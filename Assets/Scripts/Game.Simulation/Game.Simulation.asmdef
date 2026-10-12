@@ -2,7 +2,8 @@
     "name": "Game.Simulation",
     "rootNamespace": "Game.Simulation",
     "references": [
-        "Game.Core"
+        "Game.Core",
+        "Game.Content"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

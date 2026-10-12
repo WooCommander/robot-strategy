@@ -191,6 +191,12 @@ namespace Game.Presentation.Controllers
             {
                 _currentlySelectedBuilding.SetSelected(true);
             }
+
+            if (_selectionController != null)
+            {
+                _selectionController.SyncSelectedBuilding(view);
+                _selectionController.SyncSelectedRobot(null);
+            }
         }
 
         private void HandleRobotSelected(RobotView view)
@@ -209,6 +215,12 @@ namespace Game.Presentation.Controllers
             if (_currentlySelectedRobot != null)
             {
                 _currentlySelectedRobot.SetSelected(true);
+            }
+
+            if (_selectionController != null)
+            {
+                _selectionController.SyncSelectedRobot(view);
+                _selectionController.SyncSelectedBuilding(null);
             }
         }
 

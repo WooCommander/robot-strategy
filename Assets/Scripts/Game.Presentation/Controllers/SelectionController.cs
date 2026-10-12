@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
 using Game.Core.Types;
 using Game.Presentation.Camera;
@@ -14,6 +15,10 @@ namespace Game.Presentation.Controllers
         private UnityEngine.Camera _cam;
         private BuildingView _selectedBuilding;
         private RobotView _selectedRobot;
+
+        private Vector2 _pointerDownPos;
+        private bool _isPointerDown;
+        private bool _pressedOverUI;
 
         public event Action<BuildingView> OnBuildingSelected;
         public event Action<RobotView> OnRobotSelected;
@@ -34,62 +39,86 @@ namespace Game.Presentation.Controllers
 
         private void Update()
         {
+            // Отслеживаем начало нажатия
+            bool isDownThisFrame = Input.GetMouseButtonDown(0) || 
+                                   (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
+
+            if (isDownThisFrame)
+            {
+                _isPointerDown = true;
+                _pointerDownPos = GetCurrentScreenPosition();
+                _pressedOverUI = IsPointerOverUi();
+            }
+
             HandlePointerClick();
+        }
+
+        private Vector2 GetCurrentScreenPosition()
+        {
+            if (Input.touchCount > 0)
+            {
+                return Input.GetTouch(0).position;
+            }
+            return Input.mousePosition;
+        }
+
+        private bool IsPointerOverUi()
+        {
+            if (EventSystem.current == null) return false;
+            if (EventSystem.current.IsPointerOverGameObject()) return true;
+
+            if (Input.touchCount > 0)
+            {
+                for (int i = 0; i < Input.touchCount; i++)
+                {
+                    if (EventSystem.current.IsPointerOverGameObject(Input.GetTouch(i).fingerId))
+                    {
+                        return true;
+                    }
+                }
+            }
+            return false;
         }
 
         private void HandlePointerClick()
         {
-            Vector2 pointerPos = Vector2.zero;
-            bool isLeftReleased = false;
-            bool isRightReleased = false;
+            bool isLeftReleased = Input.GetMouseButtonUp(0) || 
+                                  (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame);
+            bool isRightReleased = Input.GetMouseButtonUp(1) || 
+                                   (Mouse.current != null && Mouse.current.rightButton.wasReleasedThisFrame);
 
-            if (Mouse.current != null)
-            {
-                if (Mouse.current.leftButton.wasReleasedThisFrame)
-                {
-                    isLeftReleased = true;
-                    pointerPos = Mouse.current.position.ReadValue();
-                }
-                else if (Mouse.current.rightButton.wasReleasedThisFrame)
-                {
-                    isRightReleased = true;
-                    pointerPos = Mouse.current.position.ReadValue();
-                }
-            }
+            if (!isLeftReleased && !isRightReleased) return;
 
-            // Fallback на стандартный Input
-            if (!isLeftReleased && !isRightReleased)
-            {
-                if (Input.GetMouseButtonUp(0))
-                {
-                    isLeftReleased = true;
-                    pointerPos = Input.mousePosition;
-                }
-                else if (Input.GetMouseButtonUp(1))
-                {
-                    isRightReleased = true;
-                    pointerPos = Input.mousePosition;
-                }
-            }
+            Vector2 pointerPos = GetCurrentScreenPosition();
 
-            if (_cam == null) _cam = UnityEngine.Camera.main;
-            if (_cam == null) return;
-
-            // Клик левой кнопкой мыши
             if (isLeftReleased)
             {
+                if (!_isPointerDown) return;
+                _isPointerDown = false;
+
+                bool wasOverUI = _pressedOverUI || IsPointerOverUi();
+                _pressedOverUI = false;
+
+                // Игнорируем клики по интерфейсу (Canvas / UI)
+                if (wasOverUI)
+                {
+                    return;
+                }
+
+                // Игнорируем, если курсор сдвинулся (панорамирование камеры)
+                float dragDistance = Vector2.Distance(_pointerDownPos, pointerPos);
+                if (dragDistance > 12f)
+                {
+                    return;
+                }
+
                 if (_cameraController != null && _cameraController.IsDraggingView)
                 {
                     return;
                 }
 
-                // Игнорируем клики по интерфейсу (нижняя панель управления и верхний статус-бар)
-                bool isOverBottomHud = pointerPos.y <= 175f;
-                bool isOverTopHud = pointerPos.y >= Screen.height - 95f && pointerPos.x <= 320f;
-                if (isOverBottomHud || isOverTopHud)
-                {
-                    return;
-                }
+                if (_cam == null) _cam = UnityEngine.Camera.main;
+                if (_cam == null) return;
 
                 Ray ray = _cam.ScreenPointToRay(pointerPos);
                 Debug.Log($"[Selection] Left click at screen {pointerPos}");
@@ -132,9 +161,14 @@ namespace Game.Presentation.Controllers
                     }
                 }
             }
-            // Клик правой кнопкой мыши (прямой приказ движения для ПК)
+            // Клик правой кнопкой мыши (приказ движения)
             else if (isRightReleased && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
             {
+                if (IsPointerOverUi()) return;
+
+                if (_cam == null) _cam = UnityEngine.Camera.main;
+                if (_cam == null) return;
+
                 Ray ray = _cam.ScreenPointToRay(pointerPos);
                 if (Physics.Raycast(ray, out RaycastHit hit, 200f))
                 {
@@ -163,6 +197,16 @@ namespace Game.Presentation.Controllers
                 _selectedRobot.SetSelected(true);
             }
             OnRobotSelected?.Invoke(robot);
+        }
+
+        public void SyncSelectedBuilding(BuildingView building)
+        {
+            _selectedBuilding = building;
+        }
+
+        public void SyncSelectedRobot(RobotView robot)
+        {
+            _selectedRobot = robot;
         }
     }
 }

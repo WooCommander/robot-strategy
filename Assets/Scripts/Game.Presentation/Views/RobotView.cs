@@ -29,9 +29,14 @@ namespace Game.Presentation.Views
 
         public static event System.Action<RobotView> OnAnyRobotClicked;
 
-        private void OnMouseDown()
+        private void OnMouseUpAsButton()
         {
-            Debug.Log($"[RobotView] OnMouseDown: Robot #{_entityId} ({_owner})");
+            if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                return;
+            }
+
+            Debug.Log($"[RobotView] OnMouseUpAsButton: Robot #{_entityId} ({_owner})");
             OnAnyRobotClicked?.Invoke(this);
         }
 
@@ -43,6 +48,13 @@ namespace Game.Presentation.Views
 
             transform.position = new Vector3(state.Position.X, 0f, state.Position.Y);
             transform.rotation = Quaternion.Euler(0f, state.RotationDegrees, 0f);
+
+            // Добавляем коллайдер на корень робота для надежного выбора лучами
+            var col = GetComponent<CapsuleCollider>();
+            if (col == null) col = gameObject.AddComponent<CapsuleCollider>();
+            col.center = new Vector3(0f, 0.75f, 0f);
+            col.radius = 0.8f;
+            col.height = 1.5f;
 
             // Собираем визуальную модель робота
             var visualModel = ModularRobotBuilder.BuildRobotModel(state.Blueprint, state.Owner);

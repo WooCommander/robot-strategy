@@ -25,9 +25,14 @@ namespace Game.Presentation.Views
 
         public static event System.Action<BuildingView> OnAnyBuildingClicked;
 
-        private void OnMouseDown()
+        private void OnMouseUpAsButton()
         {
-            Debug.Log($"[BuildingView] OnMouseDown: {_type} #{_entityId} ({_owner})");
+            if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
+            {
+                return;
+            }
+
+            Debug.Log($"[BuildingView] OnMouseUpAsButton: {_type} #{_entityId} ({_owner})");
             OnAnyBuildingClicked?.Invoke(this);
         }
 

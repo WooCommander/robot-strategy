@@ -6,7 +6,8 @@
         "Game.Simulation",
         "Game.Content",
         "Unity.InputSystem",
-        "Unity.RenderPipelines.Universal.Runtime"
+        "Unity.RenderPipelines.Universal.Runtime",
+        "Unity.UGUI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

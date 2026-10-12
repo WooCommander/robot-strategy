@@ -133,6 +133,27 @@ namespace Game.Presentation.Views
                 _nameLabel.anchor = TextAnchor.MiddleCenter;
                 _nameLabel.text = _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД #{_entityId}";
             }
+
+            // Золотой 3D-маркер выбора над зданием
+            if (_selectionMarker == null)
+            {
+                _selectionMarker = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                _selectionMarker.name = "SelectionMarker";
+                _selectionMarker.transform.SetParent(transform, false);
+                _selectionMarker.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.5f : 2.5f, 0f);
+                _selectionMarker.transform.localScale = new Vector3(0.85f, 0.85f, 0.85f);
+                _selectionMarker.transform.localRotation = Quaternion.Euler(45f, 45f, 45f);
+
+                var mCol = _selectionMarker.GetComponent<Collider>();
+                if (mCol != null) DestroyImmediate(mCol);
+
+                var mRen = _selectionMarker.GetComponent<MeshRenderer>();
+                var mShader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
+                var mMat = new Material(mShader);
+                mMat.color = new Color(1.0f, 0.9f, 0.15f, 1.0f);
+                mRen.sharedMaterial = mMat;
+                _selectionMarker.SetActive(false);
+            }
         }
 
         public void UpdateOwnerVisuals(PlayerId newOwner)
@@ -159,12 +180,41 @@ namespace Game.Presentation.Views
             }
         }
 
+        [SerializeField] private GameObject _selectionMarker;
+        private bool _isSelected;
+
+        public bool IsSelected => _isSelected;
+
+        private void Update()
+        {
+            if (_isSelected && _selectionMarker != null)
+            {
+                _selectionMarker.transform.Rotate(Vector3.up, 90f * Time.deltaTime, Space.World);
+                float hover = Mathf.Sin(Time.time * 4f) * 0.15f;
+                float baseY = _type == BuildingType.Base ? 3.5f : 2.5f;
+                _selectionMarker.transform.localPosition = new Vector3(0f, baseY + hover, 0f);
+            }
+        }
+
         public void SetSelected(bool selected)
         {
+            _isSelected = selected;
+            if (_selectionMarker != null)
+            {
+                _selectionMarker.SetActive(selected);
+            }
+
+            Color activeColor = selected ? new Color(1.0f, 0.85f, 0.15f) : GetPlayerColor(_owner);
             if (_captureZoneCircle != null)
             {
-                _captureZoneCircle.startWidth = selected ? 0.35f : 0.15f;
-                _captureZoneCircle.endWidth = selected ? 0.35f : 0.15f;
+                _captureZoneCircle.startWidth = selected ? 0.45f : 0.15f;
+                _captureZoneCircle.endWidth = selected ? 0.45f : 0.15f;
+                _captureZoneCircle.startColor = activeColor;
+                _captureZoneCircle.endColor = activeColor;
+                if (_captureZoneCircle.material != null)
+                {
+                    _captureZoneCircle.material.color = activeColor;
+                }
             }
 
             if (_nameLabel != null)

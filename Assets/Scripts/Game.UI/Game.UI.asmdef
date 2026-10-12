@@ -6,7 +6,8 @@
         "Game.Simulation",
         "Game.Content",
         "Game.Presentation",
-        "Unity.InputSystem"
+        "Unity.InputSystem",
+        "Unity.UGUI"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

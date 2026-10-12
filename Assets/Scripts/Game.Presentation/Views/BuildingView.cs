@@ -23,6 +23,14 @@ namespace Game.Presentation.Views
         public BuildingType Type => _type;
         public PlayerId Owner => _owner;
 
+        public static event System.Action<BuildingView> OnAnyBuildingClicked;
+
+        private void OnMouseDown()
+        {
+            Debug.Log($"[BuildingView] OnMouseDown: {_type} #{_entityId} ({_owner})");
+            OnAnyBuildingClicked?.Invoke(this);
+        }
+
         public void Initialize(BuildingSpawnDefinition def)
         {
             _entityId = def.EntityIdValue;
@@ -61,6 +69,25 @@ namespace Game.Presentation.Views
                 _buildingRenderer = body.GetComponent<MeshRenderer>();
                 var bShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Unlit/Color");
                 _buildingRenderer.sharedMaterial = new Material(bShader);
+
+                // Удаляем коллайдер с дочернего объекта, чтобы он был строго на корне
+                var childCol = body.GetComponent<Collider>();
+                if (childCol != null) DestroyImmediate(childCol);
+            }
+
+            // Добавляем BoxCollider прямо на корень здания
+            var rootCol = GetComponent<BoxCollider>();
+            if (rootCol == null) rootCol = gameObject.AddComponent<BoxCollider>();
+
+            if (_type == BuildingType.Base)
+            {
+                rootCol.center = new Vector3(0f, 1f, 0f);
+                rootCol.size = new Vector3(3.5f, 2.5f, 3.5f);
+            }
+            else
+            {
+                rootCol.center = new Vector3(0f, 0.75f, 0f);
+                rootCol.size = new Vector3(2.5f, 2.0f, 2.5f);
             }
 
             // Добавляем круг зоны захвата с помощью LineRenderer
@@ -129,6 +156,22 @@ namespace Game.Presentation.Views
                 {
                     _captureZoneCircle.material.color = teamColor;
                 }
+            }
+        }
+
+        public void SetSelected(bool selected)
+        {
+            if (_captureZoneCircle != null)
+            {
+                _captureZoneCircle.startWidth = selected ? 0.35f : 0.15f;
+                _captureZoneCircle.endWidth = selected ? 0.35f : 0.15f;
+            }
+
+            if (_nameLabel != null)
+            {
+                string baseName = _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД #{_entityId}";
+                _nameLabel.text = selected ? $"★ {baseName} (ВЫБРАН) ★" : baseName;
+                _nameLabel.color = selected ? Color.yellow : Color.white;
             }
         }
 

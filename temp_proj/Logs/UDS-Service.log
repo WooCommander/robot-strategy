@@ -1,0 +1,74 @@
+
+Server arguments:
+  --memory-size 1073741824
+  --shared-postfix d7b813e819bc7a08de491ae8f431762d
+  --working-directory Library/DataStore
+  --silent-console
+  --shutdown-grace 0
+  --client-process-check 0
+  --uds-log-file C:/Projects/2026/game/robot-strategy/temp_proj/Logs/UDS-Service.log
+  --debug-log 2
+  -name
+  Unity.DataStore
+
+[Warning] Acquired exclusive lock but discovered existing shared memory pool, destroying and reinitialising
+[Error] Failed to create named semaphore "/udsMemd7b813e819bc7a08de491ae8f431762d1052576". Error: Already exists
+0x00007ff6d107ae45 (Unity.DataStore) uds_wait_handle_complete
+0x00007ff6d103f835 (Unity.DataStore) uds_cleanup
+0x00007ff6d104c5db (Unity.DataStore) ucommand_buffer_init
+0x00007ff6d103df3d (Unity.DataStore) uds_cleanup
+0x00007ff6d103cdb6 (Unity.DataStore) uds_cleanup
+0x00007ff6d10462f9 (Unity.DataStore) uds_cleanup
+0x00007ff6d1016c4c (Unity.DataStore) 
+0x00007ff6d1014397 (Unity.DataStore) 
+0x00007ff6d10128ac (Unity.DataStore) 
+0x00007ff6d10968c4 (Unity.DataStore) uds_wait_handle_complete
+0x00007ffcf542cd87 (KERNEL32) BaseThreadInitThunk
+0x00007ffcf62ccaec (ntdll) RtlUserThreadStart
+
+[Error] Failed to initialise named semaphore "/udsMemd7b813e819bc7a08de491ae8f431762d1052576" for command buffer
+0x00007ff6d107ae45 (Unity.DataStore) uds_wait_handle_complete
+0x00007ff6d103f835 (Unity.DataStore) uds_cleanup
+0x00007ff6d104c6c4 (Unity.DataStore) ucommand_buffer_init
+0x00007ff6d103df3d (Unity.DataStore) uds_cleanup
+0x00007ff6d103cdb6 (Unity.DataStore) uds_cleanup
+0x00007ff6d10462f9 (Unity.DataStore) uds_cleanup
+0x00007ff6d1016c4c (Unity.DataStore) 
+0x00007ff6d1014397 (Unity.DataStore) 
+0x00007ff6d10128ac (Unity.DataStore) 
+0x00007ff6d10968c4 (Unity.DataStore) uds_wait_handle_complete
+0x00007ffcf542cd87 (KERNEL32) BaseThreadInitThunk
+0x00007ffcf62ccaec (ntdll) RtlUserThreadStart
+
+[Error] Failed to initialise service system
+0x00007ff6d107ae45 (Unity.DataStore) uds_wait_handle_complete
+0x00007ff6d103f835 (Unity.DataStore) uds_cleanup
+0x00007ff6d10463b2 (Unity.DataStore) uds_cleanup
+0x00007ff6d1016c4c (Unity.DataStore) 
+0x00007ff6d1014397 (Unity.DataStore) 
+0x00007ff6d10128ac (Unity.DataStore) 
+0x00007ff6d10968c4 (Unity.DataStore) uds_wait_handle_complete
+0x00007ffcf542cd87 (KERNEL32) BaseThreadInitThunk
+0x00007ffcf62ccaec (ntdll) RtlUserThreadStart
+
+[Error] Failed to initialise UDS system as service with shared memory size 1073741824 and postfix 'd7b813e819bc7a08de491ae8f431762d'
+0x00007ff6d107ae45 (Unity.DataStore) uds_wait_handle_complete
+0x00007ff6d103f835 (Unity.DataStore) uds_cleanup
+0x00007ff6d1016cf9 (Unity.DataStore) 
+0x00007ff6d1014397 (Unity.DataStore) 
+0x00007ff6d10128ac (Unity.DataStore) 
+0x00007ff6d10968c4 (Unity.DataStore) uds_wait_handle_complete
+0x00007ffcf542cd87 (KERNEL32) BaseThreadInitThunk
+0x00007ffcf62ccaec (ntdll) RtlUserThreadStart
+
+Starting Unity Data Store Application
+[Error] Failed to listen for request, invalid system passed to arguments
+0x00007ff6d107ae45 (Unity.DataStore) uds_wait_handle_complete
+0x00007ff6d103f835 (Unity.DataStore) uds_cleanup
+0x00007ff6d101660a (Unity.DataStore) 
+0x00007ff6d1016a4f (Unity.DataStore) 
+0x00007ff6d10128b5 (Unity.DataStore) 
+0x00007ff6d10968c4 (Unity.DataStore) uds_wait_handle_complete
+0x00007ffcf542cd87 (KERNEL32) BaseThreadInitThunk
+0x00007ffcf62ccaec (ntdll) RtlUserThreadStart
+

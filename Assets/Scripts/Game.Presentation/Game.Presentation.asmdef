@@ -1,0 +1,20 @@
+{
+    "name": "Game.Presentation",
+    "rootNamespace": "Game.Presentation",
+    "references": [
+        "Game.Core",
+        "Game.Simulation",
+        "Game.Content",
+        "Unity.InputSystem",
+        "Unity.RenderPipelines.Universal.Runtime"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

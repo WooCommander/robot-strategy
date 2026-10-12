@@ -1,0 +1,68 @@
+# Архитектура проекта "Robot Strategy"
+
+## 1. Общие принципы
+Проект разрабатывается согласно ТЗ v0.1 в изометрическом 3D-формате на Unity 6 (URP) с целевой платформой Android.
+Главный принцип — **чистое ядро без зависимостей от `UnityEngine`**:
+- Игровая симуляция выполняется на дискретных тиках (20 тактов в секунду).
+- Вся логика боя, движения, захвата и экономики детерминирована и изолирована.
+- Графический слой Unity (`Presentation`) интерполирует позиции и отображает эффекты/звуки на основе состояния симуляции.
+- Команды игрока и ИИ используют единый публичный интерфейс `ICommandDispatcher`.
+
+## 2. Модули и Assembly Definitions
+
+```mermaid
+graph TD
+    GameCore[Game.Core] --> GameSimulation[Game.Simulation]
+    GameCore --> GameContent[Game.Content]
+    GameCore --> GameAI[Game.AI]
+    GameSimulation --> GameAI
+    GameCore --> GamePersistence[Game.Persistence]
+    GameSimulation --> GamePersistence
+
+    GameCore --> GamePresentation[Game.Presentation]
+    GameSimulation --> GamePresentation
+    GameContent --> GamePresentation
+
+    GameCore --> GameUI[Game.UI]
+    GameSimulation --> GameUI
+    GamePresentation --> GameUI
+
+    GamePresentation --> GamePlatform[Game.Platform]
+```
+
+### Модули:
+1. **Game.Core** (чистый C#)
+   - Идентификаторы (`EntityId`, `PlayerId`, `ModuleId`).
+   - Состояния (`MatchState`, `RobotState`, `BuildingState`, `PlayerState`).
+   - Модели команд (`ICommand`, `MoveCommand`, `AttackCommand`, `CaptureCommand`, `ProduceOrderCommand`).
+   - Контракт диспетчера команд `ICommandDispatcher`.
+   - Не имеет зависимостей от `UnityEngine`.
+
+2. **Game.Simulation** (чистый C#)
+   - `SimulationEngine`: тактовый цикл (20 тиков/с).
+   - `EconomySystem`: начисление металла, очереди производства, блокировка выходов.
+   - `NavigationSystem`: дискретная сетка проходимости, расчет путей и обход.
+   - `CombatSystem`: проверка дистанции, перезарядки, линий видимости, прямого урона и сплеша.
+   - `CaptureSystem`: таймеры захвата заводов и баз, споры за точку.
+   - `SpatialHashGrid`: пространственное хэширование для быстрого поиска ближайших целей `O(1)`.
+
+3. **Game.Content** (C# / ScriptableObjects для редактора)
+   - Определения деталей (`ModuleDefinition`, типы слотов, socket-крепления).
+   - Определения карт (`MapDefinition`, проходимость тайлов, точки баз и заводов).
+   - Валидатор сборки робота (`RobotAssemblyValidator`).
+
+4. **Game.AI** (чистый C#)
+   - Логика бота: оценка опасности базы, выбор рецептов сборки, захват точек, атака.
+   - Отдает команды исключительно через `ICommandDispatcher`.
+
+5. **Game.Persistence**
+   - Сохранение и загрузка состояния (`MatchSnapshot`, 3 ручных слота + автосейв).
+   - Replay-лог команд для быстрого воспроизведения матча.
+
+6. **Game.Presentation** (Unity 3D / URP)
+   - Визуальные префабы, скелеты роботов и привязка мешей к сокетам.
+   - Камера (изометрия, перемещение пальцем, зум).
+   - VFX (снаряды пушек, ракеты, взрывы, индикаторы захвата) и SFX.
+
+7. **Game.UI**
+   - Экраны: Главное меню, Выбор карты, Бой (панель ресурсов, миникарта, кнопки приказов), Конструктор роботов, База, Пауза, Экран результатов.

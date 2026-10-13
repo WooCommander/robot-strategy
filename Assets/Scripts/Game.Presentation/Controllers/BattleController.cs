@@ -110,20 +110,12 @@ namespace Game.Presentation.Controllers
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
 
             // Прямая подписка на клики коллайдеров
-            BuildingView.OnAnyBuildingClicked += HandleBuildingSelected;
-            RobotView.OnAnyRobotClicked += HandleRobotSelected;
 
             // На старте ничего не выбрано — экран чистый
             _currentlySelectedBuilding = null;
             _currentlySelectedRobot = null;
 
             Debug.Log($"[Battle] Initialized map '{_mapDefinition.Name}' with {_mapDefinition.Buildings.Count} buildings.");
-        }
-
-        private void OnDestroy()
-        {
-            BuildingView.OnAnyBuildingClicked -= HandleBuildingSelected;
-            RobotView.OnAnyRobotClicked -= HandleRobotSelected;
         }
 
         private void Update()

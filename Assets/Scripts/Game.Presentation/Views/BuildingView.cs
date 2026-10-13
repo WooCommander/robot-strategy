@@ -23,19 +23,6 @@ namespace Game.Presentation.Views
         public BuildingType Type => _type;
         public PlayerId Owner => _owner;
 
-        public static event System.Action<BuildingView> OnAnyBuildingClicked;
-
-        private void OnMouseUpAsButton()
-        {
-            if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
-            {
-                return;
-            }
-
-            Debug.Log($"[BuildingView] OnMouseUpAsButton: {_type} #{_entityId} ({_owner})");
-            OnAnyBuildingClicked?.Invoke(this);
-        }
-
         public void Initialize(BuildingSpawnDefinition def)
         {
             _entityId = def.EntityIdValue;

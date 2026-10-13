@@ -41,7 +41,8 @@ namespace Game.Presentation.Controllers
         {
             // Отслеживаем начало нажатия
             bool isDownThisFrame = Input.GetMouseButtonDown(0) || 
-                                   (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame);
+                                   (Mouse.current != null && Mouse.current.leftButton.wasPressedThisFrame) ||
+                                   (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasPressedThisFrame);
 
             if (isDownThisFrame)
             {
@@ -83,7 +84,8 @@ namespace Game.Presentation.Controllers
         private void HandlePointerClick()
         {
             bool isLeftReleased = Input.GetMouseButtonUp(0) || 
-                                  (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame);
+                                  (Mouse.current != null && Mouse.current.leftButton.wasReleasedThisFrame) ||
+                                  (Touchscreen.current != null && Touchscreen.current.primaryTouch.press.wasReleasedThisFrame);
             bool isRightReleased = Input.GetMouseButtonUp(1) || 
                                    (Mouse.current != null && Mouse.current.rightButton.wasReleasedThisFrame);
 
@@ -123,9 +125,31 @@ namespace Game.Presentation.Controllers
                 Ray ray = _cam.ScreenPointToRay(pointerPos);
                 Debug.Log($"[Selection] Left click at screen {pointerPos}");
 
-                if (Physics.Raycast(ray, out RaycastHit hit, 200f))
+                RaycastHit[] hits = Physics.RaycastAll(ray, 200f);
+                if (hits.Length > 0)
                 {
+                    System.Array.Sort(hits, (left, right) => left.distance.CompareTo(right.distance));
+                    RaycastHit hit = hits[0];
                     Debug.Log($"[Selection] Hit object: {hit.collider.gameObject.name}");
+
+                    foreach (RaycastHit candidate in hits)
+                    {
+                        var candidateRobot = candidate.collider.GetComponentInParent<RobotView>();
+                        if (candidateRobot != null)
+                        {
+                            SelectRobot(candidateRobot);
+                            SelectBuilding(null);
+                            return;
+                        }
+
+                        var candidateBuilding = candidate.collider.GetComponentInParent<BuildingView>();
+                        if (candidateBuilding != null)
+                        {
+                            SelectBuilding(candidateBuilding);
+                            SelectRobot(null);
+                            return;
+                        }
+                    }
 
                     // 1. Проверяем клик по роботу
                     var robot = hit.collider.GetComponentInParent<RobotView>();

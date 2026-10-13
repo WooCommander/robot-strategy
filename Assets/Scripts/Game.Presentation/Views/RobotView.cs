@@ -27,19 +27,6 @@ namespace Game.Presentation.Views
         public bool IsSelected => _isSelected;
         public RobotState State => _state;
 
-        public static event System.Action<RobotView> OnAnyRobotClicked;
-
-        private void OnMouseUpAsButton()
-        {
-            if (UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject())
-            {
-                return;
-            }
-
-            Debug.Log($"[RobotView] OnMouseUpAsButton: Robot #{_entityId} ({_owner})");
-            OnAnyRobotClicked?.Invoke(this);
-        }
-
         public void Initialize(RobotState state)
         {
             _state = state;

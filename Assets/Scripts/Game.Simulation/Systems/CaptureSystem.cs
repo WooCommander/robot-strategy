@@ -84,6 +84,10 @@ namespace Game.Simulation.Systems
             building.ProductionQueue.Clear();
             building.Owner = capturer;
             ResetCapture(building);
+            if (building.Type == BuildingType.Base)
+            {
+                state.Result = capturer == PlayerId.Player1 ? MatchResult.Player1Won : MatchResult.Player2Won;
+            }
             OnBuildingCaptured?.Invoke(building, previousOwner);
         }
     }

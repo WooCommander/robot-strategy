@@ -38,6 +38,7 @@ namespace Game.Presentation.Controllers
         private bool _isOrderMode;
         private float _nextAutonomousOrderUpdate;
         private bool _enemyReplacementPending;
+        private bool _matchResultReported;
 
         private void Start()
         {
@@ -147,6 +148,11 @@ namespace Game.Presentation.Controllers
             UpdateAutonomousOrders();
             _combatSystem.Update(_matchState, Time.deltaTime);
             _captureSystem.Update(_matchState, Time.deltaTime);
+            if (!_matchResultReported && _matchState.Result != MatchResult.InProgress)
+            {
+                _matchResultReported = true;
+                Debug.Log(_matchState.Result == MatchResult.Player1Won ? "[Battle] Победа: вражеская база захвачена." : "[Battle] Поражение: ваша база захвачена.");
+            }
             UpdateControlMode();
             UpdateDirectControl();
 

@@ -37,6 +37,7 @@ namespace Game.Core.Models
         public int TotalCost { get; set; }
 
         public float WeaponCooldownRemaining { get; set; }
+        public int ScoutPatrolStep { get; set; }
         public RobotOrder CurrentOrder { get; set; } = new RobotOrder();
 
         public bool IsAlive => CurrentHealth > 0;

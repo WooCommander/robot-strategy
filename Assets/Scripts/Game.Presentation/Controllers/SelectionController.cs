@@ -25,7 +25,6 @@ namespace Game.Presentation.Controllers
         public event Action<BuildingView> OnBuildingSelected;
         public event Action<RobotView> OnRobotSelected;
         public event Action<SimVector2> OnGroundClicked;
-        public event Action<RobotView, SimVector2> OnMoveOrderRequested;
         public event Action<RobotView, RobotView> OnAttackOrderRequested;
         public event Action<RobotView, BuildingView> OnCaptureOrderRequested;
 
@@ -208,11 +207,7 @@ namespace Game.Presentation.Controllers
                     var worldPos = new SimVector2(hit.point.x, hit.point.z);
 
                     // Если был выбран свой робот — отдаем приказ на движение
-                    if (_isOrderMode && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
-                    {
-                        OnMoveOrderRequested?.Invoke(_selectedRobot, worldPos);
-                    }
-                    else if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)
+                    if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)
                     {
                         SelectBuilding(null);
                         SelectRobot(null);

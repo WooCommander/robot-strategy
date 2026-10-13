@@ -42,20 +42,50 @@ namespace Game.Presentation.Views
         private Font _uiFont;
         private bool _isOrderMode;
         private IReadOnlyDictionary<string, ModuleDefinition> _moduleCatalog;
+        private MapDefinition _mapDefinition;
+        private RectTransform _minimapContent;
+        private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
+        private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
 
-        public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog)
+        public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
         {
             _moduleCatalog = moduleCatalog;
+            _mapDefinition = mapDefinition;
             EnsureFont();
             EnsureEventSystem();
             CreateCanvas();
             CreateTopBar();
             CreateBottomPanel();
+            CreateMinimap();
         }
 
         public void SetOrderMode(bool isOrderMode)
         {
             _isOrderMode = isOrderMode;
+        }
+
+        public void UpdateMinimap(MatchState state)
+        {
+            if (_minimapContent == null || state == null || _mapDefinition == null) return;
+
+            foreach (var building in state.Buildings.Values)
+            {
+                var marker = GetOrCreateMarker(_minimapBuildingMarkers, building.Id.Value, "Building", 10f);
+                marker.color = GetOwnerColor(building.Owner, 0.95f);
+                PlaceMarker(marker.rectTransform, building.Position);
+            }
+
+            var activeRobotIds = new HashSet<int>();
+            foreach (var robot in state.Robots.Values)
+            {
+                if (!robot.IsAlive) continue;
+                activeRobotIds.Add(robot.Id.Value);
+                var marker = GetOrCreateMarker(_minimapRobotMarkers, robot.Id.Value, "Robot", 5f);
+                marker.color = GetOwnerColor(robot.Owner, 1f);
+                PlaceMarker(marker.rectTransform, robot.Position);
+            }
+
+            RemoveMissingRobotMarkers(activeRobotIds);
         }
 
         private void EnsureFont()
@@ -120,6 +150,60 @@ namespace Game.Presentation.Views
             var selectBaseBtn = CreateButton(topBar.transform, "SelectBaseBtn", "🏛 БАЗА\n<size=11>ВЫБРАТЬ</size>", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
                 new Vector2(-70f, 0f), new Vector2(115f, 80f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 13);
             selectBaseBtn.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
+        }
+
+        private void CreateMinimap()
+        {
+            var panel = CreatePanel(_canvas.transform, "Minimap", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-20f, -20f), new Vector2(230f, 170f), new Color(0.03f, 0.07f, 0.12f, 0.92f));
+            CreateLabel(panel.transform, "Title", "МИНИКАРТА", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(8f, -6f), new Vector2(-8f, -27f), 12, FontStyle.Bold, new Color(0.5f, 0.85f, 1f), TextAnchor.MiddleCenter);
+
+            var mapArea = CreatePanel(panel.transform, "Map", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.18f, 0.36f, 0.16f, 1f));
+            _minimapContent = mapArea.GetComponent<RectTransform>();
+        }
+
+        private Image GetOrCreateMarker(Dictionary<int, Image> markers, int id, string type, float size)
+        {
+            if (markers.TryGetValue(id, out var existing)) return existing;
+
+            var markerGo = new GameObject($"{type}_{id}");
+            markerGo.transform.SetParent(_minimapContent, false);
+            var rt = markerGo.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0.5f);
+            rt.anchorMax = new Vector2(0.5f, 0.5f);
+            rt.sizeDelta = Vector2.one * size;
+            var image = markerGo.AddComponent<Image>();
+            markers[id] = image;
+            return image;
+        }
+
+        private void PlaceMarker(RectTransform marker, SimVector2 position)
+        {
+            marker.anchorMin = new Vector2(position.X / _mapDefinition.Width, position.Y / _mapDefinition.Height);
+            marker.anchorMax = marker.anchorMin;
+            marker.anchoredPosition = Vector2.zero;
+        }
+
+        private void RemoveMissingRobotMarkers(HashSet<int> activeRobotIds)
+        {
+            var obsolete = new List<int>();
+            foreach (var pair in _minimapRobotMarkers)
+            {
+                if (!activeRobotIds.Contains(pair.Key))
+                {
+                    Destroy(pair.Value.gameObject);
+                    obsolete.Add(pair.Key);
+                }
+            }
+            foreach (int id in obsolete) _minimapRobotMarkers.Remove(id);
+        }
+
+        private static Color GetOwnerColor(PlayerId owner, float alpha)
+        {
+            return owner == PlayerId.Player1 ? new Color(0.2f, 0.65f, 1f, alpha) :
+                owner == PlayerId.Player2 ? new Color(1f, 0.25f, 0.25f, alpha) : new Color(0.8f, 0.8f, 0.8f, alpha);
         }
 
         private void CreateBottomPanel()
@@ -194,7 +278,7 @@ namespace Game.Presentation.Views
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
                 string controlHint = _isOrderMode
-                    ? "<color=#66CCFF>ПРИКАЗЫ: клик — движение/атака | C — автозахват | H — охота | R — разведка | S — стоп</color>"
+                    ? "<color=#66CCFF>ПРИКАЗЫ: клик по врагу — атака | C — автозахват | H — охота | R — разведка | S — стоп</color>"
                     : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
                 _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
                 SetProgress(0f);

@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Game.Core.Models;
 using Game.Core.Types;
@@ -22,6 +23,7 @@ namespace Game.Content.Definitions
                 TileSize = 1.0f,
                 Tiles = new TileType[width * height]
             };
+            var random = new Random(Environment.TickCount);
 
             // Заполнение базовой землей
             for (int y = 0; y < height; y++)
@@ -136,6 +138,31 @@ namespace Game.Content.Definitions
                 SpawnPoint = new SimVector2(midX + 0.5f, 7.0f),
                 CaptureRadius = 2.5f
             });
+
+            int[] flankRows = { 8, 15, 22 };
+            for (int index = flankRows.Length - 1; index > 0; index--)
+            {
+                int swapIndex = random.Next(index + 1);
+                int swap = flankRows[index];
+                flankRows[index] = flankRows[swapIndex];
+                flankRows[swapIndex] = swap;
+            }
+
+            for (int index = 0; index < flankRows.Length; index++)
+            {
+                bool placeOnLeft = random.Next(2) == 0;
+                float x = placeOnLeft ? 11.5f : width - 12.5f;
+                float spawnX = placeOnLeft ? x + 1.5f : x - 1.5f;
+                map.Buildings.Add(new BuildingSpawnDefinition
+                {
+                    EntityIdValue = 104 + index,
+                    Type = BuildingType.Factory,
+                    InitialOwner = PlayerId.Neutral,
+                    Position = new SimVector2(x, flankRows[index] + 0.5f),
+                    SpawnPoint = new SimVector2(spawnX, flankRows[index] + 0.5f),
+                    CaptureRadius = 2.5f
+                });
+            }
 
             return map;
         }

@@ -226,7 +226,11 @@ namespace Game.Simulation.Systems
         {
             var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
             if (error != null) return CommandResult.Fail(error);
-            foreach (var robot in robots) robot.CurrentOrder = RobotOrder.Scout(cmd.TargetPosition);
+            foreach (var robot in robots)
+            {
+                robot.ScoutPatrolStep = 0;
+                robot.CurrentOrder = RobotOrder.Scout(cmd.TargetPosition);
+            }
             return CommandResult.Success();
         }
 

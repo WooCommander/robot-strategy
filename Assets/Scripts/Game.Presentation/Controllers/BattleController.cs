@@ -110,14 +110,13 @@ namespace Game.Presentation.Controllers
 
             _selectionController.OnBuildingSelected += HandleBuildingSelected;
             _selectionController.OnRobotSelected += HandleRobotSelected;
-            _selectionController.OnMoveOrderRequested += HandleMoveOrder;
             _selectionController.OnAttackOrderRequested += HandleAttackOrder;
             _selectionController.OnCaptureOrderRequested += HandleCaptureOrder;
 
             // 6. Инициализация нативного Canvas HUD
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
-            _hudView.Initialize(_moduleCatalog);
+            _hudView.Initialize(_moduleCatalog, _mapDefinition);
             _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
@@ -154,6 +153,7 @@ namespace Game.Presentation.Controllers
 
                 RobotState activeRobotState = _currentlySelectedRobot != null ? _currentlySelectedRobot.State : null;
                 _hudView.UpdateState(_matchState.Player1, activeBuildingState, activeRobotState);
+                _hudView.UpdateMinimap(_matchState);
             }
         }
 
@@ -179,6 +179,7 @@ namespace Game.Presentation.Controllers
             var go = new GameObject($"Robot_Unit_{robotState.Id.Value}");
             var view = go.AddComponent<RobotView>();
             view.Initialize(robotState);
+            view.SetTerrainSpeedProvider(GetTerrainSpeedMultiplier);
 
             _spawnedRobots[robotState.Id.Value] = view;
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
@@ -394,9 +395,11 @@ namespace Game.Presentation.Controllers
                 {
                     bool targetIsAtMapEdge = robot.CurrentOrder.TargetPosition.X <= 2f ||
                                              robot.CurrentOrder.TargetPosition.X >= _mapDefinition.Width - 3f;
-                    if (targetIsAtMapEdge)
+                    bool reachedTarget = SimVector2.SqrDistance(robot.Position, robot.CurrentOrder.TargetPosition) < 0.8f * 0.8f;
+                    if (targetIsAtMapEdge || reachedTarget)
                     {
-                        robot.CurrentOrder.TargetPosition = GetScoutDestination(robot);
+                        if (reachedTarget) robot.ScoutPatrolStep++;
+                        robot.CurrentOrder.TargetPosition = GetScoutDestination(robot, robot.ScoutPatrolStep);
                         view.StopMovement();
                     }
 
@@ -411,6 +414,13 @@ namespace Game.Presentation.Controllers
             {
                 view.SetMovementPath(waypoints);
             }
+        }
+
+        private float GetTerrainSpeedMultiplier(SimVector2 position)
+        {
+            GridCoord grid = _navigationGrid.WorldToGrid(position);
+            float multiplier = _navigationGrid.GetSpeedMultiplier(grid.X, grid.Y);
+            return multiplier > 0f ? multiplier : 1f;
         }
 
         private BuildingState FindNearestBuilding(RobotState robot, System.Func<BuildingState, bool> predicate)
@@ -447,11 +457,11 @@ namespace Game.Presentation.Controllers
             return nearest;
         }
 
-        private SimVector2 GetScoutDestination(RobotState robot)
+        private SimVector2 GetScoutDestination(RobotState robot, int patrolStep = 0)
         {
             // Разведка ведёт в сектора у противника, но не к скалам карты и не под базу.
             float x = robot.Owner == PlayerId.Player1 ? _mapDefinition.Width - 9f : 8f;
-            float y = 6f + (robot.Id.Value % 3) * 9f;
+            float y = 6f + ((robot.Id.Value + patrolStep) % 3) * 9f;
             return new SimVector2(x, y);
         }
 

@@ -21,6 +21,7 @@ namespace Game.Presentation.Views
         private bool _isSelected;
         private List<SimVector2> _currentPath = new List<SimVector2>();
         private int _currentPathIndex = 0;
+        private System.Func<SimVector2, float> _terrainSpeedProvider;
 
         public int EntityId => _entityId;
         public PlayerId Owner => _owner;
@@ -141,6 +142,11 @@ namespace Game.Presentation.Views
             _currentPathIndex = 0;
         }
 
+        public void SetTerrainSpeedProvider(System.Func<SimVector2, float> terrainSpeedProvider)
+        {
+            _terrainSpeedProvider = terrainSpeedProvider;
+        }
+
         public void MoveDirect(Vector2 inputDirection)
         {
             if (_state == null || inputDirection.sqrMagnitude < 0.001f)
@@ -152,7 +158,7 @@ namespace Game.Presentation.Views
             _state.CurrentOrder = RobotOrder.Stop();
 
             Vector3 direction = new Vector3(inputDirection.x, 0f, inputDirection.y).normalized;
-            transform.position += direction * (_state.MoveSpeed * Time.deltaTime);
+            transform.position += direction * (_state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) * Time.deltaTime);
             transform.rotation = Quaternion.LookRotation(direction);
             _state.Position = new SimVector2(transform.position.x, transform.position.z);
             _state.RotationDegrees = transform.eulerAngles.y;
@@ -170,7 +176,7 @@ namespace Game.Presentation.Views
             var target2D = _currentPath[_currentPathIndex];
             Vector3 targetWorld = new Vector3(target2D.X, 0f, target2D.Y);
 
-            float speed = _state != null ? _state.MoveSpeed : 3.5f;
+            float speed = _state != null ? _state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) : 3.5f;
             transform.position = Vector3.MoveTowards(transform.position, targetWorld, speed * Time.deltaTime);
 
             Vector3 dir = (targetWorld - transform.position);
@@ -203,6 +209,11 @@ namespace Game.Presentation.Views
             Color col = ratio > 0.5f ? Color.green : (ratio > 0.25f ? Color.yellow : Color.red);
             _healthBarFill.startColor = col;
             _healthBarFill.endColor = col;
+        }
+
+        private float GetTerrainSpeedMultiplier(SimVector2 position)
+        {
+            return Mathf.Max(0.1f, _terrainSpeedProvider?.Invoke(position) ?? 1f);
         }
     }
 }

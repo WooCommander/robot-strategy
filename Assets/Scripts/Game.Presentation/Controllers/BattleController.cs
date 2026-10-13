@@ -37,6 +37,7 @@ namespace Game.Presentation.Controllers
         private BattleHudView _hudView;
         private bool _isOrderMode;
         private float _nextAutonomousOrderUpdate;
+        private bool _enemyReplacementPending;
 
         private void Start()
         {
@@ -120,6 +121,7 @@ namespace Game.Presentation.Controllers
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
             _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
+            _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
 
             // Прямая подписка на клики коллайдеров
@@ -137,6 +139,11 @@ namespace Game.Presentation.Controllers
 
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
+            if (_enemyReplacementPending && _matchState.Player2.Metal >= RobotPresetCatalog.Scout.GetCost(_moduleCatalog))
+            {
+                QueueTestEnemyScout();
+                _enemyReplacementPending = false;
+            }
             UpdateAutonomousOrders();
             _combatSystem.Update(_matchState, Time.deltaTime);
             _captureSystem.Update(_matchState, Time.deltaTime);
@@ -163,6 +170,17 @@ namespace Game.Presentation.Controllers
             BuildingView p1Base = GetPlayer1BaseView();
             if (p1Base == null) return;
             OrderPresetRobot(new EntityId(p1Base.EntityId), preset);
+        }
+
+        private void HandleRobotOrderFromHud(OrderType order)
+        {
+            if (_currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1) return;
+            var robot = _currentlySelectedRobot.State;
+            if (order == OrderType.Stop) _currentlySelectedRobot.StopMovement();
+            robot.CurrentOrder = order == OrderType.Capture ? RobotOrder.Capture(EntityId.None) :
+                order == OrderType.Hunt ? RobotOrder.Hunt() :
+                order == OrderType.Scout ? RobotOrder.Scout(GetScoutDestination(robot)) :
+                order == OrderType.Defend ? RobotOrder.Defend(robot.Position) : RobotOrder.Stop();
         }
 
         private void HandleSelectPlayerBaseFromHud()
@@ -205,6 +223,11 @@ namespace Game.Presentation.Controllers
             if (_currentlySelectedRobot != null && _currentlySelectedRobot.EntityId == target.Id.Value)
             {
                 HandleRobotSelected(null);
+            }
+
+            if (target.Owner == PlayerId.Player2)
+            {
+                _enemyReplacementPending = true;
             }
         }
 

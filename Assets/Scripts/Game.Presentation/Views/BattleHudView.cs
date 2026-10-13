@@ -37,6 +37,8 @@ namespace Game.Presentation.Views
 
         // Делегат заказа робота
         public event Action<RobotPresetDefinition> OnOrderPresetRequested;
+        public event Action<OrderType> OnRobotOrderRequested;
+        private readonly Dictionary<OrderType, Button> _orderButtons = new Dictionary<OrderType, Button>();
         public event Action OnSelectPlayerBaseRequested;
 
         private Font _uiFont;
@@ -261,6 +263,12 @@ namespace Game.Presentation.Views
                 new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-160f, btnY), new Vector2(btnW, btnH),
                 new Color(0.12f, 0.32f, 0.54f, 0.98f));
             _missileBtnText = _missileBtn.GetComponentInChildren<Text>();
+
+            CreateOrderButton(OrderType.Capture, "ЗАХВАТ", -300f);
+            CreateOrderButton(OrderType.Hunt, "ОХОТА", -150f);
+            CreateOrderButton(OrderType.Scout, "РАЗВЕДКА", 0f);
+            CreateOrderButton(OrderType.Defend, "ОБОРОНА", 150f);
+            CreateOrderButton(OrderType.Stop, "СТОП", 300f);
         }
 
         public void UpdateState(PlayerState player, BuildingState activeBuilding, RobotState selectedRobot)
@@ -283,11 +291,13 @@ namespace Game.Presentation.Views
                 _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
                 SetProgress(0f);
                 SetProductionButtonsVisible(false);
+                SetOrderButtonsVisible(true, selectedRobot.CurrentOrder.Type);
             }
             else if (activeBuilding != null)
             {
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 SetProductionButtonsVisible(true);
+                SetOrderButtonsVisible(false, OrderType.None);
 
                 if (activeBuilding.Type == BuildingType.Base && activeBuilding.Owner == PlayerId.Player1)
                 {
@@ -325,6 +335,7 @@ namespace Game.Presentation.Views
                     _queueStatusText.text = $"Доход объекта: +{activeBuilding.MetalIncomePerSecond} М/сек. Подведите боевых роботов в круг захвата!";
                     SetProgress(0f);
                     SetProductionButtonsVisible(false);
+                    SetOrderButtonsVisible(false, OrderType.None);
                 }
             }
             else
@@ -338,6 +349,24 @@ namespace Game.Presentation.Views
             if (_scoutBtn != null) _scoutBtn.gameObject.SetActive(visible);
             if (_tankBtn != null) _tankBtn.gameObject.SetActive(visible);
             if (_missileBtn != null) _missileBtn.gameObject.SetActive(visible);
+        }
+
+        private void CreateOrderButton(OrderType order, string label, float x)
+        {
+            var button = CreateButton(_bottomPanel.transform, "Order_" + order, label, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 65f), new Vector2(135f, 48f), new Color(0.12f, 0.20f, 0.32f), 13);
+            button.onClick.AddListener(() => OnRobotOrderRequested?.Invoke(order));
+            _orderButtons[order] = button;
+            button.gameObject.SetActive(false);
+        }
+
+        private void SetOrderButtonsVisible(bool visible, OrderType activeOrder)
+        {
+            foreach (var pair in _orderButtons)
+            {
+                pair.Value.gameObject.SetActive(visible);
+                var image = pair.Value.GetComponent<Image>();
+                image.color = pair.Key == activeOrder ? new Color(0.15f, 0.65f, 0.95f) : new Color(0.12f, 0.20f, 0.32f);
+            }
         }
 
         private void SetProgress(float value)

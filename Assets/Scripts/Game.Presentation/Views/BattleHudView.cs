@@ -69,8 +69,13 @@ namespace Game.Presentation.Views
 
         private void CreateCanvas()
         {
-            var canvasGo = new GameObject("BattleCanvas");
-            canvasGo.transform.SetParent(transform, false);
+            var canvasGo = new GameObject("BattleCanvas", typeof(RectTransform));
+
+            var canvasRect = (RectTransform)canvasGo.transform;
+            canvasRect.anchorMin = Vector2.zero;
+            canvasRect.anchorMax = Vector2.one;
+            canvasRect.offsetMin = Vector2.zero;
+            canvasRect.offsetMax = Vector2.zero;
 
             _canvas = canvasGo.AddComponent<Canvas>();
             _canvas.renderMode = RenderMode.ScreenSpaceOverlay;

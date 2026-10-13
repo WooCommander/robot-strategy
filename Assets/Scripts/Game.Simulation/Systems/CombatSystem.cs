@@ -11,6 +11,7 @@ namespace Game.Simulation.Systems
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
 
         public event Action<RobotState, RobotState> OnRobotDestroyed;
+        public event Action<RobotState, RobotState, WeaponType> OnWeaponFired;
 
         public CombatSystem(IReadOnlyDictionary<string, ModuleDefinition> catalog)
         {
@@ -59,6 +60,7 @@ namespace Game.Simulation.Systems
             }
 
             attacker.WeaponCooldownRemaining = weapon.CooldownSeconds;
+            OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
             if (weapon.WeaponType == WeaponType.AreaMissile)
             {
                 ApplySplashDamage(attacker, target.Position, weapon, state);

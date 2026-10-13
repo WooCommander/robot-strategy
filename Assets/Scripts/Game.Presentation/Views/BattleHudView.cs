@@ -24,7 +24,7 @@ namespace Game.Presentation.Views
         private GameObject _bottomPanel;
         private Text _panelTitleText;
         private Text _queueStatusText;
-        private Image _progressBarFill;
+        private RectTransform _progressBarFillRect;
         private GameObject _progressBarObj;
 
         private Button _scoutBtn;
@@ -137,15 +137,14 @@ namespace Game.Presentation.Views
             fillGo.transform.SetParent(_progressBarObj.transform, false);
             var fillRt = fillGo.AddComponent<RectTransform>();
             fillRt.anchorMin = new Vector2(0f, 0f);
-            fillRt.anchorMax = new Vector2(1f, 1f);
+            fillRt.anchorMax = new Vector2(0f, 1f);
+            fillRt.pivot = new Vector2(0f, 0.5f);
             fillRt.offsetMin = Vector2.zero;
             fillRt.offsetMax = Vector2.zero;
-            _progressBarFill = fillGo.AddComponent<Image>();
-            _progressBarFill.color = new Color(0.15f, 0.80f, 0.95f, 1f);
-            _progressBarFill.type = Image.Type.Filled;
-            _progressBarFill.fillMethod = Image.FillMethod.Horizontal;
-            _progressBarFill.fillOrigin = 0;
-            _progressBarFill.fillAmount = 0f;
+            _progressBarFillRect = fillRt;
+            var progressBarFill = fillGo.AddComponent<Image>();
+            progressBarFill.color = new Color(0.15f, 0.80f, 0.95f, 1f);
+            SetProgress(0f);
 
             // Кнопки сборки роботов
             float btnW = 280f;
@@ -198,7 +197,7 @@ namespace Game.Presentation.Views
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
                 _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | <color=#FFFF00>Кликните по карте для перемещения</color>";
-                _progressBarFill.fillAmount = 0f;
+                SetProgress(0f);
                 SetProductionButtonsVisible(false);
             }
             else if (activeBuilding != null)
@@ -217,20 +216,21 @@ namespace Game.Presentation.Views
                         if (first.Status == OrderProductionStatus.ExitBlocked)
                         {
                             _queueStatusText.text = "<color=yellow>⚠️ ВЫХОД ЗАБЛОКИРОВАН (уведите робота с точки сбора)!</color>";
-                            _progressBarFill.fillAmount = 1f;
+                            SetProgress(1f);
                         }
                         else
                         {
                             float rem = first.RemainingBuildTimeSeconds;
-                            float progress = Mathf.Clamp01(1f - (rem / 10f));
+                            float total = Mathf.Max(0.01f, first.TotalBuildTimeSeconds);
+                            float progress = Mathf.Clamp01(1f - (rem / total));
                             _queueStatusText.text = $"Сборка: <b>{first.Blueprint.Name}</b> (осталось {rem:F1}с) | Очередь: {q.Count}/3";
-                            _progressBarFill.fillAmount = progress;
+                            SetProgress(progress);
                         }
                     }
                     else
                     {
                         _queueStatusText.text = "Очередь: <b>0/3 (Свободно — нажмите кнопку ниже для сборки)</b>";
-                        _progressBarFill.fillAmount = 0f;
+                        SetProgress(0f);
                     }
                 }
                 else
@@ -239,7 +239,7 @@ namespace Game.Presentation.Views
                         ? $"★ ВРАЖЕСКАЯ БАЗА #{activeBuilding.Id.Value} ★"
                         : $"★ НЕЙТРАЛЬНЫЙ ЗАВОД #{activeBuilding.Id.Value} ★";
                     _queueStatusText.text = $"Доход объекта: +{activeBuilding.MetalIncomePerSecond} М/сек. Подведите боевых роботов в круг захвата!";
-                    _progressBarFill.fillAmount = 0f;
+                    SetProgress(0f);
                     SetProductionButtonsVisible(false);
                 }
             }
@@ -254,6 +254,13 @@ namespace Game.Presentation.Views
             if (_scoutBtn != null) _scoutBtn.gameObject.SetActive(visible);
             if (_tankBtn != null) _tankBtn.gameObject.SetActive(visible);
             if (_missileBtn != null) _missileBtn.gameObject.SetActive(visible);
+        }
+
+        private void SetProgress(float value)
+        {
+            if (_progressBarFillRect == null) return;
+
+            _progressBarFillRect.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);
         }
 
         private void UpdateButtonsAffordability(int metal)

@@ -23,7 +23,6 @@ namespace Game.Presentation.Controllers
         public event Action<BuildingView> OnBuildingSelected;
         public event Action<RobotView> OnRobotSelected;
         public event Action<SimVector2> OnGroundClicked;
-        public event Action<RobotView, SimVector2> OnMoveOrderRequested;
         public event Action<RobotView, RobotView> OnAttackOrderRequested;
 
         public RobotView SelectedRobot => _selectedRobot;
@@ -190,11 +189,7 @@ namespace Game.Presentation.Controllers
                     var worldPos = new SimVector2(hit.point.x, hit.point.z);
 
                     // Если был выбран свой робот — отдаем приказ на движение
-                    if (_selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
-                    {
-                        OnMoveOrderRequested?.Invoke(_selectedRobot, worldPos);
-                    }
-                    else
+                    if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)
                     {
                         SelectBuilding(null);
                         SelectRobot(null);
@@ -203,20 +198,6 @@ namespace Game.Presentation.Controllers
                 }
             }
             // Клик правой кнопкой мыши (приказ движения)
-            else if (isRightReleased && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
-            {
-                if (IsPointerOverUi()) return;
-
-                if (_cam == null) _cam = UnityEngine.Camera.main;
-                if (_cam == null) return;
-
-                Ray ray = _cam.ScreenPointToRay(pointerPos);
-                if (Physics.Raycast(ray, out RaycastHit hit, 200f))
-                {
-                    var worldPos = new SimVector2(hit.point.x, hit.point.z);
-                    OnMoveOrderRequested?.Invoke(_selectedRobot, worldPos);
-                }
-            }
         }
 
         public void SelectBuilding(BuildingView building)

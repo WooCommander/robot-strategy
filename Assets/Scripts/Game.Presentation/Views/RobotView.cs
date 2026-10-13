@@ -134,6 +134,24 @@ namespace Game.Presentation.Views
             _currentPathIndex = 0;
         }
 
+        public void MoveDirect(Vector2 inputDirection)
+        {
+            if (_state == null || inputDirection.sqrMagnitude < 0.001f)
+            {
+                return;
+            }
+
+            _currentPath.Clear();
+            _currentPathIndex = 0;
+            _state.CurrentOrder = RobotOrder.Stop();
+
+            Vector3 direction = new Vector3(inputDirection.x, 0f, inputDirection.y).normalized;
+            transform.position += direction * (_state.MoveSpeed * Time.deltaTime);
+            transform.rotation = Quaternion.LookRotation(direction);
+            _state.Position = new SimVector2(transform.position.x, transform.position.z);
+            _state.RotationDegrees = transform.eulerAngles.y;
+        }
+
         private void Update()
         {
             MoveAlongPath();

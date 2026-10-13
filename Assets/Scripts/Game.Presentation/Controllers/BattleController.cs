@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using Game.Content.Definitions;
 using Game.Core.Commands;
 using Game.Core.Models;
@@ -104,7 +105,6 @@ namespace Game.Presentation.Controllers
 
             _selectionController.OnBuildingSelected += HandleBuildingSelected;
             _selectionController.OnRobotSelected += HandleRobotSelected;
-            _selectionController.OnMoveOrderRequested += HandleMoveOrder;
             _selectionController.OnAttackOrderRequested += HandleAttackOrder;
 
             // 6. Инициализация нативного Canvas HUD
@@ -130,6 +130,7 @@ namespace Game.Presentation.Controllers
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
             _combatSystem.Update(_matchState, Time.deltaTime);
+            UpdateDirectControl();
 
             // Обновление нативного Canvas интерфейса
             if (_hudView != null)
@@ -312,6 +313,22 @@ namespace Game.Presentation.Controllers
             {
                 Debug.LogWarning($"[Battle] РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РґР°С‚СЊ РїСЂРёРєР°Р· Р°С‚Р°РєРё: {result.ErrorReason}");
             }
+        }
+
+        private void UpdateDirectControl()
+        {
+            if (_currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1 || Keyboard.current == null)
+            {
+                return;
+            }
+
+            Vector2 direction = Vector2.zero;
+            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) direction.y += 1f;
+            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) direction.y -= 1f;
+            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) direction.x -= 1f;
+            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) direction.x += 1f;
+
+            _currentlySelectedRobot.MoveDirect(direction);
         }
 
 

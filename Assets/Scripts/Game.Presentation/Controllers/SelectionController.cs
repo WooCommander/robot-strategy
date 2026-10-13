@@ -24,6 +24,7 @@ namespace Game.Presentation.Controllers
         public event Action<RobotView> OnRobotSelected;
         public event Action<SimVector2> OnGroundClicked;
         public event Action<RobotView, SimVector2> OnMoveOrderRequested;
+        public event Action<RobotView, RobotView> OnAttackOrderRequested;
 
         public RobotView SelectedRobot => _selectedRobot;
         public BuildingView SelectedBuilding => _selectedBuilding;
@@ -137,8 +138,16 @@ namespace Game.Presentation.Controllers
                         var candidateRobot = candidate.collider.GetComponentInParent<RobotView>();
                         if (candidateRobot != null)
                         {
-                            SelectRobot(candidateRobot);
+                            if (_selectedRobot != null &&
+                                _selectedRobot.Owner == PlayerId.Player1 &&
+                                candidateRobot.Owner != _selectedRobot.Owner)
+                            {
+                                OnAttackOrderRequested?.Invoke(_selectedRobot, candidateRobot);
+                                return;
+                            }
+
                             SelectBuilding(null);
+                            SelectRobot(candidateRobot);
                             return;
                         }
 
@@ -155,8 +164,16 @@ namespace Game.Presentation.Controllers
                     var robot = hit.collider.GetComponentInParent<RobotView>();
                     if (robot != null)
                     {
-                        SelectRobot(robot);
+                        if (_selectedRobot != null &&
+                            _selectedRobot.Owner == PlayerId.Player1 &&
+                            robot.Owner != _selectedRobot.Owner)
+                        {
+                            OnAttackOrderRequested?.Invoke(_selectedRobot, robot);
+                            return;
+                        }
+
                         SelectBuilding(null);
+                        SelectRobot(robot);
                         return;
                     }
 

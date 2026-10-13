@@ -26,6 +26,7 @@ namespace Game.Presentation.Controllers
         private MatchState _matchState;
         private CommandDispatcher _commandDispatcher;
         private ProductionSystem _productionSystem;
+        private CombatSystem _combatSystem;
         private Dictionary<string, ModuleDefinition> _moduleCatalog;
 
         private readonly Dictionary<int, RobotView> _spawnedRobots = new Dictionary<int, RobotView>();
@@ -68,6 +69,8 @@ namespace Game.Presentation.Controllers
             _commandDispatcher = new CommandDispatcher(_moduleCatalog);
             _productionSystem = new ProductionSystem(_moduleCatalog);
             _productionSystem.OnRobotSpawned += HandleRobotSpawned;
+            _combatSystem = new CombatSystem(_moduleCatalog);
+            _combatSystem.OnRobotDestroyed += HandleRobotDestroyed;
 
             // 3. Построение визуала карты
             if (_mapRenderer == null)
@@ -101,6 +104,7 @@ namespace Game.Presentation.Controllers
             _selectionController.OnBuildingSelected += HandleBuildingSelected;
             _selectionController.OnRobotSelected += HandleRobotSelected;
             _selectionController.OnMoveOrderRequested += HandleMoveOrder;
+            _selectionController.OnAttackOrderRequested += HandleAttackOrder;
 
             // 6. Инициализация нативного Canvas HUD
             var hudGo = new GameObject("BattleHud");
@@ -124,6 +128,7 @@ namespace Game.Presentation.Controllers
 
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
+            _combatSystem.Update(_matchState, Time.deltaTime);
 
             // Обновление нативного Canvas интерфейса
             if (_hudView != null)
@@ -164,6 +169,19 @@ namespace Game.Presentation.Controllers
 
             _spawnedRobots[robotState.Id.Value] = view;
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
+        }
+
+        private void HandleRobotDestroyed(RobotState attacker, RobotState target)
+        {
+            if (_spawnedRobots.Remove(target.Id.Value, out var view) && view != null)
+            {
+                Destroy(view.gameObject);
+            }
+
+            if (_currentlySelectedRobot != null && _currentlySelectedRobot.EntityId == target.Id.Value)
+            {
+                HandleRobotSelected(null);
+            }
         }
 
         private void HandleBuildingSelected(BuildingView view)
@@ -241,6 +259,27 @@ namespace Game.Presentation.Controllers
             else
             {
                 Debug.LogWarning($"[Battle] Нет пути к точке {targetWorld}!");
+            }
+        }
+
+        private void HandleAttackOrder(RobotView attacker, RobotView target)
+        {
+            if (attacker?.State == null || target?.State == null || attacker.Owner != PlayerId.Player1 || attacker.Owner == target.Owner)
+            {
+                return;
+            }
+
+            var command = new OrderAttackCommand
+            {
+                PlayerId = attacker.Owner,
+                RobotIds = new List<EntityId> { attacker.State.Id },
+                TargetEntityId = target.State.Id
+            };
+
+            var result = _commandDispatcher.Dispatch(command, _matchState);
+            if (!result.IsSuccess)
+            {
+                Debug.LogWarning($"[Battle] РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РґР°С‚СЊ РїСЂРёРєР°Р· Р°С‚Р°РєРё: {result.ErrorReason}");
             }
         }
 

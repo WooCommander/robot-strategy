@@ -146,6 +146,11 @@ namespace Game.Simulation.Systems
                 return CommandResult.Fail("Цель атаки не существует или уже уничтожена.");
             }
 
+            if (targetRobot.Owner == cmd.PlayerId)
+            {
+                return CommandResult.Fail("Нельзя атаковать своего робота.");
+            }
+
             foreach (var robot in robots)
             {
                 robot.CurrentOrder = RobotOrder.Attack(cmd.TargetEntityId);

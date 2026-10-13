@@ -78,6 +78,7 @@ namespace Game.Presentation.Controllers
             _combatSystem.OnWeaponFired += HandleWeaponFired;
             _captureSystem = new CaptureSystem();
             _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
+            QueueTestEnemyScout();
 
             // 3. Построение визуала карты
             if (_mapRenderer == null)
@@ -182,6 +183,15 @@ namespace Game.Presentation.Controllers
             view.SetTerrainSpeedProvider(GetTerrainSpeedMultiplier);
 
             _spawnedRobots[robotState.Id.Value] = view;
+            if (robotState.Owner == PlayerId.Player2)
+            {
+                _commandDispatcher.Dispatch(new OrderCaptureCommand
+                {
+                    PlayerId = PlayerId.Player2,
+                    RobotIds = new List<EntityId> { robotState.Id },
+                    TargetBuildingId = EntityId.None
+                }, _matchState);
+            }
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
         }
 
@@ -373,7 +383,7 @@ namespace Game.Presentation.Controllers
             {
                 RobotView view = pair.Value;
                 RobotState robot = view?.State;
-                if (robot == null || !robot.IsAlive || robot.Owner != PlayerId.Player1) continue;
+                if (robot == null || !robot.IsAlive) continue;
 
                 if (robot.CurrentOrder.Type == OrderType.Capture)
                 {
@@ -421,6 +431,16 @@ namespace Game.Presentation.Controllers
             {
                 view.SetMovementPath(waypoints);
             }
+        }
+
+        private void QueueTestEnemyScout()
+        {
+            _commandDispatcher.Dispatch(new EnqueueProductionCommand
+            {
+                PlayerId = PlayerId.Player2,
+                BaseBuildingId = new EntityId(2),
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint()
+            }, _matchState);
         }
 
         private float GetTerrainSpeedMultiplier(SimVector2 position)

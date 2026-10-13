@@ -46,8 +46,21 @@ namespace Game.Simulation.Systems
                     metalToAddP2 += b.MetalIncomePerSecond * deltaSeconds;
             }
 
-            state.Player1.Metal += (int)metalToAddP1;
-            state.Player2.Metal += (int)metalToAddP2;
+            state.Player1.MetalIncomePerSecond = (int)Math.Round(metalToAddP1 / Math.Max(deltaSeconds, 0.0001f));
+            state.Player2.MetalIncomePerSecond = (int)Math.Round(metalToAddP2 / Math.Max(deltaSeconds, 0.0001f));
+
+            AddMetal(state.Player1, metalToAddP1);
+            AddMetal(state.Player2, metalToAddP2);
+        }
+
+        private static void AddMetal(PlayerState player, float amount)
+        {
+            player.MetalFraction += amount;
+            int wholeMetal = (int)Math.Floor(player.MetalFraction);
+            if (wholeMetal <= 0) return;
+
+            player.Metal += wholeMetal;
+            player.MetalFraction -= wholeMetal;
         }
 
         private void UpdateProductionQueues(MatchState state, float deltaSeconds)

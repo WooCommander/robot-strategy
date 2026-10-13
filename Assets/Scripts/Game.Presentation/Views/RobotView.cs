@@ -26,6 +26,7 @@ namespace Game.Presentation.Views
         public PlayerId Owner => _owner;
         public bool IsSelected => _isSelected;
         public RobotState State => _state;
+        public bool IsMovingAlongPath => _currentPath != null && _currentPathIndex < _currentPath.Count;
 
         public void Initialize(RobotState state)
         {
@@ -134,6 +135,12 @@ namespace Game.Presentation.Views
             _currentPathIndex = 0;
         }
 
+        public void StopMovement()
+        {
+            _currentPath.Clear();
+            _currentPathIndex = 0;
+        }
+
         public void MoveDirect(Vector2 inputDirection)
         {
             if (_state == null || inputDirection.sqrMagnitude < 0.001f)
@@ -141,8 +148,7 @@ namespace Game.Presentation.Views
                 return;
             }
 
-            _currentPath.Clear();
-            _currentPathIndex = 0;
+            StopMovement();
             _state.CurrentOrder = RobotOrder.Stop();
 
             Vector3 direction = new Vector3(inputDirection.x, 0f, inputDirection.y).normalized;

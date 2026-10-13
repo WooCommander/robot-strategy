@@ -39,7 +39,7 @@ namespace Game.Simulation.Systems
 
         private void TryAttack(RobotState attacker, MatchState state)
         {
-            if (attacker.CurrentOrder?.Type != OrderType.Attack || attacker.WeaponCooldownRemaining > 0f)
+            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt) || attacker.WeaponCooldownRemaining > 0f)
             {
                 return;
             }
@@ -47,7 +47,10 @@ namespace Game.Simulation.Systems
             if (!state.Robots.TryGetValue(attacker.CurrentOrder.TargetEntityId.Value, out var target) ||
                 !target.IsAlive || target.Owner == attacker.Owner)
             {
-                attacker.CurrentOrder = RobotOrder.Stop();
+                if (attacker.CurrentOrder.Type == OrderType.Attack)
+                {
+                    attacker.CurrentOrder = RobotOrder.Stop();
+                }
                 return;
             }
 

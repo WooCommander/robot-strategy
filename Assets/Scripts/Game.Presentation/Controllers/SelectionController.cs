@@ -20,12 +20,14 @@ namespace Game.Presentation.Controllers
         private bool _isPointerDown;
         private bool _pressedOverUI;
         private bool _isOrderMode;
+        private bool _isCaptureTargeting;
 
         public event Action<BuildingView> OnBuildingSelected;
         public event Action<RobotView> OnRobotSelected;
         public event Action<SimVector2> OnGroundClicked;
         public event Action<RobotView, SimVector2> OnMoveOrderRequested;
         public event Action<RobotView, RobotView> OnAttackOrderRequested;
+        public event Action<RobotView, BuildingView> OnCaptureOrderRequested;
 
         public RobotView SelectedRobot => _selectedRobot;
         public BuildingView SelectedBuilding => _selectedBuilding;
@@ -156,6 +158,13 @@ namespace Game.Presentation.Controllers
                         var candidateBuilding = candidate.collider.GetComponentInParent<BuildingView>();
                         if (candidateBuilding != null)
                         {
+                            if (_isCaptureTargeting && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
+                            {
+                                _isCaptureTargeting = false;
+                                OnCaptureOrderRequested?.Invoke(_selectedRobot, candidateBuilding);
+                                return;
+                            }
+
                             SelectRobot(null);
                             SelectBuilding(candidateBuilding);
                             return;
@@ -183,6 +192,13 @@ namespace Game.Presentation.Controllers
                     var building = hit.collider.GetComponentInParent<BuildingView>();
                     if (building != null)
                     {
+                        if (_isCaptureTargeting && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
+                        {
+                            _isCaptureTargeting = false;
+                            OnCaptureOrderRequested?.Invoke(_selectedRobot, building);
+                            return;
+                        }
+
                         SelectRobot(null);
                         SelectBuilding(building);
                         return;
@@ -226,6 +242,12 @@ namespace Game.Presentation.Controllers
         public void SetOrderMode(bool isOrderMode)
         {
             _isOrderMode = isOrderMode;
+        }
+
+        public void BeginCaptureTargeting()
+        {
+            _isOrderMode = true;
+            _isCaptureTargeting = true;
         }
 
         public void SelectRobot(RobotView robot)

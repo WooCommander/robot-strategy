@@ -10,8 +10,8 @@ namespace Game.Content.Definitions
 
         public static MapDefinition CreatePrototypeMap()
         {
-            const int width = 32;
-            const int height = 20;
+            const int width = 48;
+            const int height = 30;
 
             var map = new MapDefinition
             {
@@ -45,37 +45,37 @@ namespace Game.Content.Definitions
             }
 
             // Центральный хребет гор с узким проходом (Chokepoint)
-            int midX = width / 2; // 16
+            int midX = width / 2; // 24
             for (int y = 1; y < height - 1; y++)
             {
-                // Оставляем проход по центру (y = 9..11), на севере (y = 15..17) и юге (y = 2..4)
-                if (y >= 5 && y <= 8)
+                // Оставляем проход по центру (y = 13..17), на севере (y = 23..26) и юге (y = 3..7)
+                if (y >= 8 && y <= 12)
                 {
                     map.SetTile(midX - 1, y, TileType.Mountain);
                     map.SetTile(midX, y, TileType.Mountain);
                 }
-                else if (y >= 12 && y <= 15)
+                else if (y >= 18 && y <= 22)
                 {
                     map.SetTile(midX - 1, y, TileType.Mountain);
                     map.SetTile(midX, y, TileType.Mountain);
                 }
             }
 
-            // Центральное озеро/вода с мостом в узком месте (y = 9..11)
-            for (int y = 9; y <= 11; y++)
+            // Центральное озеро/вода с мостом в узком месте (y = 13..17)
+            for (int y = 13; y <= 17; y++)
             {
                 map.SetTile(midX - 1, y, TileType.Bridge);
                 map.SetTile(midX, y, TileType.Bridge);
             }
 
-            // Дороги: Северная магистраль (y = 16) и Южная магистраль (y = 3)
+            // Дороги: Северная магистраль (y = 24) и Южная магистраль (y = 5)
             for (int x = 3; x < width - 3; x++)
             {
-                map.SetTile(x, 16, TileType.Road);
-                map.SetTile(x, 3, TileType.Road);
+                map.SetTile(x, 24, TileType.Road);
+                map.SetTile(x, 5, TileType.Road);
             }
             // Подводящие дороги от баз
-            for (int y = 3; y <= 16; y++)
+            for (int y = 5; y <= 24; y++)
             {
                 map.SetTile(4, y, TileType.Road);
                 map.SetTile(width - 5, y, TileType.Road);
@@ -88,8 +88,8 @@ namespace Game.Content.Definitions
                 EntityIdValue = 1,
                 Type = BuildingType.Base,
                 InitialOwner = PlayerId.Player1,
-                Position = new SimVector2(4.5f, 10.0f),
-                SpawnPoint = new SimVector2(6.5f, 10.0f),
+                Position = new SimVector2(4.5f, 15.0f),
+                SpawnPoint = new SimVector2(6.5f, 15.0f),
                 CaptureRadius = 3.5f
             });
 
@@ -99,8 +99,8 @@ namespace Game.Content.Definitions
                 EntityIdValue = 2,
                 Type = BuildingType.Base,
                 InitialOwner = PlayerId.Player2,
-                Position = new SimVector2(width - 4.5f, 10.0f),
-                SpawnPoint = new SimVector2(width - 6.5f, 10.0f),
+                Position = new SimVector2(width - 4.5f, 15.0f),
+                SpawnPoint = new SimVector2(width - 6.5f, 15.0f),
                 CaptureRadius = 3.5f
             });
 
@@ -110,8 +110,8 @@ namespace Game.Content.Definitions
                 EntityIdValue = 101,
                 Type = BuildingType.Factory,
                 InitialOwner = PlayerId.Neutral,
-                Position = new SimVector2(midX + 0.5f, 16.5f),
-                SpawnPoint = new SimVector2(midX + 0.5f, 15.0f),
+                Position = new SimVector2(midX + 0.5f, 24.5f),
+                SpawnPoint = new SimVector2(midX + 0.5f, 23.0f),
                 CaptureRadius = 2.5f
             });
 
@@ -121,8 +121,8 @@ namespace Game.Content.Definitions
                 EntityIdValue = 102,
                 Type = BuildingType.Factory,
                 InitialOwner = PlayerId.Neutral,
-                Position = new SimVector2(midX + 0.5f, 10.0f),
-                SpawnPoint = new SimVector2(midX + 0.5f, 8.5f),
+                Position = new SimVector2(midX + 0.5f, 15.0f),
+                SpawnPoint = new SimVector2(midX + 0.5f, 13.0f),
                 CaptureRadius = 2.5f
             });
 
@@ -132,8 +132,8 @@ namespace Game.Content.Definitions
                 EntityIdValue = 103,
                 Type = BuildingType.Factory,
                 InitialOwner = PlayerId.Neutral,
-                Position = new SimVector2(midX + 0.5f, 3.5f),
-                SpawnPoint = new SimVector2(midX + 0.5f, 5.0f),
+                Position = new SimVector2(midX + 0.5f, 5.5f),
+                SpawnPoint = new SimVector2(midX + 0.5f, 7.0f),
                 CaptureRadius = 2.5f
             });
 

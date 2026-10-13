@@ -28,6 +28,7 @@ namespace Game.Presentation.Controllers
         private CommandDispatcher _commandDispatcher;
         private ProductionSystem _productionSystem;
         private CombatSystem _combatSystem;
+        private CaptureSystem _captureSystem;
         private Dictionary<string, ModuleDefinition> _moduleCatalog;
 
         private readonly Dictionary<int, RobotView> _spawnedRobots = new Dictionary<int, RobotView>();
@@ -35,6 +36,7 @@ namespace Game.Presentation.Controllers
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
         private bool _isOrderMode;
+        private float _nextAutonomousOrderUpdate;
 
         private void Start()
         {
@@ -74,6 +76,8 @@ namespace Game.Presentation.Controllers
             _combatSystem = new CombatSystem(_moduleCatalog);
             _combatSystem.OnRobotDestroyed += HandleRobotDestroyed;
             _combatSystem.OnWeaponFired += HandleWeaponFired;
+            _captureSystem = new CaptureSystem();
+            _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
 
             // 3. Построение визуала карты
             if (_mapRenderer == null)
@@ -108,11 +112,12 @@ namespace Game.Presentation.Controllers
             _selectionController.OnRobotSelected += HandleRobotSelected;
             _selectionController.OnMoveOrderRequested += HandleMoveOrder;
             _selectionController.OnAttackOrderRequested += HandleAttackOrder;
+            _selectionController.OnCaptureOrderRequested += HandleCaptureOrder;
 
             // 6. Инициализация нативного Canvas HUD
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
-            _hudView.Initialize();
+            _hudView.Initialize(_moduleCatalog);
             _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
@@ -132,7 +137,9 @@ namespace Game.Presentation.Controllers
 
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
+            UpdateAutonomousOrders();
             _combatSystem.Update(_matchState, Time.deltaTime);
+            _captureSystem.Update(_matchState, Time.deltaTime);
             UpdateControlMode();
             UpdateDirectControl();
 
@@ -150,11 +157,11 @@ namespace Game.Presentation.Controllers
             }
         }
 
-        private void HandleOrderPresetFromHud(string name, string chassis, string body, string weapon, string equip)
+        private void HandleOrderPresetFromHud(RobotPresetDefinition preset)
         {
             BuildingView p1Base = GetPlayer1BaseView();
             if (p1Base == null) return;
-            OrderPresetRobot(new EntityId(p1Base.EntityId), name, chassis, body, weapon, equip);
+            OrderPresetRobot(new EntityId(p1Base.EntityId), preset);
         }
 
         private void HandleSelectPlayerBaseFromHud()
@@ -187,6 +194,18 @@ namespace Game.Presentation.Controllers
             if (_currentlySelectedRobot != null && _currentlySelectedRobot.EntityId == target.Id.Value)
             {
                 HandleRobotSelected(null);
+            }
+        }
+
+        private void HandleBuildingCaptured(BuildingState building, PlayerId previousOwner)
+        {
+            foreach (var view in _mapRenderer.SpawnedBuildings)
+            {
+                if (view.EntityId == building.Id.Value)
+                {
+                    view.UpdateOwnerVisuals(building.Owner);
+                    break;
+                }
             }
         }
 
@@ -319,6 +338,123 @@ namespace Game.Presentation.Controllers
             }
         }
 
+        private void HandleCaptureOrder(RobotView robot, BuildingView target)
+        {
+            if (robot?.State == null || target == null || robot.Owner != PlayerId.Player1)
+            {
+                return;
+            }
+
+            var command = new OrderCaptureCommand
+            {
+                PlayerId = robot.Owner,
+                RobotIds = new List<EntityId> { robot.State.Id },
+                TargetBuildingId = new EntityId(target.EntityId)
+            };
+            var result = _commandDispatcher.Dispatch(command, _matchState);
+            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, _matchState.Buildings[target.EntityId].Position, out var waypoints))
+            {
+                robot.SetMovementPath(waypoints);
+                Debug.Log($"[Battle] Робот #{robot.EntityId} получил приказ захватить здание #{target.EntityId}.");
+            }
+            else if (!result.IsSuccess)
+            {
+                Debug.LogWarning($"[Battle] Приказ захвата отклонён: {result.ErrorReason}");
+            }
+        }
+
+        private void UpdateAutonomousOrders()
+        {
+            if (Time.time < _nextAutonomousOrderUpdate) return;
+            _nextAutonomousOrderUpdate = Time.time + 0.4f;
+
+            foreach (var pair in _spawnedRobots)
+            {
+                RobotView view = pair.Value;
+                RobotState robot = view?.State;
+                if (robot == null || !robot.IsAlive || robot.Owner != PlayerId.Player1) continue;
+
+                if (robot.CurrentOrder.Type == OrderType.Capture)
+                {
+                    var target = FindNearestBuilding(robot, building => building.Owner != robot.Owner);
+                    if (target == null) continue;
+                    bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
+                    robot.CurrentOrder.TargetEntityId = target.Id;
+                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
+                }
+                else if (robot.CurrentOrder.Type == OrderType.Hunt)
+                {
+                    var target = FindNearestEnemy(robot);
+                    if (target == null) continue;
+                    bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
+                    robot.CurrentOrder.TargetEntityId = target.Id;
+                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
+                }
+                else if (robot.CurrentOrder.Type == OrderType.Scout)
+                {
+                    bool targetIsAtMapEdge = robot.CurrentOrder.TargetPosition.X <= 2f ||
+                                             robot.CurrentOrder.TargetPosition.X >= _mapDefinition.Width - 3f;
+                    if (targetIsAtMapEdge)
+                    {
+                        robot.CurrentOrder.TargetPosition = GetScoutDestination(robot);
+                        view.StopMovement();
+                    }
+
+                    if (!view.IsMovingAlongPath) RouteRobotTo(view, robot.CurrentOrder.TargetPosition);
+                }
+            }
+        }
+
+        private void RouteRobotTo(RobotView view, SimVector2 target)
+        {
+            if (_pathfinder.TryFindPath(view.State.Position, target, out var waypoints))
+            {
+                view.SetMovementPath(waypoints);
+            }
+        }
+
+        private BuildingState FindNearestBuilding(RobotState robot, System.Func<BuildingState, bool> predicate)
+        {
+            BuildingState nearest = null;
+            float nearestDistance = float.MaxValue;
+            foreach (var building in _matchState.Buildings.Values)
+            {
+                if (!predicate(building)) continue;
+                float distance = SimVector2.SqrDistance(robot.Position, building.Position);
+                if (distance < nearestDistance)
+                {
+                    nearest = building;
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
+        }
+
+        private RobotState FindNearestEnemy(RobotState robot)
+        {
+            RobotState nearest = null;
+            float nearestDistance = float.MaxValue;
+            foreach (var candidate in _matchState.Robots.Values)
+            {
+                if (!candidate.IsAlive || candidate.Owner == robot.Owner) continue;
+                float distance = SimVector2.SqrDistance(robot.Position, candidate.Position);
+                if (distance < nearestDistance)
+                {
+                    nearest = candidate;
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
+        }
+
+        private SimVector2 GetScoutDestination(RobotState robot)
+        {
+            // Разведка ведёт в сектора у противника, но не к скалам карты и не под базу.
+            float x = robot.Owner == PlayerId.Player1 ? _mapDefinition.Width - 9f : 8f;
+            float y = 6f + (robot.Id.Value % 3) * 9f;
+            return new SimVector2(x, y);
+        }
+
         private void UpdateDirectControl()
         {
             if (_isOrderMode || _currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1 || Keyboard.current == null)
@@ -337,7 +473,63 @@ namespace Game.Presentation.Controllers
 
         private void UpdateControlMode()
         {
-            if (Keyboard.current == null || !Keyboard.current.tabKey.wasPressedThisFrame)
+            if (Keyboard.current == null)
+            {
+                return;
+            }
+
+            if (_currentlySelectedRobot != null && _currentlySelectedRobot.Owner == PlayerId.Player1)
+            {
+                if (Keyboard.current.cKey.wasPressedThisFrame)
+                {
+                    _isOrderMode = true;
+                    _selectionController.SetOrderMode(true);
+                    _hudView.SetOrderMode(true);
+                    _commandDispatcher.Dispatch(new OrderCaptureCommand
+                    {
+                        PlayerId = PlayerId.Player1,
+                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
+                        TargetBuildingId = EntityId.None
+                    }, _matchState);
+                }
+                else if (Keyboard.current.hKey.wasPressedThisFrame)
+                {
+                    _isOrderMode = true;
+                    _selectionController.SetOrderMode(true);
+                    _hudView.SetOrderMode(true);
+                    _commandDispatcher.Dispatch(new OrderHuntCommand
+                    {
+                        PlayerId = PlayerId.Player1,
+                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id }
+                    }, _matchState);
+                }
+                else if (Keyboard.current.rKey.wasPressedThisFrame)
+                {
+                    _isOrderMode = true;
+                    _selectionController.SetOrderMode(true);
+                    _hudView.SetOrderMode(true);
+                    _commandDispatcher.Dispatch(new OrderScoutCommand
+                    {
+                        PlayerId = PlayerId.Player1,
+                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
+                        TargetPosition = GetScoutDestination(_currentlySelectedRobot.State)
+                    }, _matchState);
+                }
+                else if (_isOrderMode && Keyboard.current.sKey.wasPressedThisFrame)
+                {
+                    var result = _commandDispatcher.Dispatch(new OrderStopCommand
+                    {
+                        PlayerId = PlayerId.Player1,
+                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id }
+                    }, _matchState);
+                    if (result.IsSuccess)
+                    {
+                        _currentlySelectedRobot.StopMovement();
+                    }
+                }
+            }
+
+            if (!Keyboard.current.tabKey.wasPressedThisFrame)
             {
                 return;
             }
@@ -363,16 +555,9 @@ namespace Game.Presentation.Controllers
             return null;
         }
 
-        private void OrderPresetRobot(EntityId baseId, string name, string chassis, string body, string weapon, string equip)
+        private void OrderPresetRobot(EntityId baseId, RobotPresetDefinition preset)
         {
-            var bp = new RobotBlueprint(
-                $"bp_{Guid.NewGuid():N}",
-                name,
-                chassis,
-                body,
-                weapon,
-                equip
-            );
+            var bp = preset.CreateBlueprint();
 
             var cmd = new EnqueueProductionCommand
             {
@@ -384,7 +569,7 @@ namespace Game.Presentation.Controllers
             var res = _commandDispatcher.Dispatch(cmd, _matchState);
             if (res.IsSuccess)
             {
-                Debug.Log($"[Battle] Заказ на робота '{name}' поставлен в очередь производства!");
+                Debug.Log($"[Battle] Заказ на робота '{preset.Name}' поставлен в очередь производства!");
             }
             else
             {

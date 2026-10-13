@@ -35,6 +35,8 @@ namespace Game.Simulation.Systems
                 OrderCaptureCommand capture => HandleCapture(capture, state),
                 OrderDefendCommand defend => HandleDefend(defend, state),
                 OrderStopCommand stop => HandleStop(stop, state),
+                OrderHuntCommand hunt => HandleHunt(hunt, state),
+                OrderScoutCommand scout => HandleScout(scout, state),
                 _ => CommandResult.Fail($"Неизвестный тип команды: {command.GetType().Name}")
             };
         }
@@ -81,7 +83,7 @@ namespace Game.Simulation.Systems
             player.Metal -= validation.TotalCost;
             player.QueuedRobotsCount++;
 
-            float buildTime = Math.Max(5.0f, validation.TotalCost * 0.05f); // 5% от стоимости как базовое время сборки
+            float buildTime = GetBuildTimeSeconds(cmd.Blueprint, validation.TotalCost);
             var order = new ProductionOrder
             {
                 OrderId = Guid.NewGuid().ToString("N"),
@@ -94,6 +96,13 @@ namespace Game.Simulation.Systems
 
             building.ProductionQueue.Add(order);
             return CommandResult.Success();
+        }
+
+        private static float GetBuildTimeSeconds(RobotBlueprint blueprint, int totalCost)
+        {
+            if (RobotPresetCatalog.TryFind(blueprint, out var preset)) return preset.BuildTimeSeconds;
+
+            return Math.Max(5f, totalCost * 0.05f);
         }
 
         private CommandResult HandleCancel(CancelProductionCommand cmd, MatchState state, PlayerState player)
@@ -163,9 +172,15 @@ namespace Game.Simulation.Systems
             var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
             if (error != null) return CommandResult.Fail(error);
 
-            if (!state.Buildings.ContainsKey(cmd.TargetBuildingId.Value))
+            BuildingState targetBuilding = null;
+            if (cmd.TargetBuildingId.IsValid && !state.Buildings.TryGetValue(cmd.TargetBuildingId.Value, out targetBuilding))
             {
                 return CommandResult.Fail("Целевое здание для захвата не найдено.");
+            }
+
+            if (cmd.TargetBuildingId.IsValid && targetBuilding.Owner == cmd.PlayerId)
+            {
+                return CommandResult.Fail("Нельзя захватывать собственное здание.");
             }
 
             foreach (var robot in robots)
@@ -196,6 +211,22 @@ namespace Game.Simulation.Systems
             {
                 robot.CurrentOrder = RobotOrder.Stop();
             }
+            return CommandResult.Success();
+        }
+
+        private CommandResult HandleHunt(OrderHuntCommand cmd, MatchState state)
+        {
+            var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
+            if (error != null) return CommandResult.Fail(error);
+            foreach (var robot in robots) robot.CurrentOrder = RobotOrder.Hunt();
+            return CommandResult.Success();
+        }
+
+        private CommandResult HandleScout(OrderScoutCommand cmd, MatchState state)
+        {
+            var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
+            if (error != null) return CommandResult.Fail(error);
+            foreach (var robot in robots) robot.CurrentOrder = RobotOrder.Scout(cmd.TargetPosition);
             return CommandResult.Success();
         }
 

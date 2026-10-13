@@ -12,6 +12,8 @@ namespace Game.Core.Commands
         Capture = 3,
         Defend = 4,
         Stop = 5,
+        Hunt = 6,
+        Scout = 7,
         EnqueueProduction = 10,
         CancelProduction = 11
     }
@@ -95,6 +97,25 @@ namespace Game.Core.Commands
         public CommandType Type => CommandType.Stop;
 
         public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
+    }
+
+    [Serializable]
+    public class OrderHuntCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.Hunt;
+        public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
+    }
+
+    [Serializable]
+    public class OrderScoutCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.Scout;
+        public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
+        public SimVector2 TargetPosition { get; set; }
     }
 
     [Serializable]

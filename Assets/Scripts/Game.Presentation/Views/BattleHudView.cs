@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem.UI;
@@ -35,14 +36,16 @@ namespace Game.Presentation.Views
         private Text _missileBtnText;
 
         // Делегат заказа робота
-        public event Action<string, string, string, string, string> OnOrderPresetRequested;
+        public event Action<RobotPresetDefinition> OnOrderPresetRequested;
         public event Action OnSelectPlayerBaseRequested;
 
         private Font _uiFont;
         private bool _isOrderMode;
+        private IReadOnlyDictionary<string, ModuleDefinition> _moduleCatalog;
 
-        public void Initialize()
+        public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog)
         {
+            _moduleCatalog = moduleCatalog;
             EnsureFont();
             EnsureEventSystem();
             CreateCanvas();
@@ -131,7 +134,7 @@ namespace Game.Presentation.Views
                 new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -12f), new Vector2(-20f, -36f), 18, FontStyle.Bold, new Color(0.35f, 0.85f, 1f), TextAnchor.MiddleLeft);
 
             // Статус очереди
-            _queueStatusText = CreateLabel(_bottomPanel.transform, "QueueStatus", "Очередь: 0/3 (Свободно — выберите робота для заказа)",
+            _queueStatusText = CreateLabel(_bottomPanel.transform, "QueueStatus", "Очередь: 0/5 | База: +5 М/сек, завод: +10 М/сек",
                 new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -38f), new Vector2(-20f, -62f), 15, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
 
             // Прогресс-бар сборки (фон)
@@ -158,41 +161,29 @@ namespace Game.Presentation.Views
             float btnY = 65f;
 
             // 1. Разведчик (350 М, 8с)
-            _scoutBtn = CreateButton(_bottomPanel.transform, "Btn_Scout", "<b>РАЗВЕДЧИК</b>\n<color=#FFD700>350 М</color> • 8 сек\n<size=12>Ноги + Пушка</size>",
+            _scoutBtn = CreatePresetButton("Btn_Scout", RobotPresetCatalog.Scout,
                 new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(160f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f), 15);
+                new Color(0.12f, 0.32f, 0.54f, 0.98f));
             _scoutBtnText = _scoutBtn.GetComponentInChildren<Text>();
-            _scoutBtn.onClick.AddListener(() =>
-            {
-                OnOrderPresetRequested?.Invoke("Разведчик", DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon, null);
-            });
 
             // 2. Тяжёлый танк (570 М, 12с)
-            _tankBtn = CreateButton(_bottomPanel.transform, "Btn_Tank", "<b>ТЯЖЁЛЫЙ ТАНК</b>\n<color=#FFD700>570 М</color> • 12 сек\n<size=12>Гусеницы + Броня</size>",
+            _tankBtn = CreatePresetButton("Btn_Tank", RobotPresetCatalog.Tank,
                 new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f), 15);
+                new Color(0.12f, 0.32f, 0.54f, 0.98f));
             _tankBtnText = _tankBtn.GetComponentInChildren<Text>();
-            _tankBtn.onClick.AddListener(() =>
-            {
-                OnOrderPresetRequested?.Invoke("Танк", DefaultContentCatalog.ChassisTracks, DefaultContentCatalog.BodyHeavy, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.EquipArmor);
-            });
 
             // 3. Ракетчик (440 М, 10с)
-            _missileBtn = CreateButton(_bottomPanel.transform, "Btn_Missile", "<b>РАКЕТЧИК</b>\n<color=#FFD700>440 М</color> • 10 сек\n<size=12>Гусеницы + Ракеты</size>",
+            _missileBtn = CreatePresetButton("Btn_Missile", RobotPresetCatalog.Missile,
                 new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-160f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f), 15);
+                new Color(0.12f, 0.32f, 0.54f, 0.98f));
             _missileBtnText = _missileBtn.GetComponentInChildren<Text>();
-            _missileBtn.onClick.AddListener(() =>
-            {
-                OnOrderPresetRequested?.Invoke("Ракетчик", DefaultContentCatalog.ChassisTracks, DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponMissiles, null);
-            });
         }
 
         public void UpdateState(PlayerState player, BuildingState activeBuilding, RobotState selectedRobot)
         {
             if (player != null)
             {
-                _metalText.text = $"💰 Металл: <color=#FFD700><b>{player.Metal}</b></color> (+5/с База)";
+                _metalText.text = $"💰 Металл: <color=#FFD700><b>{player.Metal}</b></color> (<color=#00FF88>+{player.MetalIncomePerSecond}/с</color>)";
                 _armyText.text = $"🤖 Армия: <b>{player.TotalArmyCount} / {PlayerState.MaxArmyLimit}</b> (В бою: {player.ActiveRobotsCount})";
 
                 UpdateButtonsAffordability(player.Metal);
@@ -203,7 +194,7 @@ namespace Game.Presentation.Views
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
                 string controlHint = _isOrderMode
-                    ? "<color=#66CCFF>РЕЖИМ ПРИКАЗОВ: клик по земле — движение, по врагу — атака</color>"
+                    ? "<color=#66CCFF>ПРИКАЗЫ: клик — движение/атака | C — автозахват | H — охота | R — разведка | S — стоп</color>"
                     : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
                 _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
                 SetProgress(0f);
@@ -232,13 +223,13 @@ namespace Game.Presentation.Views
                             float rem = first.RemainingBuildTimeSeconds;
                             float total = Mathf.Max(0.01f, first.TotalBuildTimeSeconds);
                             float progress = Mathf.Clamp01(1f - (rem / total));
-                            _queueStatusText.text = $"Сборка: <b>{first.Blueprint.Name}</b> (осталось {rem:F1}с) | Очередь: {q.Count}/3";
+                            _queueStatusText.text = $"Сборка: <b>{first.Blueprint.Name}</b> (осталось {rem:F1}с) | Очередь: {q.Count}/{BuildingState.MaxQueueSize}";
                             SetProgress(progress);
                         }
                     }
                     else
                     {
-                        _queueStatusText.text = "Очередь: <b>0/3 (Свободно — нажмите кнопку ниже для сборки)</b>";
+                        _queueStatusText.text = $"Очередь: <b>0/{BuildingState.MaxQueueSize}</b> | База: <color=#00FF88>+5 М/сек</color>, завод: <color=#00FF88>+10 М/сек</color>.";
                         SetProgress(0f);
                     }
                 }
@@ -274,17 +265,33 @@ namespace Game.Presentation.Views
 
         private void UpdateButtonsAffordability(int metal)
         {
-            SetButtonState(_scoutBtn, _scoutBtnText, "РАЗВЕДЧИК", 350, 8, "Ноги + Пушка", metal >= 350);
-            SetButtonState(_tankBtn, _tankBtnText, "ТЯЖЁЛЫЙ ТАНК", 570, 12, "Гусеницы + Броня", metal >= 570);
-            SetButtonState(_missileBtn, _missileBtnText, "РАКЕТЧИК", 440, 10, "Гусеницы + Ракеты", metal >= 440);
+            SetPresetButtonState(_scoutBtn, _scoutBtnText, RobotPresetCatalog.Scout, metal);
+            SetPresetButtonState(_tankBtn, _tankBtnText, RobotPresetCatalog.Tank, metal);
+            SetPresetButtonState(_missileBtn, _missileBtnText, RobotPresetCatalog.Missile, metal);
         }
 
-        private void SetButtonState(Button btn, Text txt, string name, int cost, int time, string modules, bool canAfford)
+        private Button CreatePresetButton(string name, RobotPresetDefinition preset, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos, Vector2 sizeDelta, Color color)
+        {
+            var button = CreateButton(_bottomPanel.transform, name, FormatPresetText(preset, true), anchorMin, anchorMax, anchoredPos, sizeDelta, color, 15);
+            button.onClick.AddListener(() => OnOrderPresetRequested?.Invoke(preset));
+            return button;
+        }
+
+        private void SetPresetButtonState(Button btn, Text txt, RobotPresetDefinition preset, int metal)
         {
             if (btn == null || txt == null) return;
+            int cost = preset.GetCost(_moduleCatalog);
+            bool canAfford = metal >= cost;
             btn.interactable = canAfford;
             string costColor = canAfford ? "#FFD700" : "#FF6666";
-            txt.text = $"<b>{name}</b>\n<color={costColor}>{cost} М</color> • {time} сек\n<size=12>{modules}</size>";
+            txt.text = $"<b>{preset.CardTitle}</b>\n<color={costColor}>{cost} М</color> • {preset.BuildTimeSeconds:0} сек\n<size=12>{preset.ModulesLabel}</size>";
+        }
+
+        private string FormatPresetText(RobotPresetDefinition preset, bool canAfford)
+        {
+            int cost = preset.GetCost(_moduleCatalog);
+            string costColor = canAfford ? "#FFD700" : "#FF6666";
+            return $"<b>{preset.CardTitle}</b>\n<color={costColor}>{cost} М</color> • {preset.BuildTimeSeconds:0} сек\n<size=12>{preset.ModulesLabel}</size>";
         }
 
         // Вспомогательные методы построения UGUI элементов

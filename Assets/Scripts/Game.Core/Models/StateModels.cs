@@ -15,6 +15,8 @@ namespace Game.Core.Models
         public static RobotOrder Attack(EntityId target) => new RobotOrder { Type = OrderType.Attack, TargetEntityId = target };
         public static RobotOrder Capture(EntityId target) => new RobotOrder { Type = OrderType.Capture, TargetEntityId = target };
         public static RobotOrder Defend(SimVector2 pos) => new RobotOrder { Type = OrderType.Defend, TargetPosition = pos };
+        public static RobotOrder Hunt() => new RobotOrder { Type = OrderType.Hunt };
+        public static RobotOrder Scout(SimVector2 position) => new RobotOrder { Type = OrderType.Scout, TargetPosition = position };
     }
 
     [Serializable]
@@ -90,6 +92,8 @@ namespace Game.Core.Models
     {
         public PlayerId Id { get; set; }
         public int Metal { get; set; } = 600;
+        public float MetalFraction { get; set; }
+        public int MetalIncomePerSecond { get; set; }
         public const int MaxArmyLimit = 40;
 
         public int ActiveRobotsCount { get; set; }

@@ -45,7 +45,9 @@ namespace Game.Core.Types
         Attack = 2,
         Capture = 3,
         Defend = 4,
-        Stop = 5
+        Stop = 5,
+        Hunt = 6,
+        Scout = 7
     }
 
     public enum BuildingType : byte

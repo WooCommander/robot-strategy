@@ -391,6 +391,13 @@ namespace Game.Presentation.Controllers
                     robot.CurrentOrder.TargetEntityId = target.Id;
                     if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
                 }
+                else if (robot.CurrentOrder.Type == OrderType.Defend)
+                {
+                    view.StopMovement();
+                    var target = FindNearestEnemy(robot);
+                    robot.CurrentOrder.TargetEntityId = target != null && SimVector2.SqrDistance(robot.Position, target.Position) <= 64f
+                        ? target.Id : EntityId.None;
+                }
                 else if (robot.CurrentOrder.Type == OrderType.Scout)
                 {
                     bool targetIsAtMapEdge = robot.CurrentOrder.TargetPosition.X <= 2f ||
@@ -523,6 +530,19 @@ namespace Game.Presentation.Controllers
                         PlayerId = PlayerId.Player1,
                         RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
                         TargetPosition = GetScoutDestination(_currentlySelectedRobot.State)
+                    }, _matchState);
+                }
+                else if (Keyboard.current.fKey.wasPressedThisFrame)
+                {
+                    _isOrderMode = true;
+                    _selectionController.SetOrderMode(true);
+                    _hudView.SetOrderMode(true);
+                    _currentlySelectedRobot.StopMovement();
+                    _commandDispatcher.Dispatch(new OrderDefendCommand
+                    {
+                        PlayerId = PlayerId.Player1,
+                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
+                        TargetPosition = _currentlySelectedRobot.State.Position
                     }, _matchState);
                 }
                 else if (_isOrderMode && Keyboard.current.sKey.wasPressedThisFrame)

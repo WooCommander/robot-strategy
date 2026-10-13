@@ -278,7 +278,7 @@ namespace Game.Presentation.Views
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
                 string controlHint = _isOrderMode
-                    ? "<color=#66CCFF>ПРИКАЗЫ: клик по врагу — атака | C — автозахват | H — охота | R — разведка | S — стоп</color>"
+                    ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп</color>"
                     : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
                 _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
                 SetProgress(0f);

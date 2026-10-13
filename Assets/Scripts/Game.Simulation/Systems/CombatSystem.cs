@@ -39,7 +39,7 @@ namespace Game.Simulation.Systems
 
         private void TryAttack(RobotState attacker, MatchState state)
         {
-            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt) || attacker.WeaponCooldownRemaining > 0f)
+            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt && attacker.CurrentOrder?.Type != OrderType.Defend) || attacker.WeaponCooldownRemaining > 0f)
             {
                 return;
             }

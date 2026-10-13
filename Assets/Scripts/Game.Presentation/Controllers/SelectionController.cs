@@ -145,7 +145,8 @@ namespace Game.Presentation.Controllers
                                 _selectedRobot.Owner == PlayerId.Player1 &&
                                 candidateRobot.Owner != _selectedRobot.Owner)
                             {
-                                OnAttackOrderRequested?.Invoke(_selectedRobot, candidateRobot);
+                                SelectBuilding(null);
+                                SelectRobot(candidateRobot);
                                 return;
                             }
 
@@ -178,7 +179,8 @@ namespace Game.Presentation.Controllers
                             _selectedRobot.Owner == PlayerId.Player1 &&
                             robot.Owner != _selectedRobot.Owner)
                         {
-                            OnAttackOrderRequested?.Invoke(_selectedRobot, robot);
+                            SelectBuilding(null);
+                            SelectRobot(robot);
                             return;
                         }
 

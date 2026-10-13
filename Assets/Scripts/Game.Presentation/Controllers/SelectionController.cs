@@ -19,14 +19,17 @@ namespace Game.Presentation.Controllers
         private Vector2 _pointerDownPos;
         private bool _isPointerDown;
         private bool _pressedOverUI;
+        private bool _isOrderMode;
 
         public event Action<BuildingView> OnBuildingSelected;
         public event Action<RobotView> OnRobotSelected;
         public event Action<SimVector2> OnGroundClicked;
+        public event Action<RobotView, SimVector2> OnMoveOrderRequested;
         public event Action<RobotView, RobotView> OnAttackOrderRequested;
 
         public RobotView SelectedRobot => _selectedRobot;
         public BuildingView SelectedBuilding => _selectedBuilding;
+        public bool IsOrderMode => _isOrderMode;
 
         private void Awake()
         {
@@ -137,7 +140,7 @@ namespace Game.Presentation.Controllers
                         var candidateRobot = candidate.collider.GetComponentInParent<RobotView>();
                         if (candidateRobot != null)
                         {
-                            if (_selectedRobot != null &&
+                            if (_isOrderMode && _selectedRobot != null &&
                                 _selectedRobot.Owner == PlayerId.Player1 &&
                                 candidateRobot.Owner != _selectedRobot.Owner)
                             {
@@ -163,7 +166,7 @@ namespace Game.Presentation.Controllers
                     var robot = hit.collider.GetComponentInParent<RobotView>();
                     if (robot != null)
                     {
-                        if (_selectedRobot != null &&
+                        if (_isOrderMode && _selectedRobot != null &&
                             _selectedRobot.Owner == PlayerId.Player1 &&
                             robot.Owner != _selectedRobot.Owner)
                         {
@@ -189,7 +192,11 @@ namespace Game.Presentation.Controllers
                     var worldPos = new SimVector2(hit.point.x, hit.point.z);
 
                     // Если был выбран свой робот — отдаем приказ на движение
-                    if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)
+                    if (_isOrderMode && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
+                    {
+                        OnMoveOrderRequested?.Invoke(_selectedRobot, worldPos);
+                    }
+                    else if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)
                     {
                         SelectBuilding(null);
                         SelectRobot(null);
@@ -214,6 +221,11 @@ namespace Game.Presentation.Controllers
             }
 
             OnBuildingSelected?.Invoke(building);
+        }
+
+        public void SetOrderMode(bool isOrderMode)
+        {
+            _isOrderMode = isOrderMode;
         }
 
         public void SelectRobot(RobotView robot)

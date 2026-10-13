@@ -34,6 +34,7 @@ namespace Game.Presentation.Controllers
         private BuildingView _currentlySelectedBuilding;
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
+        private bool _isOrderMode;
 
         private void Start()
         {
@@ -105,12 +106,14 @@ namespace Game.Presentation.Controllers
 
             _selectionController.OnBuildingSelected += HandleBuildingSelected;
             _selectionController.OnRobotSelected += HandleRobotSelected;
+            _selectionController.OnMoveOrderRequested += HandleMoveOrder;
             _selectionController.OnAttackOrderRequested += HandleAttackOrder;
 
             // 6. Инициализация нативного Canvas HUD
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize();
+            _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
 
@@ -130,6 +133,7 @@ namespace Game.Presentation.Controllers
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
             _combatSystem.Update(_matchState, Time.deltaTime);
+            UpdateControlMode();
             UpdateDirectControl();
 
             // Обновление нативного Canvas интерфейса
@@ -317,7 +321,7 @@ namespace Game.Presentation.Controllers
 
         private void UpdateDirectControl()
         {
-            if (_currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1 || Keyboard.current == null)
+            if (_isOrderMode || _currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1 || Keyboard.current == null)
             {
                 return;
             }
@@ -329,6 +333,19 @@ namespace Game.Presentation.Controllers
             if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) direction.x += 1f;
 
             _currentlySelectedRobot.MoveDirect(direction);
+        }
+
+        private void UpdateControlMode()
+        {
+            if (Keyboard.current == null || !Keyboard.current.tabKey.wasPressedThisFrame)
+            {
+                return;
+            }
+
+            _isOrderMode = !_isOrderMode;
+            _selectionController.SetOrderMode(_isOrderMode);
+            _hudView.SetOrderMode(_isOrderMode);
+            Debug.Log($"[Battle] Р РµР¶РёРј СѓРїСЂР°РІР»РµРЅРёСЏ: {(_isOrderMode ? "РїСЂРёРєР°Р·С‹" : "СЂСѓС‡РЅРѕР№")}.");
         }
 
 

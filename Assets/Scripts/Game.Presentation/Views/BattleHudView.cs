@@ -39,6 +39,7 @@ namespace Game.Presentation.Views
         public event Action OnSelectPlayerBaseRequested;
 
         private Font _uiFont;
+        private bool _isOrderMode;
 
         public void Initialize()
         {
@@ -47,6 +48,11 @@ namespace Game.Presentation.Views
             CreateCanvas();
             CreateTopBar();
             CreateBottomPanel();
+        }
+
+        public void SetOrderMode(bool isOrderMode)
+        {
+            _isOrderMode = isOrderMode;
         }
 
         private void EnsureFont()
@@ -196,7 +202,10 @@ namespace Game.Presentation.Views
             {
                 if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
                 _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
-                _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | <color=#FFFF00>Кликните по карте для перемещения</color>";
+                string controlHint = _isOrderMode
+                    ? "<color=#66CCFF>РЕЖИМ ПРИКАЗОВ: клик по земле — движение, по врагу — атака</color>"
+                    : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
+                _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
                 SetProgress(0f);
                 SetProductionButtonsVisible(false);
             }
@@ -304,8 +313,8 @@ namespace Game.Presentation.Views
             var rt = go.AddComponent<RectTransform>();
             rt.anchorMin = anchorMin;
             rt.anchorMax = anchorMax;
-            rt.offsetMin = offsetMin;
-            rt.offsetMax = offsetMax;
+            rt.offsetMin = new Vector2(offsetMin.x, offsetMax.y);
+            rt.offsetMax = new Vector2(offsetMax.x, offsetMin.y);
 
             var txt = go.AddComponent<Text>();
             txt.font = _uiFont;

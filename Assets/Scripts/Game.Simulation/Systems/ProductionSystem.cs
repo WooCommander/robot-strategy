@@ -9,6 +9,7 @@ namespace Game.Simulation.Systems
 {
     public class ProductionSystem
     {
+        private const float SpawnExitClearance = 1.5f;
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
         private int _nextEntityId = 1000;
 
@@ -117,7 +118,7 @@ namespace Game.Simulation.Systems
                 Id = new EntityId(++_nextEntityId),
                 Owner = building.Owner,
                 Blueprint = order.Blueprint,
-                Position = building.SpawnPoint,
+                Position = GetReleasePosition(building),
                 RotationDegrees = building.Owner == PlayerId.Player1 ? 0f : 180f,
                 MaxHealth = val.TotalHealth,
                 CurrentHealth = val.TotalHealth,
@@ -128,6 +129,19 @@ namespace Game.Simulation.Systems
 
             state.Robots[newRobot.Id.Value] = newRobot;
             OnRobotSpawned?.Invoke(newRobot);
+        }
+
+        private static SimVector2 GetReleasePosition(BuildingState building)
+        {
+            SimVector2 direction = building.SpawnPoint - building.Position;
+            if (direction.SqrMagnitude < 0.001f)
+            {
+                direction = building.Owner == PlayerId.Player2
+                    ? new SimVector2(-1f, 0f)
+                    : new SimVector2(1f, 0f);
+            }
+
+            return building.SpawnPoint + direction / direction.Magnitude * SpawnExitClearance;
         }
     }
 }

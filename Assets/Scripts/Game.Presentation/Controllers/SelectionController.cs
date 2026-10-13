@@ -145,8 +145,8 @@ namespace Game.Presentation.Controllers
                         var candidateBuilding = candidate.collider.GetComponentInParent<BuildingView>();
                         if (candidateBuilding != null)
                         {
-                            SelectBuilding(candidateBuilding);
                             SelectRobot(null);
+                            SelectBuilding(candidateBuilding);
                             return;
                         }
                     }
@@ -164,8 +164,8 @@ namespace Game.Presentation.Controllers
                     var building = hit.collider.GetComponentInParent<BuildingView>();
                     if (building != null)
                     {
-                        SelectBuilding(building);
                         SelectRobot(null);
+                        SelectBuilding(building);
                         return;
                     }
 
@@ -204,7 +204,17 @@ namespace Game.Presentation.Controllers
 
         public void SelectBuilding(BuildingView building)
         {
+            if (_selectedBuilding != null && _selectedBuilding != building)
+            {
+                _selectedBuilding.SetSelected(false);
+            }
+
             _selectedBuilding = building;
+            if (_selectedBuilding != null)
+            {
+                _selectedBuilding.SetSelected(true);
+            }
+
             OnBuildingSelected?.Invoke(building);
         }
 

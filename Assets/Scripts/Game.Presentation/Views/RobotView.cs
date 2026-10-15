@@ -16,6 +16,7 @@ namespace Game.Presentation.Views
         [SerializeField] private LineRenderer _selectionRing;
         [SerializeField] private LineRenderer _healthBarBg;
         [SerializeField] private LineRenderer _healthBarFill;
+        private Transform _healthBarRoot;
 
         private RobotState _state;
         private bool _isSelected;
@@ -88,6 +89,7 @@ namespace Game.Presentation.Views
             var hbObj = new GameObject("HealthBar");
             hbObj.transform.SetParent(transform, false);
             hbObj.transform.localPosition = new Vector3(0f, 1.8f, 0f);
+            _healthBarRoot = hbObj.transform;
 
             var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
 
@@ -167,6 +169,13 @@ namespace Game.Presentation.Views
         private void Update()
         {
             MoveAlongPath();
+        }
+
+        private void LateUpdate()
+        {
+            if (_healthBarRoot == null || UnityEngine.Camera.main == null) return;
+            var cameraTransform = UnityEngine.Camera.main.transform;
+            _healthBarRoot.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
         }
 
         private void MoveAlongPath()

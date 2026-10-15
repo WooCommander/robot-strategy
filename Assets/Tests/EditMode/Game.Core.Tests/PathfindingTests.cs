@@ -46,5 +46,19 @@ namespace Game.Core.Tests
             bool success = pathfinder.TryFindPath(startInsideRock, target, out _);
             Assert.IsFalse(success, "Нельзя стартовать из непроходимой скалы");
         }
+
+        [Test]
+        public void UnwalkableTarget_ShouldEndOnWalkableCell()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            var nav = new NavigationGrid(map);
+            var pathfinder = new AStarPathfinder(nav);
+
+            bool success = pathfinder.TryFindPath(new SimVector2(4.5f, 10f), new SimVector2(-2f, 10f), out var waypoints);
+
+            Assert.IsTrue(success);
+            var end = nav.WorldToGrid(waypoints[waypoints.Count - 1]);
+            Assert.IsTrue(nav.IsWalkable(end.X, end.Y), "Финиш должен оставаться в проходимой клетке.");
+        }
     }
 }

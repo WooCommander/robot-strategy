@@ -95,6 +95,7 @@ namespace Game.Simulation.Navigation
 
             var startGrid = _grid.WorldToGrid(startWorld);
             var endGrid = _grid.WorldToGrid(endWorld);
+            bool requestedEndIsWalkable = _grid.IsWalkable(endGrid.X, endGrid.Y);
 
             // Если старт или финиш за пределами сетки или непроходимы
             if (!_grid.IsWalkable(startGrid.X, startGrid.Y))
@@ -102,7 +103,7 @@ namespace Game.Simulation.Navigation
                 return false;
             }
 
-            if (!_grid.IsWalkable(endGrid.X, endGrid.Y))
+            if (!requestedEndIsWalkable)
             {
                 // Поиск ближайшей проходимой соседней клетки
                 if (!TryFindNearestWalkable(endGrid, out endGrid))
@@ -113,7 +114,7 @@ namespace Game.Simulation.Navigation
 
             if (startGrid == endGrid)
             {
-                waypoints.Add(endWorld);
+                waypoints.Add(_grid.GridToWorld(endGrid));
                 return true;
             }
 
@@ -217,8 +218,9 @@ namespace Game.Simulation.Navigation
                 waypoints.Add(_grid.GridToWorld(coord));
             }
 
-            // Финальная точная позиция клика
-            if (waypoints.Count > 0)
+            // Точную точку оставляем только для исходно проходимой клетки.
+            // Иначе робот вернётся в недостижимую позицию за границей или на препятствии.
+            if (requestedEndIsWalkable && waypoints.Count > 0)
             {
                 waypoints[waypoints.Count - 1] = endWorld;
             }

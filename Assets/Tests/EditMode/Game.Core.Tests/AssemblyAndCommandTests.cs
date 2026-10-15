@@ -177,6 +177,22 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void ConstructorDraft_ShouldBuildAndValidateSelectedModules()
+        {
+            var draft = new RobotConstructorDraft(_catalog);
+            Assert.IsTrue(draft.Select(ModuleSlotType.Chassis, DefaultContentCatalog.ChassisBiped));
+            Assert.IsTrue(draft.Select(ModuleSlotType.Body, DefaultContentCatalog.BodyLight));
+            Assert.IsTrue(draft.Select(ModuleSlotType.Weapon, DefaultContentCatalog.WeaponCannon));
+            Assert.IsTrue(draft.Select(ModuleSlotType.Control, DefaultContentCatalog.ControlBasic));
+
+            var validation = draft.Validate();
+
+            Assert.IsTrue(validation.IsValid);
+            Assert.AreEqual(390, validation.TotalCost);
+            Assert.IsFalse(draft.Select(ModuleSlotType.Control, DefaultContentCatalog.WeaponCannon));
+        }
+
+        [Test]
         public void A13_OrderCommand_ToEnemyRobot_ShouldBeRejected()
         {
             var dispatcher = new CommandDispatcher(_catalog);

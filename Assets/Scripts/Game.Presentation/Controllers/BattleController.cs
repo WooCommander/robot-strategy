@@ -42,6 +42,7 @@ namespace Game.Presentation.Controllers
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
         private WeaponEffectsPool _weaponEffects;
+        private CombatFeedbackView _combatFeedback;
         private bool _isOrderMode;
         private float _nextAutonomousOrderUpdate;
         private bool _matchResultReported;
@@ -85,6 +86,7 @@ namespace Game.Presentation.Controllers
             _combatSystem.OnRobotDestroyed += HandleRobotDestroyed;
             _combatSystem.OnWeaponFired += HandleWeaponFired;
             _combatSystem.OnProjectileImpact += HandleProjectileImpact;
+            _combatSystem.OnDamageDealt += HandleDamageDealt;
             _captureSystem = new CaptureSystem();
             _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
             _aiCommander = new AiCommander(_commandDispatcher, _moduleCatalog);
@@ -136,6 +138,7 @@ namespace Game.Presentation.Controllers
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
             _hudView.OnRestartRequested += RestartMatch;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
+            _combatFeedback = new GameObject("CombatFeedback").AddComponent<CombatFeedbackView>();
 
             // Прямая подписка на клики коллайдеров
 
@@ -327,6 +330,11 @@ namespace Game.Presentation.Controllers
         private void HandleProjectileImpact(RobotState attacker, SimVector2 impactPosition, WeaponType weaponType)
         {
             _weaponEffects.PlayImpact(impactPosition, weaponType);
+        }
+
+        private void HandleDamageDealt(RobotState target, int damage)
+        {
+            _combatFeedback?.ShowDamage(target.Position, damage);
         }
 
         private void HandleBuildingSelected(BuildingView view)

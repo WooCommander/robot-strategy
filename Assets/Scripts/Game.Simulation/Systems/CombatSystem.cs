@@ -13,6 +13,7 @@ namespace Game.Simulation.Systems
         public event Action<RobotState, RobotState> OnRobotDestroyed;
         public event Action<RobotState, RobotState, WeaponType> OnWeaponFired;
         public event Action<RobotState, SimVector2, WeaponType> OnProjectileImpact;
+        public event Action<RobotState, int> OnDamageDealt;
 
         public CombatSystem(IReadOnlyDictionary<string, ModuleDefinition> catalog)
         {
@@ -145,6 +146,7 @@ namespace Game.Simulation.Systems
         private void ApplyDamage(RobotState attacker, RobotState target, int damage, MatchState state)
         {
             target.CurrentHealth = Math.Max(0, target.CurrentHealth - Math.Max(0, damage));
+            OnDamageDealt?.Invoke(target, damage);
             if (target.IsAlive)
             {
                 return;

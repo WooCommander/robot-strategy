@@ -197,6 +197,8 @@ namespace Game.Presentation.Views
             if (_healthBarRoot == null || UnityEngine.Camera.main == null) return;
             var cameraTransform = UnityEngine.Camera.main.transform;
             _healthBarRoot.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
+            float scale = Mathf.Clamp(UnityEngine.Camera.main.orthographicSize / 9f, 0.75f, 1.8f);
+            _healthBarRoot.localScale = Vector3.one * scale;
         }
 
         private void MoveAlongPath()

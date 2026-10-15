@@ -17,6 +17,7 @@ namespace Game.Presentation.Views
         [SerializeField] private LineRenderer _captureZoneCircle;
         [SerializeField] private TextMesh _nameLabel;
         [SerializeField] private TextMesh _captureLabel;
+        [SerializeField] private LineRenderer _captureProgressArc;
 
         private MaterialPropertyBlock _propBlock;
 
@@ -139,6 +140,17 @@ namespace Game.Presentation.Views
             _captureLabel.anchor = TextAnchor.MiddleCenter;
             _captureLabel.gameObject.SetActive(false);
 
+            var arcObj = new GameObject("CaptureProgressArc");
+            arcObj.transform.SetParent(transform, false);
+            arcObj.transform.localPosition = new Vector3(0f, 0.08f, 0f);
+            _captureProgressArc = arcObj.AddComponent<LineRenderer>();
+            _captureProgressArc.useWorldSpace = false;
+            _captureProgressArc.alignment = LineAlignment.TransformZ;
+            _captureProgressArc.startWidth = 0.28f;
+            _captureProgressArc.endWidth = 0.28f;
+            _captureProgressArc.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
+            _captureProgressArc.gameObject.SetActive(false);
+
             // Золотой 3D-маркер выбора над зданием
             if (_selectionMarker == null)
             {
@@ -190,9 +202,11 @@ namespace Game.Presentation.Views
             if (_captureLabel == null || state == null) return;
             bool isCapturing = state.CaptureProgressSeconds > 0f || state.IsContested;
             _captureLabel.gameObject.SetActive(isCapturing);
+            _captureProgressArc.gameObject.SetActive(isCapturing);
             if (!isCapturing) return;
 
             float percent = Mathf.Clamp01(state.CaptureProgressSeconds / state.CaptureTimeTotal) * 100f;
+            UpdateCaptureArc(percent / 100f, state.IsContested ? Color.yellow : GetPlayerColor(state.CapturingPlayer));
             if (state.IsContested)
             {
                 _captureLabel.text = "ЗАХВАТ ОСПАРИВАЕТСЯ";
@@ -202,6 +216,20 @@ namespace Game.Presentation.Views
             {
                 _captureLabel.text = $"ЗАХВАТ: {percent:0}%";
                 _captureLabel.color = GetPlayerColor(state.CapturingPlayer);
+            }
+        }
+
+        private void UpdateCaptureArc(float progress, Color color)
+        {
+            const int segments = 40;
+            int points = Mathf.Max(2, Mathf.CeilToInt(segments * progress));
+            _captureProgressArc.positionCount = points;
+            _captureProgressArc.startColor = color;
+            _captureProgressArc.endColor = color;
+            for (int index = 0; index < points; index++)
+            {
+                float angle = Mathf.Deg2Rad * (360f * index / (segments - 1));
+                _captureProgressArc.SetPosition(index, new Vector3(Mathf.Cos(angle) * _captureRadius, 0f, Mathf.Sin(angle) * _captureRadius));
             }
         }
 
@@ -216,6 +244,8 @@ namespace Game.Presentation.Views
             {
                 var cameraTransform = UnityEngine.Camera.main.transform;
                 _captureLabel.transform.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
+                float scale = Mathf.Clamp(UnityEngine.Camera.main.orthographicSize / 9f, 0.75f, 1.8f);
+                _captureLabel.transform.localScale = Vector3.one * scale;
             }
             if (_isSelected && _selectionMarker != null)
             {

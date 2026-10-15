@@ -21,7 +21,7 @@ namespace Game.AI
 
         public void Think(MatchState state)
         {
-            if (state == null || state.Result != MatchResult.InProgress) return;
+            if (state == null || state.IsPaused || state.Result != MatchResult.InProgress) return;
             BuildingState baseBuilding = FindBase(state, PlayerId.Player2);
             if (baseBuilding == null) return;
 

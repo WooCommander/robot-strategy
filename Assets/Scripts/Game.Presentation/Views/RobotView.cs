@@ -31,6 +31,7 @@ namespace Game.Presentation.Views
         public PlayerId Owner => _owner;
         public bool IsSelected => _isSelected;
         public RobotState State => _state;
+        public bool SimulationActive { get; set; } = true;
         public bool IsMovingAlongPath => _currentPath != null && _currentPathIndex < _currentPath.Count;
 
         public void Initialize(RobotState state)
@@ -159,6 +160,7 @@ namespace Game.Presentation.Views
         {
             _currentPath.Clear();
             _currentPathIndex = 0;
+            if (_state != null) _state.Velocity = SimVector2.Zero;
         }
 
         public void SetTerrainSpeedProvider(System.Func<SimVector2, float> terrainSpeedProvider)
@@ -173,7 +175,7 @@ namespace Game.Presentation.Views
 
         public void MoveDirect(Vector2 inputDirection)
         {
-            if (_state == null || inputDirection.sqrMagnitude < 0.001f)
+            if (!SimulationActive || _state == null || !_state.IsAlive || inputDirection.sqrMagnitude < 0.001f)
             {
                 return;
             }
@@ -191,6 +193,11 @@ namespace Game.Presentation.Views
 
         private void Update()
         {
+            if (!SimulationActive || _state == null || !_state.IsAlive)
+            {
+                if (_state != null) _state.Velocity = SimVector2.Zero;
+                return;
+            }
             MoveAlongPath();
             if (_state != null && Time.deltaTime > 0f)
             {

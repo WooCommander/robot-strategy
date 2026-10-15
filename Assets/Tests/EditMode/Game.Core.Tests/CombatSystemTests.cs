@@ -192,6 +192,67 @@ namespace Game.Core.Tests
             return state;
         }
 
+        [Test]
+        public void CaptureRobot_FiresWithoutLosingBuildingOrder_AndKillsScout()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles);
+            var target = CreateRobot(2, PlayerId.Player2, 7f, DefaultContentCatalog.WeaponCannon);
+            target.CurrentHealth = target.MaxHealth = 120;
+            var state = CreateState(attacker, target);
+            state.Player2.ActiveRobotsCount = 1;
+            attacker.CurrentOrder = RobotOrder.Capture(new EntityId(101));
+            int hits = 0;
+            var combat = new CombatSystem(_catalog);
+            combat.OnDamageDealt += (robot, damage) => { if (robot == target) hits++; };
+            for (int tick = 0; tick < 600 && target.IsAlive; tick++) combat.Update(state, 0.02f);
+            Assert.AreEqual(0, target.CurrentHealth);
+            Assert.AreEqual(3, hits);
+            Assert.AreEqual(0, state.Player2.ActiveRobotsCount);
+            Assert.AreEqual(OrderType.Capture, attacker.CurrentOrder.Type);
+            Assert.AreEqual(new EntityId(101), attacker.CurrentOrder.TargetEntityId);
+        }
+
+        [Test]
+        public void TacticalController_CloseStationaryShot_DoesNotOvershootMovingTarget()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlTactical);
+            var target = CreateRobot(2, PlayerId.Player2, 2f, DefaultContentCatalog.WeaponCannon);
+            target.Velocity = new SimVector2(0f, 6f);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+            var combat = new CombatSystem(_catalog);
+            combat.Update(state, 0.01f);
+            var shot = state.Projectiles[0];
+            float flight = shot.RemainingTravelSeconds + 0.01f;
+            Assert.AreEqual(SimVector2.Distance(attacker.Position, shot.ImpactPosition) / 18f, flight, 0.001f);
+            target.Position += target.Velocity * flight;
+            combat.Update(state, flight);
+            Assert.AreEqual(65, target.CurrentHealth);
+        }
+
+        [Test]
+        public void ImpactEffectException_CannotCancelDamage()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon);
+            var target = CreateRobot(2, PlayerId.Player2, 2f, DefaultContentCatalog.WeaponCannon);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+            var combat = new CombatSystem(_catalog);
+            combat.OnProjectileImpact += (robot, point, weapon) => throw new System.InvalidOperationException("VFX failure");
+            Assert.Throws<System.InvalidOperationException>(() => combat.Update(state, 0.2f));
+            Assert.AreEqual(65, target.CurrentHealth);
+        }
+
+        private static MatchState UnusedCreateState(params RobotState[] robots)
+        {
+            var state = new MatchState();
+            foreach (var robot in robots)
+            {
+                state.Robots[robot.Id.Value] = robot;
+            }
+            return state;
+        }
+
         private static RobotState CreateRobot(int id, PlayerId owner, float x, string weaponId, string controlId = DefaultContentCatalog.ControlBasic)
         {
             return new RobotState

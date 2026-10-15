@@ -147,6 +147,13 @@ namespace Game.Presentation.Controllers
                     // Робот имеет приоритет над зданием: его коллайдер может пересекаться с зоной захвата.
                     if (hitRobot != null)
                     {
+                        if (_selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1 &&
+                            hitRobot.Owner != _selectedRobot.Owner && hitRobot.State.IsAlive)
+                        {
+                            _isCaptureTargeting = false;
+                            OnAttackOrderRequested?.Invoke(_selectedRobot, hitRobot);
+                            return;
+                        }
                         if (hitRobot == _selectedRobot && !_isOrderMode && !_isCaptureTargeting)
                         {
                             SelectRobot(null);

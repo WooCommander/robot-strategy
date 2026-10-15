@@ -137,7 +137,6 @@ namespace Game.Presentation.Controllers
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
             _hudView.SetOrderMode(false);
-            _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
             _hudView.OnRestartRequested += RestartMatch;
@@ -156,6 +155,9 @@ namespace Game.Presentation.Controllers
         private void Update()
         {
             if (_matchState == null) return;
+
+            foreach (var view in _spawnedRobots.Values)
+                view.SimulationActive = !_matchState.IsPaused && _matchState.Result == MatchResult.InProgress;
 
             if (!_matchState.IsPaused)
             {
@@ -191,13 +193,6 @@ namespace Game.Presentation.Controllers
                 _hudView.UpdateState(_matchState.Player1, activeBuildingState, activeRobotState);
                 _hudView.UpdateMinimap(_matchState);
             }
-        }
-
-        private void HandleOrderPresetFromHud(RobotPresetDefinition preset)
-        {
-            BuildingView p1Base = GetPlayer1BaseView();
-            if (p1Base == null) return;
-            OrderPresetRobot(new EntityId(p1Base.EntityId), preset);
         }
 
         private void HandleOrderBlueprintFromHud(RobotBlueprint blueprint)
@@ -329,48 +324,66 @@ namespace Game.Presentation.Controllers
 
         private Vector3 ResolveRobotMovement(RobotView movingRobot, Vector3 desiredPosition)
         {
-            const float collisionRadius = 1.7f;
-            Vector3 resolvedPosition = desiredPosition;
+            Vector3 origin = movingRobot.transform.position;
+            Vector3 step = desiredPosition - origin;
+            if (IsMovementPositionFree(movingRobot, desiredPosition)) return desiredPosition;
+            // Объезд ограничен длиной шага: коллизии не телепортируют робота и не искажают упреждение.
+            float side = movingRobot.EntityId % 2 == 0 ? 1f : -1f;
+            for (int attempt = 1; attempt <= 4; attempt++)
+            {
+                float angle = (attempt <= 2 ? 45f : 90f) * (attempt % 2 == 1 ? side : -side);
+                Vector3 candidate = origin + Quaternion.Euler(0f, angle, 0f) * step;
+                if (IsMovementPositionFree(movingRobot, candidate)) return candidate;
+            }
+            return origin;
+        }
+
+        private bool IsMovementPositionFree(RobotView movingRobot, Vector3 position)
+        {
+            var point = new SimVector2(position.x, position.z);
+            var cell = _navigationGrid.WorldToGrid(point);
+            if (!_navigationGrid.IsWalkable(cell.X, cell.Y)) return false;
             foreach (var other in _spawnedRobots.Values)
             {
                 if (other == null || other == movingRobot || !other.State.IsAlive) continue;
-                Vector3 separation = resolvedPosition - other.transform.position;
-                separation.y = 0f;
-                if (separation.sqrMagnitude >= collisionRadius * collisionRadius) continue;
-
-                if (separation.sqrMagnitude < 0.001f)
-                {
-                    separation = movingRobot.EntityId < other.EntityId ? Vector3.right : Vector3.left;
-                }
-                Vector3 tangent = Vector3.Cross(Vector3.up, separation.normalized) * (movingRobot.EntityId % 2 == 0 ? 1f : -1f);
-                Vector3 detour = other.transform.position + separation.normalized * collisionRadius + tangent * 0.25f;
-                resolvedPosition = Vector3.Distance(detour, other.transform.position) >= collisionRadius ? detour : movingRobot.transform.position;
+                if ((position - other.transform.position).sqrMagnitude < 1.7f * 1.7f) return false;
             }
-
             foreach (var building in _matchState.Buildings.Values)
             {
                 float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
-                Vector3 center = new Vector3(building.Position.X, resolvedPosition.y, building.Position.Y);
-                Vector3 separation = resolvedPosition - center;
-                separation.y = 0f;
-                if (separation.sqrMagnitude >= clearance * clearance) continue;
-                if (separation.sqrMagnitude < 0.001f) separation = Vector3.right;
-                resolvedPosition = center + separation.normalized * clearance;
+                if (SimVector2.SqrDistance(point, building.Position) < clearance * clearance) return false;
             }
-            return resolvedPosition;
+            return true;
         }
 
-        private static SimVector2 GetBuildingApproachPoint(RobotState robot, BuildingState building)
+        private void RouteRobotToCapture(RobotView view, BuildingState building)
         {
-            SimVector2 direction = robot.Position - building.Position;
-            if (direction.SqrMagnitude < 0.001f) direction = new SimVector2(1f, 0f);
-            direction /= direction.Magnitude;
-            float angle = (robot.Id.Value % 6 - 2.5f) * 0.28f;
-            float cosine = Mathf.Cos(angle);
-            float sine = Mathf.Sin(angle);
-            direction = new SimVector2(direction.X * cosine - direction.Y * sine, direction.X * sine + direction.Y * cosine);
-            float approachDistance = building.Type == BuildingType.Base ? 3.0f : 2.1f;
-            return building.Position + direction / direction.Magnitude * approachDistance;
+            if (CaptureSystem.IsInCaptureRange(view.State, building))
+            {
+                view.StopMovement();
+                return;
+            }
+            List<SimVector2> bestPath = null;
+            float bestDistance = float.MaxValue;
+            float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
+            // Выбираем реальную проходимую клетку внутри зоны, а не новую точку на дуге от текущей позиции.
+            for (int y = 0; y < _navigationGrid.Height; y++)
+            {
+                for (int x = 0; x < _navigationGrid.Width; x++)
+                {
+                    if (!_navigationGrid.IsWalkable(x, y)) continue;
+                    SimVector2 point = _navigationGrid.GridToWorld(new GridCoord(x, y));
+                    float radiusSq = SimVector2.SqrDistance(point, building.Position);
+                    if (radiusSq < clearance * clearance || radiusSq > building.CaptureRadius * building.CaptureRadius) continue;
+                    float distance = SimVector2.SqrDistance(point, view.State.Position);
+                    if (distance >= bestDistance || !IsMovementPositionFree(view, new Vector3(point.X, 0f, point.Y))) continue;
+                    if (!_pathfinder.TryFindPath(view.State.Position, point, out var path)) continue;
+                    bestPath = path;
+                    bestDistance = distance;
+                }
+            }
+            if (bestPath != null) view.SetMovementPath(bestPath);
+            else view.StopMovement();
         }
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
@@ -501,9 +514,9 @@ namespace Game.Presentation.Controllers
                 TargetBuildingId = new EntityId(target.EntityId)
             };
             var result = _commandDispatcher.Dispatch(command, _matchState);
-            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, GetBuildingApproachPoint(robot.State, _matchState.Buildings[target.EntityId]), out var waypoints))
+            if (result.IsSuccess)
             {
-                robot.SetMovementPath(waypoints);
+                RouteRobotToCapture(robot, _matchState.Buildings[target.EntityId]);
                 Debug.Log($"[Battle] Робот #{robot.EntityId} получил приказ захватить здание #{target.EntityId}.");
             }
             else if (!result.IsSuccess)
@@ -514,6 +527,7 @@ namespace Game.Presentation.Controllers
 
         private void UpdateAutonomousOrders()
         {
+            if (_matchState.IsPaused || _matchState.Result != MatchResult.InProgress) return;
             if (Time.time < _nextAutonomousOrderUpdate) return;
             _nextAutonomousOrderUpdate = Time.time + 0.4f;
 
@@ -536,10 +550,15 @@ namespace Game.Presentation.Controllers
                     {
                         target = FindNearestBuilding(robot, building => building.Owner != robot.Owner);
                     }
-                    if (target == null) continue;
+                    if (target == null) { view.StopMovement(); continue; }
                     bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
                     robot.CurrentOrder.TargetEntityId = target.Id;
-                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, GetBuildingApproachPoint(robot, target));
+                    if (CaptureSystem.IsInCaptureRange(robot, target))
+                    {
+                        view.StopMovement();
+                        continue;
+                    }
+                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotToCapture(view, target);
                 }
                 else if (robot.CurrentOrder.Type == OrderType.Attack)
                 {
@@ -772,26 +791,5 @@ namespace Game.Presentation.Controllers
             return null;
         }
 
-        private void OrderPresetRobot(EntityId baseId, RobotPresetDefinition preset)
-        {
-            var bp = preset.CreateBlueprint();
-
-            var cmd = new EnqueueProductionCommand
-            {
-                PlayerId = PlayerId.Player1,
-                BaseBuildingId = baseId,
-                Blueprint = bp
-            };
-
-            var res = _commandDispatcher.Dispatch(cmd, _matchState);
-            if (res.IsSuccess)
-            {
-                Debug.Log($"[Battle] Заказ на робота '{preset.Name}' поставлен в очередь производства!");
-            }
-            else
-            {
-                Debug.LogWarning($"[Battle] Ошибка заказа: {res.ErrorReason}");
-            }
-        }
     }
 }

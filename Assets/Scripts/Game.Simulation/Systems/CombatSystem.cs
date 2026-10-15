@@ -42,42 +42,50 @@ namespace Game.Simulation.Systems
 
         private void TryAttack(RobotState attacker, MatchState state)
         {
-            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt && attacker.CurrentOrder?.Type != OrderType.Defend) || attacker.WeaponCooldownRemaining > 0f)
+            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt &&
+                 attacker.CurrentOrder?.Type != OrderType.Defend && attacker.CurrentOrder?.Type != OrderType.Capture) ||
+                attacker.WeaponCooldownRemaining > 0f)
             {
                 return;
             }
 
-            if (!state.Robots.TryGetValue(attacker.CurrentOrder.TargetEntityId.Value, out var target) ||
-                !target.IsAlive || target.Owner == attacker.Owner)
+            if (attacker.Blueprint == null || string.IsNullOrEmpty(attacker.Blueprint.WeaponId) ||
+                !_catalog.TryGetValue(attacker.Blueprint.WeaponId, out var weapon) || weapon.SlotType != ModuleSlotType.Weapon)
+                return;
+
+            RobotState target = null;
+            if (attacker.CurrentOrder.Type == OrderType.Attack)
             {
-                if (attacker.CurrentOrder.Type == OrderType.Attack)
+                if (!state.Robots.TryGetValue(attacker.CurrentOrder.TargetEntityId.Value, out target) ||
+                    !target.IsAlive || target.Owner == attacker.Owner)
                 {
                     attacker.CurrentOrder = RobotOrder.Stop();
+                    return;
                 }
-                return;
             }
-
-            if (attacker.Blueprint == null ||
-                !_catalog.TryGetValue(attacker.Blueprint.WeaponId, out var weapon) ||
-                weapon.SlotType != ModuleSlotType.Weapon ||
-                SimVector2.SqrDistance(attacker.Position, target.Position) > weapon.Range * weapon.Range)
+            else
             {
-                return;
+                // Захват сохраняет ID здания в приказе; боевую цель выбираем отдельно.
+                float nearest = weapon.Range * weapon.Range;
+                foreach (var candidate in state.Robots.Values)
+                {
+                    if (!candidate.IsAlive || candidate.Owner == attacker.Owner) continue;
+                    float distance = SimVector2.SqrDistance(attacker.Position, candidate.Position);
+                    if (distance > nearest) continue;
+                    nearest = distance;
+                    target = candidate;
+                }
             }
+            if (target == null || SimVector2.SqrDistance(attacker.Position, target.Position) > weapon.Range * weapon.Range) return;
 
             attacker.WeaponCooldownRemaining = weapon.CooldownSeconds;
-            OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
             ModuleDefinition controller = null;
             if (!string.IsNullOrEmpty(attacker.Blueprint.ControlModuleId))
             {
                 _catalog.TryGetValue(attacker.Blueprint.ControlModuleId, out controller);
             }
             float speed = Math.Max(0.1f, weapon.ProjectileSpeed);
-            float travelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed;
-            // Даже базовый контроллер знает время полёта. Дополнительное упреждение
-            // от модуля применяется только если оно больше физически необходимого.
-            // При резкой смене траектории цель всё ещё может уйти от неуправляемого снаряда.
-            float leadSeconds = Math.Max(travelSeconds, controller?.LeadPredictionSeconds ?? 0f);
+            float travelSeconds = GetInterceptTime(attacker.Position, target.Position, target.Velocity, speed);
             state.Projectiles.Add(new ProjectileState
             {
                 SourceRobotId = attacker.Id,
@@ -86,10 +94,28 @@ namespace Game.Simulation.Systems
                 WeaponType = weapon.WeaponType,
                 Damage = weapon.Damage,
                 SplashRadius = weapon.SplashRadius,
-                ImpactPosition = target.Position + target.Velocity * leadSeconds,
+                ImpactPosition = target.Position + target.Velocity * travelSeconds,
                 RemainingTravelSeconds = travelSeconds,
                 IsGuided = weapon.WeaponType == WeaponType.AreaMissile && (controller?.CanGuideMissiles ?? false)
             });
+            OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
+        }
+
+        private static float GetInterceptTime(SimVector2 origin, SimVector2 target, SimVector2 velocity, float speed)
+        {
+            SimVector2 offset = target - origin;
+            float a = velocity.SqrMagnitude - speed * speed;
+            float b = 2f * (offset.X * velocity.X + offset.Y * velocity.Y);
+            float c = offset.SqrMagnitude;
+            float fallback = (float)Math.Sqrt(c) / speed;
+            if (Math.Abs(a) < 0.0001f) return b < -0.0001f ? -c / b : fallback;
+            float discriminant = b * b - 4f * a * c;
+            if (discriminant < 0f) return fallback;
+            float root = (float)Math.Sqrt(discriminant);
+            float t1 = (-b - root) / (2f * a);
+            float t2 = (-b + root) / (2f * a);
+            if (t1 > 0f && t2 > 0f) return Math.Min(t1, t2);
+            return t1 > 0f ? t1 : t2 > 0f ? t2 : fallback;
         }
 
         private void UpdateProjectiles(MatchState state, float deltaSeconds)
@@ -106,7 +132,6 @@ namespace Game.Simulation.Systems
 
                 state.Projectiles.RemoveAt(index);
                 state.Robots.TryGetValue(projectile.SourceRobotId.Value, out RobotState attacker);
-                OnProjectileImpact?.Invoke(attacker, projectile.ImpactPosition, projectile.WeaponType);
                 if (projectile.WeaponType == WeaponType.AreaMissile)
                 {
                     ApplySplashDamage(attacker, projectile, state);
@@ -115,6 +140,7 @@ namespace Game.Simulation.Systems
                 {
                     ApplyDirectHit(attacker, projectile, state);
                 }
+                OnProjectileImpact?.Invoke(attacker, projectile.ImpactPosition, projectile.WeaponType);
             }
         }
 
@@ -151,10 +177,11 @@ namespace Game.Simulation.Systems
 
         private void ApplyDamage(RobotState attacker, RobotState target, int damage, MatchState state)
         {
-            target.CurrentHealth = Math.Max(0, target.CurrentHealth - Math.Max(0, damage));
-            OnDamageDealt?.Invoke(target, damage);
+            int appliedDamage = Math.Min(target.CurrentHealth, Math.Max(0, damage));
+            target.CurrentHealth -= appliedDamage;
             if (target.IsAlive)
             {
+                OnDamageDealt?.Invoke(target, appliedDamage);
                 return;
             }
 
@@ -166,6 +193,7 @@ namespace Game.Simulation.Systems
             }
 
             OnRobotDestroyed?.Invoke(attacker, target);
+            OnDamageDealt?.Invoke(target, appliedDamage);
         }
     }
 }

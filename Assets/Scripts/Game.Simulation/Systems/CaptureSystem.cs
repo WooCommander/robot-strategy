@@ -6,6 +6,10 @@ namespace Game.Simulation.Systems
 {
     public sealed class CaptureSystem
     {
+        public static bool IsInCaptureRange(RobotState robot, BuildingState building) =>
+            robot != null && robot.IsAlive && building != null &&
+            SimVector2.SqrDistance(robot.Position, building.Position) <= building.CaptureRadius * building.CaptureRadius;
+
         public event Action<BuildingState, PlayerId> OnBuildingCaptured;
 
         public void Update(MatchState state, float deltaSeconds)
@@ -19,13 +23,12 @@ namespace Game.Simulation.Systems
             {
                 bool player1Present = false;
                 bool player2Present = false;
-                float captureRadiusSq = building.CaptureRadius * building.CaptureRadius;
                 foreach (var robot in state.Robots.Values)
                 {
                     if (!robot.IsAlive ||
                         robot.CurrentOrder.Type != OrderType.Capture ||
                         robot.CurrentOrder.TargetEntityId != building.Id ||
-                        SimVector2.SqrDistance(robot.Position, building.Position) > captureRadiusSq)
+                        !IsInCaptureRange(robot, building))
                     {
                         continue;
                     }

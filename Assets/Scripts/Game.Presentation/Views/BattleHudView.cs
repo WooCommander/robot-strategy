@@ -29,19 +29,25 @@ namespace Game.Presentation.Views
         private RectTransform _progressBarFillRect;
         private GameObject _progressBarObj;
 
-        private Button _scoutBtn;
-        private Text _scoutBtnText;
-        private Button _tankBtn;
-        private Text _tankBtnText;
-        private Button _missileBtn;
-        private Text _missileBtnText;
         private Button _constructorBtn;
         private GameObject _constructorOverlay;
         private Text _constructorSummary;
         private RobotConstructorDraft _constructorDraft;
+        private int _constructorStep;
+        private readonly string[] _selectedModules = new string[4];
+        private readonly string[] _stepNames = { "ШАССИ", "КОРПУС", "ОРУЖИЕ", "УПРАВЛЕНИЕ" };
+        private readonly ModuleSlotType[] _stepSlots = { ModuleSlotType.Chassis, ModuleSlotType.Body, ModuleSlotType.Weapon, ModuleSlotType.Control };
+        private Transform _constructorOptions;
+        private Transform _constructorPreview;
+        private Text _constructorStepTitle;
+        private Text _constructorParts;
+        private Button _constructorNext;
+        private Button _constructorBack;
+        private Button _constructorProduce;
+        private PlayerState _constructorPlayer;
+        private BuildingState _constructorBase;
 
         // Делегат заказа робота
-        public event Action<RobotPresetDefinition> OnOrderPresetRequested;
         public event Action<RobotBlueprint> OnOrderBlueprintRequested;
         public event Action<OrderType> OnRobotOrderRequested;
         public event Action OnRestartRequested;
@@ -63,7 +69,6 @@ namespace Game.Presentation.Views
             _moduleCatalog = moduleCatalog;
             _mapDefinition = mapDefinition;
             _constructorDraft = new RobotConstructorDraft(moduleCatalog);
-            SelectConstructorDefaults();
             EnsureFont();
             EnsureEventSystem();
             CreateCanvas();
@@ -272,30 +277,8 @@ namespace Game.Presentation.Views
             SetProgress(0f);
 
             // Кнопки сборки роботов
-            float btnW = 280f;
-            float btnH = 110f;
-            float btnY = 65f;
-
-            // 1. Разведчик (350 М, 8с)
-            _scoutBtn = CreatePresetButton("Btn_Scout", RobotPresetCatalog.Scout,
-                new Vector2(0f, 0f), new Vector2(0f, 0f), new Vector2(160f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f));
-            _scoutBtnText = _scoutBtn.GetComponentInChildren<Text>();
-
-            // 2. Тяжёлый танк (570 М, 12с)
-            _tankBtn = CreatePresetButton("Btn_Tank", RobotPresetCatalog.Tank,
-                new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f));
-            _tankBtnText = _tankBtn.GetComponentInChildren<Text>();
-
-            // 3. Ракетчик (440 М, 10с)
-            _missileBtn = CreatePresetButton("Btn_Missile", RobotPresetCatalog.Missile,
-                new Vector2(1f, 0f), new Vector2(1f, 0f), new Vector2(-160f, btnY), new Vector2(btnW, btnH),
-                new Color(0.12f, 0.32f, 0.54f, 0.98f));
-            _missileBtnText = _missileBtn.GetComponentInChildren<Text>();
-
             _constructorBtn = CreateButton(_bottomPanel.transform, "Btn_Constructor", "КОНСТРУКТОР", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-90f, -25f), new Vector2(155f, 34f), new Color(0.22f, 0.45f, 0.62f), 12);
+                new Vector2(-165f, -75f), new Vector2(280f, 64f), new Color(0.22f, 0.45f, 0.62f), 12);
             _constructorBtn.onClick.AddListener(ShowConstructor);
 
             CreateOrderButton(OrderType.Capture, "ЗАХВАТ", -300f);
@@ -307,12 +290,19 @@ namespace Game.Presentation.Views
 
         public void UpdateState(PlayerState player, BuildingState activeBuilding, RobotState selectedRobot)
         {
+            _constructorPlayer = player;
+            _constructorBase = activeBuilding != null && activeBuilding.Owner == PlayerId.Player1 && activeBuilding.Type == BuildingType.Base ? activeBuilding : null;
+            if (_constructorOverlay != null && _constructorOverlay.activeSelf)
+            {
+                if (_constructorBase == null) _constructorOverlay.SetActive(false);
+                else RefreshConstructorSummary();
+            }
             if (player != null)
             {
                 _metalText.text = $"💰 Металл: <color=#FFD700><b>{player.Metal}</b></color> (<color=#00FF88>+{player.MetalIncomePerSecond}/с</color>)";
                 _armyText.text = $"🤖 Армия: <b>{player.TotalArmyCount} / {PlayerState.MaxArmyLimit}</b> (В бою: {player.ActiveRobotsCount})";
 
-                UpdateButtonsAffordability(player.Metal);
+                _constructorPlayer = player;
             }
 
             if (selectedRobot != null)
@@ -390,9 +380,6 @@ namespace Game.Presentation.Views
 
         private void SetProductionButtonsVisible(bool visible)
         {
-            if (_scoutBtn != null) _scoutBtn.gameObject.SetActive(visible);
-            if (_tankBtn != null) _tankBtn.gameObject.SetActive(visible);
-            if (_missileBtn != null) _missileBtn.gameObject.SetActive(visible);
             if (_constructorBtn != null) _constructorBtn.gameObject.SetActive(visible);
         }
 
@@ -421,100 +408,147 @@ namespace Game.Presentation.Views
             _progressBarFillRect.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);
         }
 
-        private void UpdateButtonsAffordability(int metal)
-        {
-            SetPresetButtonState(_scoutBtn, _scoutBtnText, RobotPresetCatalog.Scout, metal);
-            SetPresetButtonState(_tankBtn, _tankBtnText, RobotPresetCatalog.Tank, metal);
-            SetPresetButtonState(_missileBtn, _missileBtnText, RobotPresetCatalog.Missile, metal);
-        }
-
-        private Button CreatePresetButton(string name, RobotPresetDefinition preset, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos, Vector2 sizeDelta, Color color)
-        {
-            var button = CreateButton(_bottomPanel.transform, name, FormatPresetText(preset, true), anchorMin, anchorMax, anchoredPos, sizeDelta, color, 15);
-            button.onClick.AddListener(() => OnOrderPresetRequested?.Invoke(preset));
-            return button;
-        }
-
-        private void SetPresetButtonState(Button btn, Text txt, RobotPresetDefinition preset, int metal)
-        {
-            if (btn == null || txt == null) return;
-            int cost = preset.GetCost(_moduleCatalog);
-            bool canAfford = metal >= cost;
-            btn.interactable = canAfford;
-            string costColor = canAfford ? "#FFD700" : "#FF6666";
-            txt.text = $"<b>{preset.CardTitle}</b>\n<color={costColor}>{cost} М</color> • {preset.BuildTimeSeconds:0} сек\n<size=12>{preset.ModulesLabel}</size>";
-        }
-
-        private string FormatPresetText(RobotPresetDefinition preset, bool canAfford)
-        {
-            int cost = preset.GetCost(_moduleCatalog);
-            string costColor = canAfford ? "#FFD700" : "#FF6666";
-            return $"<b>{preset.CardTitle}</b>\n<color={costColor}>{cost} М</color> • {preset.BuildTimeSeconds:0} сек\n<size=12>{preset.ModulesLabel}</size>";
-        }
-
-        private void SelectConstructorDefaults()
-        {
-            _constructorDraft.Select(ModuleSlotType.Chassis, DefaultContentCatalog.ChassisBiped);
-            _constructorDraft.Select(ModuleSlotType.Body, DefaultContentCatalog.BodyLight);
-            _constructorDraft.Select(ModuleSlotType.Weapon, DefaultContentCatalog.WeaponCannon);
-            _constructorDraft.Select(ModuleSlotType.Control, DefaultContentCatalog.ControlBasic);
-        }
-
         private void ShowConstructor()
         {
+            if (_constructorBase == null) return;
             if (_constructorOverlay == null) CreateConstructorOverlay();
-            RefreshConstructorSummary();
+            _constructorStep = 0;
+            _constructorDraft = new RobotConstructorDraft(_moduleCatalog);
+            Array.Clear(_selectedModules, 0, _selectedModules.Length);
             _constructorOverlay.SetActive(true);
+            RefreshConstructorStep();
         }
 
         private void CreateConstructorOverlay()
         {
-            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstructor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
-                Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.78f));
-            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(790f, 660f), new Color(0.06f, 0.10f, 0.18f, 1f));
-            CreateLabel(card.transform, "Title", "КОНСТРУКТОР РОБОТА", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -20f), new Vector2(-150f, -55f), 24, FontStyle.Bold, new Color(0.35f, 0.85f, 1f), TextAnchor.MiddleLeft);
-            var close = CreateButton(card.transform, "Close", "×", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-34f, -34f), new Vector2(50f, 42f), new Color(0.38f, 0.16f, 0.18f), 22);
+            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstructor", Vector2.zero, Vector2.one,
+                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.85f));
+            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(900f, 640f), new Color(0.06f, 0.10f, 0.18f));
+            CreateLabel(card.transform, "Title", "КОНСТРУКТОР РОБОТА", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(24f, -18f), new Vector2(-85f, -55f), 24, FontStyle.Bold, Color.cyan, TextAnchor.MiddleLeft);
+            var close = CreateButton(card.transform, "Close", "×", Vector2.one, Vector2.one,
+                new Vector2(-34f, -34f), new Vector2(44f, 42f), new Color(0.38f, 0.16f, 0.18f), 22);
             close.onClick.AddListener(() => _constructorOverlay.SetActive(false));
-
-            CreateConstructorRow(card.transform, "ШАССИ", ModuleSlotType.Chassis, new[] { DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.ChassisTracks }, 145f);
-            CreateConstructorRow(card.transform, "КОРПУС", ModuleSlotType.Body, new[] { DefaultContentCatalog.BodyLight, DefaultContentCatalog.BodyHeavy }, 235f);
-            CreateConstructorRow(card.transform, "ОРУЖИЕ", ModuleSlotType.Weapon, new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponMissiles }, 325f);
-            CreateConstructorRow(card.transform, "УПРАВЛЕНИЕ", ModuleSlotType.Control, new[] { DefaultContentCatalog.ControlBasic, DefaultContentCatalog.ControlTactical, DefaultContentCatalog.ControlGuidance }, 415f);
-
-            _constructorSummary = CreateLabel(card.transform, "Summary", string.Empty, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 75f), new Vector2(-24f, 185f), 15, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
-            var produce = CreateButton(card.transform, "Produce", "ПОСТАВИТЬ В ОЧЕРЕДЬ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 35f), new Vector2(330f, 52f), new Color(0.12f, 0.48f, 0.30f), 16);
-            produce.onClick.AddListener(() =>
+            _constructorStepTitle = CreateLabel(card.transform, "Step", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(24f, -75f), new Vector2(-24f, -110f), 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+            _constructorOptions = CreatePanel(card.transform, "Options", new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(0f, 1f), new Vector2(24f, -125f), new Vector2(410f, 320f), Color.clear).transform;
+            _constructorPreview = CreatePanel(card.transform, "Preview", new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(1f, 1f), new Vector2(-24f, -125f), new Vector2(410f, 230f), new Color(0.09f, 0.17f, 0.25f)).transform;
+            _constructorParts = CreateLabel(card.transform, "Parts", "", new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-434f, -370f), new Vector2(-24f, -460f), 15, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            _constructorSummary = CreateLabel(card.transform, "Summary", "", Vector2.zero, new Vector2(1f, 0f),
+                new Vector2(24f, 160f), new Vector2(-24f, 80f), 16, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
+            _constructorBack = CreateButton(card.transform, "Back", "НАЗАД", Vector2.zero, Vector2.zero,
+                new Vector2(100f, 36f), new Vector2(150f, 48f), new Color(0.2f, 0.3f, 0.4f), 16);
+            _constructorBack.onClick.AddListener(() => { _constructorStep--; RefreshConstructorStep(); });
+            _constructorNext = CreateButton(card.transform, "Next", "ДАЛЕЕ", new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-174f, 36f), new Vector2(300f, 48f), new Color(0.1f, 0.45f, 0.65f), 16);
+            _constructorNext.onClick.AddListener(() => { _constructorStep++; RefreshConstructorStep(); });
+            _constructorProduce = CreateButton(card.transform, "Produce", "ПОСТАВИТЬ В ОЧЕРЕДЬ", new Vector2(1f, 0f), new Vector2(1f, 0f),
+                new Vector2(-174f, 36f), new Vector2(300f, 48f), new Color(0.12f, 0.48f, 0.30f), 16);
+            _constructorProduce.onClick.AddListener(() =>
             {
-                var validation = _constructorDraft.Validate();
-                if (!validation.IsValid) return;
+                RefreshConstructorSummary();
+                if (!_constructorProduce.interactable) return;
                 OnOrderBlueprintRequested?.Invoke(_constructorDraft.CreateBlueprint($"custom_{Guid.NewGuid():N}", "Пользовательский робот"));
                 _constructorOverlay.SetActive(false);
             });
             _constructorOverlay.SetActive(false);
         }
 
-        private void CreateConstructorRow(Transform parent, string label, ModuleSlotType slot, string[] modules, float y)
+        private void RefreshConstructorStep()
         {
-            CreateLabel(parent, label, label, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(24f, -y), new Vector2(175f, -y - 48f), 15, FontStyle.Bold, new Color(0.65f, 0.78f, 0.92f), TextAnchor.MiddleLeft);
-            for (int i = 0; i < modules.Length; i++)
+            foreach (Transform child in _constructorOptions) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            _constructorStepTitle.text = $"ШАГ {_constructorStep + 1} / 4 — {_stepNames[_constructorStep]}";
+            int index = 0;
+            foreach (var module in _constructorDraft.GetModules(_stepSlots[_constructorStep]))
             {
-                string id = modules[i];
-                ModuleDefinition module = _moduleCatalog[id];
-                var button = CreateButton(parent, $"{slot}_{id}", FormatModuleButton(module), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(320f + i * 155f, -y - 24f), new Vector2(145f, 58f), new Color(0.13f, 0.27f, 0.43f), 11);
-                button.onClick.AddListener(() => { _constructorDraft.Select(slot, id); RefreshConstructorSummary(); });
+                string id = module.Id;
+                bool selected = _selectedModules[_constructorStep] == id;
+                var button = CreateButton(_constructorOptions, id, (selected ? "✓ " : "") + FormatModuleButton(module),
+                    new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(205f, -48f - index * 105f),
+                    new Vector2(410f, 96f), selected ? new Color(0.12f, 0.55f, 0.65f) : new Color(0.18f, 0.29f, 0.4f), 16);
+                button.onClick.AddListener(() =>
+                {
+                    _selectedModules[_constructorStep] = id;
+                    _constructorDraft.Select(_stepSlots[_constructorStep], id);
+                    RefreshConstructorStep();
+                });
+                index++;
             }
+            _constructorBack.interactable = _constructorStep > 0;
+            _constructorNext.gameObject.SetActive(_constructorStep < 3);
+            _constructorNext.interactable = _selectedModules[_constructorStep] != null;
+            _constructorProduce.gameObject.SetActive(_constructorStep == 3);
+            RefreshConstructorPreview();
+            RefreshConstructorSummary();
+        }
+
+        private void RefreshConstructorPreview()
+        {
+            foreach (Transform child in _constructorPreview) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
+            // Схематический вид сверху: части появляются только после выбора соответствующего модуля.
+            if (_selectedModules[0] != null)
+            {
+                bool tracks = _selectedModules[0] == DefaultContentCatalog.ChassisTracks;
+                PreviewPart("LeftChassis", -72f, -25f, 32f, tracks ? 145f : 90f, Color.gray);
+                PreviewPart("RightChassis", 72f, -25f, 32f, tracks ? 145f : 90f, Color.gray);
+                PreviewPart("Frame", 0f, -25f, 115f, 35f, new Color(0.3f, 0.34f, 0.4f));
+            }
+            if (_selectedModules[1] != null)
+            {
+                bool heavy = _selectedModules[1] == DefaultContentCatalog.BodyHeavy;
+                PreviewPart("Body", 0f, -10f, heavy ? 125f : 90f, heavy ? 110f : 80f, new Color(0.12f, 0.5f, 0.8f));
+            }
+            if (_selectedModules[2] != null)
+            {
+                bool missiles = _selectedModules[2] == DefaultContentCatalog.WeaponMissiles;
+                if (missiles)
+                    for (int i = -1; i <= 1; i++) PreviewPart("Missile" + i, i * 23f, 48f, 16f, 68f, new Color(0.9f, 0.6f, 0.25f));
+                else PreviewPart("Cannon", 0f, 55f, 16f, 85f, new Color(0.65f, 0.75f, 0.85f));
+            }
+            if (_selectedModules[3] != null)
+            {
+                int lights = _selectedModules[3] == DefaultContentCatalog.ControlBasic ? 1 : _selectedModules[3] == DefaultContentCatalog.ControlTactical ? 2 : 3;
+                for (int i = 0; i < lights; i++) PreviewPart("Controller" + i, -18f + i * 18f, -35f, 12f, 12f, Color.cyan);
+            }
+            string parts = "";
+            for (int i = 0; i < 4; i++)
+                parts += $"{_stepNames[i]}: {(_selectedModules[i] == null ? "не выбрано" : _moduleCatalog[_selectedModules[i]].Name)}\n";
+            _constructorParts.text = parts;
+        }
+
+        private void PreviewPart(string name, float x, float y, float width, float height, Color color)
+        {
+            var part = CreatePanel(_constructorPreview, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
+                new Vector2(0.5f, 0.5f), new Vector2(x, y), new Vector2(width, height), color);
+            part.GetComponent<Image>().raycastTarget = false;
         }
 
         private void RefreshConstructorSummary()
         {
-            var validation = _constructorDraft.Validate();
-            if (validation.IsValid)
+            if (_constructorSummary == null) return;
+            bool complete = Array.TrueForAll(_selectedModules, id => id != null);
+            _constructorProduce.interactable = false;
+            if (!complete)
             {
-                _constructorSummary.text = $"<b>Сборка готова</b>  •  Цена: <color=#FFD700>{validation.TotalCost} М</color>  •  Масса: {validation.TotalMass}/{validation.MaxLoadCapacity} кг  •  Прочность: {validation.TotalHealth}\nВыбранные параметры указаны на карточках модулей.";
+                _constructorSummary.text = "Выберите по одному модулю на каждом шаге. Справа — схема сборки (вид сверху).";
                 return;
             }
-            _constructorSummary.text = $"<color=#FF7777>{string.Join("\n", validation.Errors)}</color>";
+            var validation = _constructorDraft.Validate();
+            if (!validation.IsValid)
+            {
+                _constructorSummary.text = "<color=#FF8888>" + string.Join("\n", validation.Errors) + "</color>";
+                return;
+            }
+            bool available = _constructorPlayer != null && _constructorBase != null &&
+                _constructorPlayer.Metal >= validation.TotalCost && _constructorPlayer.CanBuildMoreRobots &&
+                _constructorBase.ProductionQueue.Count < BuildingState.MaxQueueSize;
+            _constructorProduce.interactable = available;
+            _constructorSummary.text = $"Цена: {validation.TotalCost} М   Масса: {validation.TotalMass}/{validation.MaxLoadCapacity} кг   HP: {validation.TotalHealth}" +
+                (available ? "\nСборка готова к производству." : "\nНедостаточно металла, заполнена очередь или достигнут лимит армии.");
         }
 
         private static string FormatModuleButton(ModuleDefinition module)

@@ -129,11 +129,10 @@ namespace Game.Presentation.Views
 
             var captureLabelObj = new GameObject("CaptureProgress");
             captureLabelObj.transform.SetParent(transform, false);
-            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 2.65f : 1.9f, 0f);
-            captureLabelObj.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
+            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.75f : 2.7f, 0f);
             _captureLabel = captureLabelObj.AddComponent<TextMesh>();
-            _captureLabel.fontSize = 20;
-            _captureLabel.characterSize = 0.08f;
+            _captureLabel.fontSize = 28;
+            _captureLabel.characterSize = 0.11f;
             _captureLabel.alignment = TextAlignment.Center;
             _captureLabel.anchor = TextAnchor.MiddleCenter;
             _captureLabel.gameObject.SetActive(false);
@@ -199,7 +198,7 @@ namespace Game.Presentation.Views
             }
             else
             {
-                _captureLabel.text = $"ЗАХВАТ {percent:0}%";
+                _captureLabel.text = $"ЗАХВАТ: {percent:0}%";
                 _captureLabel.color = GetPlayerColor(state.CapturingPlayer);
             }
         }
@@ -211,6 +210,11 @@ namespace Game.Presentation.Views
 
         private void Update()
         {
+            if (_captureLabel != null && _captureLabel.gameObject.activeSelf && UnityEngine.Camera.main != null)
+            {
+                var cameraTransform = UnityEngine.Camera.main.transform;
+                _captureLabel.transform.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
+            }
             if (_isSelected && _selectionMarker != null)
             {
                 _selectionMarker.transform.Rotate(Vector3.up, 90f * Time.deltaTime, Space.World);

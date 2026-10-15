@@ -366,7 +366,17 @@ namespace Game.Presentation.Views
                     _panelTitleText.text = activeBuilding.Type == BuildingType.Base
                         ? $"★ ВРАЖЕСКАЯ БАЗА #{activeBuilding.Id.Value} ★"
                         : $"★ НЕЙТРАЛЬНЫЙ ЗАВОД #{activeBuilding.Id.Value} ★";
-                    _queueStatusText.text = $"Доход объекта: +{activeBuilding.MetalIncomePerSecond} М/сек. Подведите боевых роботов в круг захвата!";
+                    if (activeBuilding.CaptureProgressSeconds > 0f || activeBuilding.IsContested)
+                    {
+                        float capturePercent = Mathf.Clamp01(activeBuilding.CaptureProgressSeconds / activeBuilding.CaptureTimeTotal) * 100f;
+                        _queueStatusText.text = activeBuilding.IsContested
+                            ? "<color=#FFD700>ЗАХВАТ ОСПАРИВАЕТСЯ</color>"
+                            : $"<color=#66CCFF>Захват: {capturePercent:0}%</color> игроком {activeBuilding.CapturingPlayer}";
+                    }
+                    else
+                    {
+                        _queueStatusText.text = $"Доход объекта: +{activeBuilding.MetalIncomePerSecond} М/сек. Подведите боевых роботов в круг захвата!";
+                    }
                     SetProgress(0f);
                     SetProductionButtonsVisible(false);
                     SetOrderButtonsVisible(false, OrderType.None);

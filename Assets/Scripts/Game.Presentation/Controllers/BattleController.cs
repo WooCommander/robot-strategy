@@ -131,6 +131,7 @@ namespace Game.Presentation.Controllers
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
             _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
+            _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
             _hudView.OnRestartRequested += RestartMatch;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
@@ -188,6 +189,19 @@ namespace Game.Presentation.Controllers
             BuildingView p1Base = GetPlayer1BaseView();
             if (p1Base == null) return;
             OrderPresetRobot(new EntityId(p1Base.EntityId), preset);
+        }
+
+        private void HandleOrderBlueprintFromHud(RobotBlueprint blueprint)
+        {
+            BuildingView p1Base = GetPlayer1BaseView();
+            if (p1Base == null) return;
+            var result = _commandDispatcher.Dispatch(new EnqueueProductionCommand
+            {
+                PlayerId = PlayerId.Player1,
+                BaseBuildingId = new EntityId(p1Base.EntityId),
+                Blueprint = blueprint
+            }, _matchState);
+            if (!result.IsSuccess) Debug.LogWarning($"[Battle] Ошибка заказа: {result.ErrorReason}");
         }
 
         private void HandleRobotOrderFromHud(OrderType order)

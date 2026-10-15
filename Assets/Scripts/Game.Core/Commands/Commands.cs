@@ -14,6 +14,7 @@ namespace Game.Core.Commands
         Stop = 5,
         Hunt = 6,
         Scout = 7,
+        Drive = 8,
         EnqueueProduction = 10,
         CancelProduction = 11
     }
@@ -116,6 +117,17 @@ namespace Game.Core.Commands
         public CommandType Type => CommandType.Scout;
         public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
         public SimVector2 TargetPosition { get; set; }
+    }
+
+    /// <summary>Ручное управление: робот едет в направлении, пока не придёт новое направление или приказ.</summary>
+    [Serializable]
+    public class OrderDriveCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.Drive;
+        public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
+        public SimVector2 Direction { get; set; }
     }
 
     [Serializable]

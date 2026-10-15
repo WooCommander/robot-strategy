@@ -62,7 +62,7 @@ namespace Game.Persistence
         {
             public const int CurrentVersion = 1;
             public int Version;
-            public int Tick; public float MatchTimeSeconds; public MatchResult Result; public bool IsPaused;
+            public int Tick; public float MatchTimeSeconds; public MatchResult Result; public bool IsPaused; public int NextRobotId; public int NextProductionOrderId;
             public PlayerSnapshot Player1; public PlayerSnapshot Player2;
             public List<RobotSnapshot> Robots = new List<RobotSnapshot>();
             public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
@@ -70,7 +70,7 @@ namespace Game.Persistence
 
             public static MatchSnapshot FromState(MatchState state)
             {
-                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2) };
+                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, NextRobotId = state.NextRobotId, NextProductionOrderId = state.NextProductionOrderId, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2) };
                 foreach (RobotState robot in state.Robots.Values) snapshot.Robots.Add(RobotSnapshot.FromState(robot));
                 foreach (BuildingState building in state.Buildings.Values) snapshot.Buildings.Add(BuildingSnapshot.FromState(building));
                 foreach (ProjectileState projectile in state.Projectiles) snapshot.Projectiles.Add(ProjectileSnapshot.FromState(projectile));
@@ -83,6 +83,10 @@ namespace Game.Persistence
                 foreach (RobotSnapshot robot in Robots ?? new List<RobotSnapshot>()) { RobotState restored = robot.ToState(); state.Robots[restored.Id.Value] = restored; }
                 foreach (BuildingSnapshot building in Buildings ?? new List<BuildingSnapshot>()) { BuildingState restored = building.ToState(); state.Buildings[restored.Id.Value] = restored; }
                 foreach (ProjectileSnapshot projectile in Projectiles ?? new List<ProjectileSnapshot>()) state.Projectiles.Add(projectile.ToState());
+                // Старые снимки не хранили счётчики: продолжаем после максимального ID, чтобы не было коллизий.
+                foreach (int robotId in state.Robots.Keys) state.NextRobotId = Math.Max(state.NextRobotId, robotId);
+                if (NextRobotId > 0) state.NextRobotId = Math.Max(state.NextRobotId, NextRobotId);
+                if (NextProductionOrderId > 0) state.NextProductionOrderId = NextProductionOrderId;
                 return state;
             }
         }
@@ -98,9 +102,9 @@ namespace Game.Persistence
         [Serializable]
         private sealed class RobotSnapshot
         {
-            public int Id; public PlayerId Owner; public BlueprintSnapshot Blueprint; public VectorSnapshot Position; public VectorSnapshot Velocity; public float RotationDegrees; public int MaxHealth; public int CurrentHealth; public float MoveSpeed; public int Mass; public int TotalCost; public float WeaponCooldownRemaining; public int ScoutPatrolStep; public OrderSnapshot Order;
-            public static RobotSnapshot FromState(RobotState state) => new RobotSnapshot { Id = state.Id.Value, Owner = state.Owner, Blueprint = BlueprintSnapshot.FromState(state.Blueprint), Position = VectorSnapshot.From(state.Position), Velocity = VectorSnapshot.From(state.Velocity), RotationDegrees = state.RotationDegrees, MaxHealth = state.MaxHealth, CurrentHealth = state.CurrentHealth, MoveSpeed = state.MoveSpeed, Mass = state.Mass, TotalCost = state.TotalCost, WeaponCooldownRemaining = state.WeaponCooldownRemaining, ScoutPatrolStep = state.ScoutPatrolStep, Order = OrderSnapshot.FromState(state.CurrentOrder) };
-            public RobotState ToState() => new RobotState { Id = new EntityId(Id), Owner = Owner, Blueprint = Blueprint?.ToState(), Position = Position.ToState(), Velocity = Velocity?.ToState() ?? SimVector2.Zero, RotationDegrees = RotationDegrees, MaxHealth = MaxHealth, CurrentHealth = CurrentHealth, MoveSpeed = MoveSpeed, Mass = Mass, TotalCost = TotalCost, WeaponCooldownRemaining = WeaponCooldownRemaining, ScoutPatrolStep = ScoutPatrolStep, CurrentOrder = Order?.ToState() ?? new RobotOrder() };
+            public int Id; public PlayerId Owner; public BlueprintSnapshot Blueprint; public VectorSnapshot Position; public VectorSnapshot Velocity; public float RotationDegrees; public int MaxHealth; public int CurrentHealth; public float MoveSpeed; public int Mass; public int TotalCost; public float WeaponCooldownRemaining; public int ScoutPatrolStep; public OrderSnapshot Order; public List<VectorSnapshot> Path = new List<VectorSnapshot>(); public int PathIndex; public VectorSnapshot DriveDirection; public float NextManeuverSeconds;
+            public static RobotSnapshot FromState(RobotState state) => new RobotSnapshot { Id = state.Id.Value, Owner = state.Owner, Blueprint = BlueprintSnapshot.FromState(state.Blueprint), Position = VectorSnapshot.From(state.Position), Velocity = VectorSnapshot.From(state.Velocity), RotationDegrees = state.RotationDegrees, MaxHealth = state.MaxHealth, CurrentHealth = state.CurrentHealth, MoveSpeed = state.MoveSpeed, Mass = state.Mass, TotalCost = state.TotalCost, WeaponCooldownRemaining = state.WeaponCooldownRemaining, ScoutPatrolStep = state.ScoutPatrolStep, Order = OrderSnapshot.FromState(state.CurrentOrder), Path = VectorSnapshot.FromList(state.Path), PathIndex = state.PathIndex, DriveDirection = VectorSnapshot.From(state.DriveDirection), NextManeuverSeconds = state.NextManeuverSeconds };
+            public RobotState ToState() => new RobotState { Id = new EntityId(Id), Owner = Owner, Blueprint = Blueprint?.ToState(), Position = Position.ToState(), Velocity = Velocity?.ToState() ?? SimVector2.Zero, RotationDegrees = RotationDegrees, MaxHealth = MaxHealth, CurrentHealth = CurrentHealth, MoveSpeed = MoveSpeed, Mass = Mass, TotalCost = TotalCost, WeaponCooldownRemaining = WeaponCooldownRemaining, ScoutPatrolStep = ScoutPatrolStep, CurrentOrder = Order?.ToState() ?? new RobotOrder(), Path = VectorSnapshot.ToList(Path), PathIndex = PathIndex, DriveDirection = DriveDirection?.ToState() ?? SimVector2.Zero, NextManeuverSeconds = NextManeuverSeconds };
         }
 
         [Serializable]
@@ -159,6 +163,18 @@ namespace Game.Persistence
             public float X; public float Y;
             public static VectorSnapshot From(SimVector2 value) => new VectorSnapshot { X = value.X, Y = value.Y };
             public SimVector2 ToState() => new SimVector2(X, Y);
+            public static List<VectorSnapshot> FromList(List<SimVector2> values)
+            {
+                var result = new List<VectorSnapshot>();
+                if (values != null) foreach (SimVector2 value in values) result.Add(From(value));
+                return result;
+            }
+            public static List<SimVector2> ToList(List<VectorSnapshot> values)
+            {
+                var result = new List<SimVector2>();
+                if (values != null) foreach (VectorSnapshot value in values) result.Add(value.ToState());
+                return result;
+            }
         }
     }
 }

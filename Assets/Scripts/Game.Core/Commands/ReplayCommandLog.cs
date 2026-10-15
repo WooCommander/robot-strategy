@@ -52,6 +52,7 @@ namespace Game.Core.Commands
                 case OrderStopCommand stop: record.SetRobots(stop.RobotIds); break;
                 case OrderHuntCommand hunt: record.SetRobots(hunt.RobotIds); break;
                 case OrderScoutCommand scout: record.SetRobots(scout.RobotIds); record.SetTarget(scout.TargetPosition); break;
+                case OrderDriveCommand drive: record.SetRobots(drive.RobotIds); record.SetTarget(drive.Direction); break;
                 case EnqueueProductionCommand enqueue: record.TargetEntityId = enqueue.BaseBuildingId.Value; record.Blueprint = ReplayBlueprint.From(enqueue.Blueprint); break;
                 case CancelProductionCommand cancel: record.TargetEntityId = cancel.BaseBuildingId.Value; record.OrderId = cancel.OrderId; break;
                 default: throw new NotSupportedException($"Команда {command.GetType().Name} не поддерживается в replay.");
@@ -71,6 +72,7 @@ namespace Game.Core.Commands
                 CommandType.Stop => new OrderStopCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Hunt => new OrderHuntCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Scout => new OrderScoutCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, TargetPosition = TargetPosition },
+                CommandType.Drive => new OrderDriveCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, Direction = TargetPosition },
                 CommandType.EnqueueProduction => new EnqueueProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), Blueprint = Blueprint?.ToBlueprint() },
                 CommandType.CancelProduction => new CancelProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), OrderId = OrderId },
                 _ => throw new NotSupportedException($"Тип команды {Type} не поддерживается в replay.")

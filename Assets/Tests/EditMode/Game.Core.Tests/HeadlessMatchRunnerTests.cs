@@ -21,10 +21,11 @@ namespace Game.Core.Tests
             log.Record(1, new OrderAttackCommand { PlayerId = PlayerId.Player1, SequenceNumber = 2, RobotIds = new List<EntityId> { new EntityId(1) }, TargetEntityId = new EntityId(2) });
             var runner = new HeadlessMatchRunner(catalog);
 
-            runner.RunTicks(state, log, 2, 0.1f);
+            // Выстрел на тике 1, снаряд летит 5 м / 18 м/с ≈ 0,28 с — к тику 5 он уже попал.
+            runner.RunTicks(state, log, 5, 0.1f);
 
-            Assert.AreEqual(2, state.Tick);
-            Assert.AreEqual(0.2f, state.MatchTimeSeconds, 0.001f);
+            Assert.AreEqual(5, state.Tick);
+            Assert.AreEqual(0.5f, state.MatchTimeSeconds, 0.001f);
             Assert.AreEqual(OrderType.Attack, state.Robots[1].CurrentOrder.Type);
             Assert.AreEqual(65, state.Robots[2].CurrentHealth);
             int commandsAtTickOne = 0;

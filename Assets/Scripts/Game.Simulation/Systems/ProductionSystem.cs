@@ -11,7 +11,6 @@ namespace Game.Simulation.Systems
     {
         private const float SpawnExitClearance = 1.5f;
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
-        private int _nextEntityId = 1000;
 
         public event Action<RobotState> OnRobotSpawned;
 
@@ -125,13 +124,14 @@ namespace Game.Simulation.Systems
             }
 
             var val = RobotAssemblyValidator.Validate(order.Blueprint, _catalog);
+            int robotId = ++state.NextRobotId;
 
             var newRobot = new RobotState
             {
-                Id = new EntityId(++_nextEntityId),
+                Id = new EntityId(robotId),
                 Owner = building.Owner,
                 Blueprint = order.Blueprint,
-                Position = GetReleasePosition(building, _nextEntityId),
+                Position = GetReleasePosition(building, robotId),
                 RotationDegrees = building.Owner == PlayerId.Player1 ? 0f : 180f,
                 MaxHealth = val.TotalHealth,
                 CurrentHealth = val.TotalHealth,

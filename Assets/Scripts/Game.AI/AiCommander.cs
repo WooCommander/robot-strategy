@@ -4,10 +4,11 @@ using Game.Content.Definitions;
 using Game.Core.Commands;
 using Game.Core.Models;
 using Game.Core.Types;
+using Game.Simulation.Systems;
 
 namespace Game.AI
 {
-    public sealed class AiCommander
+    public sealed class AiCommander : IMatchAgent
     {
         private const float BaseThreatRadius = 10f;
         private readonly ICommandDispatcher _dispatcher;

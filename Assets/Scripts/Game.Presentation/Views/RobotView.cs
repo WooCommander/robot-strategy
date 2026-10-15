@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using Game.Core.Models;
 using Game.Core.Types;
@@ -21,27 +20,22 @@ namespace Game.Presentation.Views
 
         private RobotState _state;
         private bool _isSelected;
-        private List<SimVector2> _currentPath = new List<SimVector2>();
-        private int _currentPathIndex = 0;
-        private System.Func<SimVector2, float> _terrainSpeedProvider;
-        private System.Func<RobotView, Vector3, Vector3> _movementResolver;
-        private SimVector2 _lastStatePosition;
+        private Vector3 _previousSimPosition;
+        private Vector3 _currentSimPosition;
 
         public int EntityId => _entityId;
         public PlayerId Owner => _owner;
         public bool IsSelected => _isSelected;
         public RobotState State => _state;
-        public bool SimulationActive { get; set; } = true;
-        public bool IsMovingAlongPath => _currentPath != null && _currentPathIndex < _currentPath.Count;
 
         public void Initialize(RobotState state)
         {
             _state = state;
             _entityId = state.Id.Value;
             _owner = state.Owner;
-            _lastStatePosition = state.Position;
 
-            transform.position = new Vector3(state.Position.X, 0f, state.Position.Y);
+            _previousSimPosition = _currentSimPosition = ToWorld(state.Position);
+            transform.position = _currentSimPosition;
             transform.rotation = Quaternion.Euler(0f, state.RotationDegrees, 0f);
 
             // Добавляем коллайдер на корень робота для надежного выбора лучами
@@ -150,60 +144,20 @@ namespace Game.Presentation.Views
             }
         }
 
-        public void SetMovementPath(List<SimVector2> waypoints)
+        /// <summary>Фиксирует позицию после тика симуляции; кадр рисуется между двумя последними тиками.</summary>
+        public void CaptureSimulationStep()
         {
-            _currentPath = waypoints ?? new List<SimVector2>();
-            _currentPathIndex = 0;
+            if (_state == null) return;
+            _previousSimPosition = _currentSimPosition;
+            _currentSimPosition = ToWorld(_state.Position);
         }
 
-        public void StopMovement()
+        public void ApplyInterpolation(float alpha)
         {
-            _currentPath.Clear();
-            _currentPathIndex = 0;
-            if (_state != null) _state.Velocity = SimVector2.Zero;
-        }
-
-        public void SetTerrainSpeedProvider(System.Func<SimVector2, float> terrainSpeedProvider)
-        {
-            _terrainSpeedProvider = terrainSpeedProvider;
-        }
-
-        public void SetMovementResolver(System.Func<RobotView, Vector3, Vector3> movementResolver)
-        {
-            _movementResolver = movementResolver;
-        }
-
-        public void MoveDirect(Vector2 inputDirection)
-        {
-            if (!SimulationActive || _state == null || !_state.IsAlive || inputDirection.sqrMagnitude < 0.001f)
-            {
-                return;
-            }
-
-            StopMovement();
-            _state.CurrentOrder = RobotOrder.Stop();
-
-            Vector3 direction = new Vector3(inputDirection.x, 0f, inputDirection.y).normalized;
-            Vector3 nextPosition = transform.position + direction * (_state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) * Time.deltaTime);
-            transform.position = _movementResolver?.Invoke(this, nextPosition) ?? nextPosition;
-            transform.rotation = Quaternion.LookRotation(direction);
-            _state.Position = new SimVector2(transform.position.x, transform.position.z);
-            _state.RotationDegrees = transform.eulerAngles.y;
-        }
-
-        private void Update()
-        {
-            if (!SimulationActive || _state == null || !_state.IsAlive)
-            {
-                if (_state != null) _state.Velocity = SimVector2.Zero;
-                return;
-            }
-            MoveAlongPath();
-            if (_state != null && Time.deltaTime > 0f)
-            {
-                _state.Velocity = (_state.Position - _lastStatePosition) / Time.deltaTime;
-                _lastStatePosition = _state.Position;
-            }
+            if (_state == null) return;
+            transform.position = Vector3.Lerp(_previousSimPosition, _currentSimPosition, Mathf.Clamp01(alpha));
+            Quaternion targetRotation = Quaternion.Euler(0f, _state.RotationDegrees, 0f);
+            transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, 360f * Time.deltaTime);
         }
 
         private void LateUpdate()
@@ -213,40 +167,6 @@ namespace Game.Presentation.Views
             _healthBarRoot.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
             float scale = Mathf.Clamp(UnityEngine.Camera.main.orthographicSize / 9f, 0.75f, 1.8f);
             _healthBarRoot.localScale = Vector3.one * scale;
-        }
-
-        private void MoveAlongPath()
-        {
-            if (_currentPath == null || _currentPathIndex >= _currentPath.Count) return;
-
-            var target2D = _currentPath[_currentPathIndex];
-            Vector3 targetWorld = new Vector3(target2D.X, 0f, target2D.Y);
-
-            float speed = _state != null ? _state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) : 3.5f;
-            Vector3 nextPosition = Vector3.MoveTowards(transform.position, targetWorld, speed * Time.deltaTime);
-            transform.position = _movementResolver?.Invoke(this, nextPosition) ?? nextPosition;
-
-            Vector3 dir = (targetWorld - transform.position);
-            dir.y = 0f;
-            if (dir.sqrMagnitude > 0.001f)
-            {
-                Quaternion targetRot = Quaternion.LookRotation(dir);
-                transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, 360f * Time.deltaTime);
-            }
-
-            // Симуляция боя, навигация и визуальная модель должны использовать одну позицию.
-            // Раньше состояние обновлялось только на границе клетки A*, из-за чего выстрелы
-            // летели в устаревшую точку, пока робот визуально уже маневрировал дальше.
-            if (_state != null)
-            {
-                _state.Position = new SimVector2(transform.position.x, transform.position.z);
-                _state.RotationDegrees = transform.eulerAngles.y;
-            }
-
-            if (Vector3.Distance(transform.position, targetWorld) < 0.1f)
-            {
-                _currentPathIndex++;
-            }
         }
 
         public void UpdateHealthVisual()
@@ -267,10 +187,7 @@ namespace Game.Presentation.Views
             }
         }
 
-        private float GetTerrainSpeedMultiplier(SimVector2 position)
-        {
-            return Mathf.Max(0.1f, _terrainSpeedProvider?.Invoke(position) ?? 1f);
-        }
+        private static Vector3 ToWorld(SimVector2 position) => new Vector3(position.X, 0f, position.Y);
 
         private static Font GetWorldFont() =>
             Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");

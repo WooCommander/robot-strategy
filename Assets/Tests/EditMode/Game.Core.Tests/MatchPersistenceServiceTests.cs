@@ -29,6 +29,31 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void SerializeAndDeserialize_RestoresMovementStateAndIdCounters()
+        {
+            MatchState source = CreateState();
+            source.NextRobotId = 1050;
+            source.NextProductionOrderId = 9;
+            RobotState robot = source.Robots[10];
+            robot.SetPath(new System.Collections.Generic.List<SimVector2> { new SimVector2(5f, 9.5f), new SimVector2(6f, 9.5f) });
+            robot.PathIndex = 1;
+            robot.DriveDirection = new SimVector2(0f, 1f);
+            robot.NextManeuverSeconds = 12.5f;
+            var service = new MatchPersistenceService();
+
+            MatchState restored = service.Deserialize(service.Serialize(source));
+
+            RobotState restoredRobot = restored.Robots[10];
+            Assert.AreEqual(2, restoredRobot.Path.Count);
+            Assert.AreEqual(new SimVector2(6f, 9.5f), restoredRobot.Path[1]);
+            Assert.AreEqual(1, restoredRobot.PathIndex);
+            Assert.AreEqual(new SimVector2(0f, 1f), restoredRobot.DriveDirection);
+            Assert.AreEqual(12.5f, restoredRobot.NextManeuverSeconds);
+            Assert.AreEqual(1050, restored.NextRobotId);
+            Assert.AreEqual(9, restored.NextProductionOrderId);
+        }
+
+        [Test]
         public void ManualAndAutoSlots_RoundTripToSpecifiedDirectory()
         {
             string directory = Path.Combine(Path.GetTempPath(), "robot-strategy-tests", System.Guid.NewGuid().ToString("N"));

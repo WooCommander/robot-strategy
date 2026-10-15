@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -12,11 +11,14 @@ using EntityId = Game.Core.Types.EntityId;
 using Game.Presentation.Camera;
 using Game.Presentation.Views;
 using Game.Persistence;
-using Game.Simulation.Navigation;
 using Game.Simulation.Systems;
 
 namespace Game.Presentation.Controllers
 {
+    /// <summary>
+    /// Связывает сцену с <see cref="MatchSimulation"/>: переводит ввод в команды, крутит фиксированные тики
+    /// и синхронизирует визуал. Игровая логика (движение, манёвр, приказы) живёт только в симуляции.
+    /// </summary>
     public class BattleController : MonoBehaviour
     {
         [Header("Components")]
@@ -25,27 +27,22 @@ namespace Game.Presentation.Controllers
         [SerializeField] private SelectionController _selectionController;
 
         private MapDefinition _mapDefinition;
-        private NavigationGrid _navigationGrid;
-        private AStarPathfinder _pathfinder;
-        private MatchState _matchState;
-        private CommandDispatcher _commandDispatcher;
-        private ProductionSystem _productionSystem;
-        private CombatSystem _combatSystem;
-        private CaptureSystem _captureSystem;
-        private AiCommander _aiCommander;
+        private MatchSimulation _simulation;
         private MatchPersistenceService _persistence;
         private Dictionary<string, ModuleDefinition> _moduleCatalog;
 
         private readonly Dictionary<int, RobotView> _spawnedRobots = new Dictionary<int, RobotView>();
-        private readonly Dictionary<int, float> _nextCombatManeuverAt = new Dictionary<int, float>();
         private BuildingView _currentlySelectedBuilding;
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
         private WeaponEffectsPool _weaponEffects;
         private CombatFeedbackView _combatFeedback;
         private bool _isOrderMode;
-        private float _nextAutonomousOrderUpdate;
         private bool _matchResultReported;
+        private RobotState _drivenRobot;
+        private SimVector2 _lastDriveDirection;
+
+        private MatchState MatchState => _simulation?.State;
 
         private void Start()
         {
@@ -54,51 +51,23 @@ namespace Game.Presentation.Controllers
 
         private void InitializeMatch()
         {
-            // 1. Загрузка каталога модулей и карты
+            // 1. Загрузка каталога модулей, карты и симуляции матча
             _moduleCatalog = DefaultContentCatalog.CreateDefaultModules();
             _mapDefinition = DefaultMapFactory.CreatePrototypeMap();
-            _navigationGrid = new NavigationGrid(_mapDefinition);
-            foreach (BuildingSpawnDefinition building in _mapDefinition.Buildings)
-            {
-                _navigationGrid.BlockCircle(building.Position, building.Type == BuildingType.Base ? 2.35f : 1.65f);
-            }
-            _pathfinder = new AStarPathfinder(_navigationGrid);
-
-            // 2. Инициализация состояния матча
-            _matchState = new MatchState();
-            _matchState.Player1.Metal = 600;
-            _matchState.Player2.Metal = 600;
-
-            foreach (var bDef in _mapDefinition.Buildings)
-            {
-                var building = new BuildingState
-                {
-                    Id = new EntityId(bDef.EntityIdValue),
-                    Type = bDef.Type,
-                    Owner = bDef.InitialOwner,
-                    Position = bDef.Position,
-                    SpawnPoint = bDef.SpawnPoint,
-                    CaptureRadius = bDef.CaptureRadius
-                };
-                _matchState.Buildings[bDef.EntityIdValue] = building;
-            }
-
-            _commandDispatcher = new CommandDispatcher(_moduleCatalog);
-            _productionSystem = new ProductionSystem(_moduleCatalog);
-            _productionSystem.OnRobotSpawned += HandleRobotSpawned;
-            _combatSystem = new CombatSystem(_moduleCatalog);
-            _combatSystem.OnRobotDestroyed += HandleRobotDestroyed;
-            _combatSystem.OnWeaponFired += HandleWeaponFired;
-            _combatSystem.OnProjectileImpact += HandleProjectileImpact;
-            _combatSystem.OnDamageDealt += HandleDamageDealt;
-            _captureSystem = new CaptureSystem();
-            _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
-            _aiCommander = new AiCommander(_commandDispatcher, _moduleCatalog);
+            _simulation = new MatchSimulation(_moduleCatalog, _mapDefinition);
+            _simulation.AddAgent(new AiCommander(_simulation.Dispatcher, _moduleCatalog));
+            _simulation.Production.OnRobotSpawned += HandleRobotSpawned;
+            _simulation.Combat.OnRobotDestroyed += HandleRobotDestroyed;
+            _simulation.Combat.OnWeaponFired += HandleWeaponFired;
+            _simulation.Combat.OnProjectileImpact += HandleProjectileImpact;
+            _simulation.Combat.OnDamageDealt += HandleDamageDealt;
+            _simulation.Capture.OnBuildingCaptured += HandleBuildingCaptured;
+            _simulation.StepCompleted += HandleSimulationStep;
             _persistence = new MatchPersistenceService();
             _weaponEffects = gameObject.AddComponent<WeaponEffectsPool>();
             _weaponEffects.Initialize();
 
-            // 3. Построение визуала карты
+            // 2. Построение визуала карты
             if (_mapRenderer == null)
             {
                 var mrGo = new GameObject("MapRenderer");
@@ -106,7 +75,7 @@ namespace Game.Presentation.Controllers
             }
             _mapRenderer.BuildMap(_mapDefinition);
 
-            // 4. Настройка камеры
+            // 3. Настройка камеры
             if (_cameraController == null)
             {
                 _cameraController = FindAnyObjectByType<RtsCameraController>();
@@ -121,7 +90,7 @@ namespace Game.Presentation.Controllers
                 _cameraController.SetBounds(_mapDefinition.Width, _mapDefinition.Height);
             }
 
-            // 5. Настройка контроллера ввода
+            // 4. Настройка контроллера ввода
             if (_selectionController == null)
             {
                 _selectionController = gameObject.AddComponent<SelectionController>();
@@ -132,7 +101,7 @@ namespace Game.Presentation.Controllers
             _selectionController.OnAttackOrderRequested += HandleAttackOrder;
             _selectionController.OnCaptureOrderRequested += HandleCaptureOrder;
 
-            // 6. Инициализация нативного Canvas HUD
+            // 5. Инициализация нативного Canvas HUD
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
@@ -143,8 +112,6 @@ namespace Game.Presentation.Controllers
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
             _combatFeedback = new GameObject("CombatFeedback").AddComponent<CombatFeedbackView>();
 
-            // Прямая подписка на клики коллайдеров
-
             // На старте ничего не выбрано — экран чистый
             _currentlySelectedBuilding = null;
             _currentlySelectedRobot = null;
@@ -154,69 +121,87 @@ namespace Game.Presentation.Controllers
 
         private void Update()
         {
-            if (_matchState == null) return;
+            if (_simulation == null) return;
 
-            foreach (var view in _spawnedRobots.Values)
-                view.SimulationActive = !_matchState.IsPaused && _matchState.Result == MatchResult.InProgress;
-
-            if (!_matchState.IsPaused)
-            {
-                _matchState.Tick++;
-                _matchState.MatchTimeSeconds += Time.deltaTime;
-            }
-            // Тиковый расчет симуляции производства и экономики
-            _productionSystem.Update(_matchState, Time.deltaTime);
-            _aiCommander.Think(_matchState);
-            UpdateAutonomousOrders();
-            _combatSystem.Update(_matchState, Time.deltaTime);
-            _captureSystem.Update(_matchState, Time.deltaTime);
-            UpdateCombatAndCaptureVisuals();
-            if (!_matchResultReported && _matchState.Result != MatchResult.InProgress)
-            {
-                _matchResultReported = true;
-                Debug.Log(_matchState.Result == MatchResult.Player1Won ? "[Battle] Победа: вражеская база захвачена." : "[Battle] Поражение: ваша база захвачена.");
-                _hudView.ShowMatchResult(_matchState.Result);
-            }
+            // Ввод превращается в команды до тиков этого кадра.
             UpdateControlMode();
             UpdateDirectControl();
+
+            _simulation.AdvanceFrame(Time.deltaTime);
+
+            float alpha = _simulation.InterpolationAlpha;
+            foreach (var view in _spawnedRobots.Values)
+            {
+                view?.ApplyInterpolation(alpha);
+            }
+
+            UpdateCombatAndCaptureVisuals();
+            if (!_matchResultReported && MatchState.Result != MatchResult.InProgress)
+            {
+                _matchResultReported = true;
+                Debug.Log(MatchState.Result == MatchResult.Player1Won ? "[Battle] Победа: вражеская база захвачена." : "[Battle] Поражение: ваша база захвачена.");
+                _hudView.ShowMatchResult(MatchState.Result);
+            }
 
             // Обновление нативного Canvas интерфейса
             if (_hudView != null)
             {
                 BuildingState activeBuildingState = null;
-                if (_currentlySelectedBuilding != null && _matchState.Buildings.TryGetValue(_currentlySelectedBuilding.EntityId, out var bState))
+                if (_currentlySelectedBuilding != null && MatchState.Buildings.TryGetValue(_currentlySelectedBuilding.EntityId, out var bState))
                 {
                     activeBuildingState = bState;
                 }
 
                 RobotState activeRobotState = _currentlySelectedRobot != null ? _currentlySelectedRobot.State : null;
-                _hudView.UpdateState(_matchState.Player1, activeBuildingState, activeRobotState);
-                _hudView.UpdateMinimap(_matchState);
+                _hudView.UpdateState(MatchState.Player1, activeBuildingState, activeRobotState);
+                _hudView.UpdateMinimap(MatchState);
             }
+        }
+
+        private void HandleSimulationStep()
+        {
+            foreach (var view in _spawnedRobots.Values)
+            {
+                view?.CaptureSimulationStep();
+            }
+        }
+
+        private CommandResult IssueForRobot(ICommand command, string failurePrefix)
+        {
+            CommandResult result = _simulation.Issue(command);
+            if (!result.IsSuccess) Debug.LogWarning($"[Battle] {failurePrefix}: {result.ErrorReason}");
+            return result;
         }
 
         private void HandleOrderBlueprintFromHud(RobotBlueprint blueprint)
         {
             BuildingView p1Base = GetPlayer1BaseView();
             if (p1Base == null) return;
-            var result = _commandDispatcher.Dispatch(new EnqueueProductionCommand
+            IssueForRobot(new EnqueueProductionCommand
             {
                 PlayerId = PlayerId.Player1,
                 BaseBuildingId = new EntityId(p1Base.EntityId),
                 Blueprint = blueprint
-            }, _matchState);
-            if (!result.IsSuccess) Debug.LogWarning($"[Battle] Ошибка заказа: {result.ErrorReason}");
+            }, "Ошибка заказа");
         }
 
         private void HandleRobotOrderFromHud(OrderType order)
         {
             if (_currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1) return;
-            var robot = _currentlySelectedRobot.State;
-            if (order == OrderType.Stop) _currentlySelectedRobot.StopMovement();
-            robot.CurrentOrder = order == OrderType.Capture ? RobotOrder.Capture(EntityId.None) :
-                order == OrderType.Hunt ? RobotOrder.Hunt() :
-                order == OrderType.Scout ? RobotOrder.Scout(GetScoutDestination(robot)) :
-                order == OrderType.Defend ? RobotOrder.Defend(robot.Position) : RobotOrder.Stop();
+            IssueForRobot(CreateRobotOrderCommand(order, _currentlySelectedRobot.State), "Приказ отклонён");
+        }
+
+        private ICommand CreateRobotOrderCommand(OrderType order, RobotState robot)
+        {
+            var ids = new List<EntityId> { robot.Id };
+            return order switch
+            {
+                OrderType.Capture => new OrderCaptureCommand { PlayerId = PlayerId.Player1, RobotIds = ids, TargetBuildingId = EntityId.None },
+                OrderType.Hunt => new OrderHuntCommand { PlayerId = PlayerId.Player1, RobotIds = ids },
+                OrderType.Scout => new OrderScoutCommand { PlayerId = PlayerId.Player1, RobotIds = ids, TargetPosition = OrderPlanner.GetScoutDestination(robot, _mapDefinition) },
+                OrderType.Defend => new OrderDefendCommand { PlayerId = PlayerId.Player1, RobotIds = ids, TargetPosition = robot.Position },
+                _ => new OrderStopCommand { PlayerId = PlayerId.Player1, RobotIds = ids }
+            };
         }
 
         private void RestartMatch()
@@ -226,11 +211,11 @@ namespace Game.Presentation.Controllers
 
         private void OnApplicationPause(bool pauseStatus)
         {
-            if (_matchState == null) return;
-            _matchState.IsPaused = pauseStatus;
+            if (MatchState == null) return;
+            MatchState.IsPaused = pauseStatus;
             if (pauseStatus)
             {
-                _persistence.SaveAuto(_matchState);
+                _persistence.SaveAuto(MatchState);
                 Debug.Log("[Battle] Матч поставлен на паузу и сохранён в автослот.");
             }
         }
@@ -250,31 +235,7 @@ namespace Game.Presentation.Controllers
             var go = new GameObject($"Robot_Unit_{robotState.Id.Value}");
             var view = go.AddComponent<RobotView>();
             view.Initialize(robotState);
-            view.SetTerrainSpeedProvider(GetTerrainSpeedMultiplier);
-            view.SetMovementResolver(ResolveRobotMovement);
-
             _spawnedRobots[robotState.Id.Value] = view;
-            if (robotState.Owner == PlayerId.Player2)
-            {
-                if (_matchState.Player2.ActiveRobotsCount > 1)
-                {
-                    _commandDispatcher.Dispatch(new OrderDefendCommand
-                    {
-                        PlayerId = PlayerId.Player2,
-                        RobotIds = new List<EntityId> { robotState.Id },
-                        TargetPosition = robotState.Position
-                    }, _matchState);
-                }
-                else
-                {
-                    _commandDispatcher.Dispatch(new OrderCaptureCommand
-                    {
-                        PlayerId = PlayerId.Player2,
-                        RobotIds = new List<EntityId> { robotState.Id },
-                        TargetBuildingId = EntityId.None
-                    }, _matchState);
-                }
-            }
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
         }
 
@@ -288,10 +249,6 @@ namespace Game.Presentation.Controllers
             if (_currentlySelectedRobot != null && _currentlySelectedRobot.EntityId == target.Id.Value)
             {
                 HandleRobotSelected(null);
-            }
-
-            if (target.Owner == PlayerId.Player2)
-            {
             }
         }
 
@@ -315,75 +272,11 @@ namespace Game.Presentation.Controllers
             }
             foreach (var view in _mapRenderer.SpawnedBuildings)
             {
-                if (_matchState.Buildings.TryGetValue(view.EntityId, out var building))
+                if (MatchState.Buildings.TryGetValue(view.EntityId, out var building))
                 {
                     view.UpdateCaptureVisual(building);
                 }
             }
-        }
-
-        private Vector3 ResolveRobotMovement(RobotView movingRobot, Vector3 desiredPosition)
-        {
-            Vector3 origin = movingRobot.transform.position;
-            Vector3 step = desiredPosition - origin;
-            if (IsMovementPositionFree(movingRobot, desiredPosition)) return desiredPosition;
-            // Объезд ограничен длиной шага: коллизии не телепортируют робота и не искажают упреждение.
-            float side = movingRobot.EntityId % 2 == 0 ? 1f : -1f;
-            for (int attempt = 1; attempt <= 4; attempt++)
-            {
-                float angle = (attempt <= 2 ? 45f : 90f) * (attempt % 2 == 1 ? side : -side);
-                Vector3 candidate = origin + Quaternion.Euler(0f, angle, 0f) * step;
-                if (IsMovementPositionFree(movingRobot, candidate)) return candidate;
-            }
-            return origin;
-        }
-
-        private bool IsMovementPositionFree(RobotView movingRobot, Vector3 position)
-        {
-            var point = new SimVector2(position.x, position.z);
-            var cell = _navigationGrid.WorldToGrid(point);
-            if (!_navigationGrid.IsWalkable(cell.X, cell.Y)) return false;
-            foreach (var other in _spawnedRobots.Values)
-            {
-                if (other == null || other == movingRobot || !other.State.IsAlive) continue;
-                if ((position - other.transform.position).sqrMagnitude < 1.7f * 1.7f) return false;
-            }
-            foreach (var building in _matchState.Buildings.Values)
-            {
-                float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
-                if (SimVector2.SqrDistance(point, building.Position) < clearance * clearance) return false;
-            }
-            return true;
-        }
-
-        private void RouteRobotToCapture(RobotView view, BuildingState building)
-        {
-            if (CaptureSystem.IsInCaptureRange(view.State, building))
-            {
-                view.StopMovement();
-                return;
-            }
-            List<SimVector2> bestPath = null;
-            float bestDistance = float.MaxValue;
-            float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
-            // Выбираем реальную проходимую клетку внутри зоны, а не новую точку на дуге от текущей позиции.
-            for (int y = 0; y < _navigationGrid.Height; y++)
-            {
-                for (int x = 0; x < _navigationGrid.Width; x++)
-                {
-                    if (!_navigationGrid.IsWalkable(x, y)) continue;
-                    SimVector2 point = _navigationGrid.GridToWorld(new GridCoord(x, y));
-                    float radiusSq = SimVector2.SqrDistance(point, building.Position);
-                    if (radiusSq < clearance * clearance || radiusSq > building.CaptureRadius * building.CaptureRadius) continue;
-                    float distance = SimVector2.SqrDistance(point, view.State.Position);
-                    if (distance >= bestDistance || !IsMovementPositionFree(view, new Vector3(point.X, 0f, point.Y))) continue;
-                    if (!_pathfinder.TryFindPath(view.State.Position, point, out var path)) continue;
-                    bestPath = path;
-                    bestDistance = distance;
-                }
-            }
-            if (bestPath != null) view.SetMovementPath(bestPath);
-            else view.StopMovement();
         }
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
@@ -451,34 +344,6 @@ namespace Game.Presentation.Controllers
             }
         }
 
-        private void HandleMoveOrder(RobotView robot, SimVector2 targetWorld)
-        {
-            if (robot == null || robot.State == null) return;
-
-            // Проверяем возможность пути через A*
-            if (_pathfinder.TryFindPath(robot.State.Position, targetWorld, out var waypoints))
-            {
-                // Отдаем команду в диспетчер
-                var cmd = new OrderMoveCommand
-                {
-                    PlayerId = robot.Owner,
-                    RobotIds = new List<EntityId> { robot.State.Id },
-                    TargetPosition = targetWorld
-                };
-
-                var res = _commandDispatcher.Dispatch(cmd, _matchState);
-                if (res.IsSuccess)
-                {
-                    robot.SetMovementPath(waypoints);
-                    Debug.Log($"[Battle] Робот #{robot.EntityId} двигается к {targetWorld} ({waypoints.Count} точек пути).");
-                }
-            }
-            else
-            {
-                Debug.LogWarning($"[Battle] Нет пути к точке {targetWorld}!");
-            }
-        }
-
         private void HandleAttackOrder(RobotView attacker, RobotView target)
         {
             if (attacker?.State == null || target?.State == null || attacker.Owner != PlayerId.Player1 || attacker.Owner == target.Owner)
@@ -486,18 +351,12 @@ namespace Game.Presentation.Controllers
                 return;
             }
 
-            var command = new OrderAttackCommand
+            IssueForRobot(new OrderAttackCommand
             {
                 PlayerId = attacker.Owner,
                 RobotIds = new List<EntityId> { attacker.State.Id },
                 TargetEntityId = target.State.Id
-            };
-
-            var result = _commandDispatcher.Dispatch(command, _matchState);
-            if (!result.IsSuccess)
-            {
-                Debug.LogWarning($"[Battle] РќРµ СѓРґР°Р»РѕСЃСЊ РѕС‚РґР°С‚СЊ РїСЂРёРєР°Р· Р°С‚Р°РєРё: {result.ErrorReason}");
-            }
+            }, "Не удалось отдать приказ атаки");
         }
 
         private void HandleCaptureOrder(RobotView robot, BuildingView target)
@@ -507,191 +366,70 @@ namespace Game.Presentation.Controllers
                 return;
             }
 
-            var command = new OrderCaptureCommand
+            CommandResult result = IssueForRobot(new OrderCaptureCommand
             {
                 PlayerId = robot.Owner,
                 RobotIds = new List<EntityId> { robot.State.Id },
                 TargetBuildingId = new EntityId(target.EntityId)
-            };
-            var result = _commandDispatcher.Dispatch(command, _matchState);
+            }, "Приказ захвата отклонён");
             if (result.IsSuccess)
             {
-                RouteRobotToCapture(robot, _matchState.Buildings[target.EntityId]);
                 Debug.Log($"[Battle] Робот #{robot.EntityId} получил приказ захватить здание #{target.EntityId}.");
             }
-            else if (!result.IsSuccess)
-            {
-                Debug.LogWarning($"[Battle] Приказ захвата отклонён: {result.ErrorReason}");
-            }
         }
 
-        private void UpdateAutonomousOrders()
-        {
-            if (_matchState.IsPaused || _matchState.Result != MatchResult.InProgress) return;
-            if (Time.time < _nextAutonomousOrderUpdate) return;
-            _nextAutonomousOrderUpdate = Time.time + 0.4f;
-
-            foreach (var pair in _spawnedRobots)
-            {
-                RobotView view = pair.Value;
-                RobotState robot = view?.State;
-                if (robot == null || !robot.IsAlive) continue;
-
-                if (robot.CurrentOrder.Type == OrderType.Capture)
-                {
-                    BuildingState target = null;
-                    if (robot.CurrentOrder.TargetEntityId.IsValid &&
-                        _matchState.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out var commandedTarget) &&
-                        commandedTarget.Owner != robot.Owner)
-                    {
-                        target = commandedTarget;
-                    }
-                    else
-                    {
-                        target = FindNearestBuilding(robot, building => building.Owner != robot.Owner);
-                    }
-                    if (target == null) { view.StopMovement(); continue; }
-                    bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
-                    robot.CurrentOrder.TargetEntityId = target.Id;
-                    if (CaptureSystem.IsInCaptureRange(robot, target))
-                    {
-                        view.StopMovement();
-                        continue;
-                    }
-                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotToCapture(view, target);
-                }
-                else if (robot.CurrentOrder.Type == OrderType.Attack)
-                {
-                    if (_matchState.Robots.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out var target) && target.IsAlive)
-                    {
-                        UpdateCombatManeuver(view, robot, target);
-                    }
-                }
-                else if (robot.CurrentOrder.Type == OrderType.Hunt)
-                {
-                    var target = FindNearestEnemy(robot);
-                    if (target == null) continue;
-                    robot.CurrentOrder.TargetEntityId = target.Id;
-                    UpdateCombatManeuver(view, robot, target);
-                }
-                else if (robot.CurrentOrder.Type == OrderType.Defend)
-                {
-                    view.StopMovement();
-                    var target = FindNearestEnemy(robot);
-                    robot.CurrentOrder.TargetEntityId = target != null && SimVector2.SqrDistance(robot.Position, target.Position) <= 64f
-                        ? target.Id : EntityId.None;
-                }
-                else if (robot.CurrentOrder.Type == OrderType.Scout)
-                {
-                    bool targetIsAtMapEdge = robot.CurrentOrder.TargetPosition.X <= 2f ||
-                                             robot.CurrentOrder.TargetPosition.X >= _mapDefinition.Width - 3f;
-                    bool reachedTarget = SimVector2.SqrDistance(robot.Position, robot.CurrentOrder.TargetPosition) < 0.8f * 0.8f;
-                    if (targetIsAtMapEdge || reachedTarget)
-                    {
-                        if (reachedTarget) robot.ScoutPatrolStep++;
-                        robot.CurrentOrder.TargetPosition = GetScoutDestination(robot, robot.ScoutPatrolStep);
-                        view.StopMovement();
-                    }
-
-                    if (!view.IsMovingAlongPath) RouteRobotTo(view, robot.CurrentOrder.TargetPosition);
-                }
-            }
-        }
-
-        private void RouteRobotTo(RobotView view, SimVector2 target)
-        {
-            if (_pathfinder.TryFindPath(view.State.Position, target, out var waypoints))
-            {
-                view.SetMovementPath(waypoints);
-            }
-        }
-
-        private void UpdateCombatManeuver(RobotView view, RobotState robot, RobotState target)
-        {
-            if (_nextCombatManeuverAt.TryGetValue(robot.Id.Value, out float nextUpdate) && Time.time < nextUpdate)
-            {
-                return;
-            }
-            if (!CombatRangePlanner.TryGetManeuverDestination(robot, target, _moduleCatalog, out var destination)) return;
-
-            float interval = 0.5f;
-            if (_moduleCatalog.TryGetValue(robot.Blueprint.ControlModuleId, out var controller))
-            {
-                interval = Mathf.Max(0.05f, controller.CombatManeuverIntervalSeconds);
-            }
-            _nextCombatManeuverAt[robot.Id.Value] = Time.time + interval;
-
-            bool destinationChanged = SimVector2.SqrDistance(robot.CurrentOrder.TargetPosition, destination) > 1f;
-            robot.CurrentOrder.TargetPosition = destination;
-            if (destinationChanged || !view.IsMovingAlongPath)
-            {
-                RouteRobotTo(view, destination);
-            }
-        }
-
-        private float GetTerrainSpeedMultiplier(SimVector2 position)
-        {
-            GridCoord grid = _navigationGrid.WorldToGrid(position);
-            float multiplier = _navigationGrid.GetSpeedMultiplier(grid.X, grid.Y);
-            return multiplier > 0f ? multiplier : 1f;
-        }
-
-        private BuildingState FindNearestBuilding(RobotState robot, System.Func<BuildingState, bool> predicate)
-        {
-            BuildingState nearest = null;
-            float nearestDistance = float.MaxValue;
-            foreach (var building in _matchState.Buildings.Values)
-            {
-                if (!predicate(building)) continue;
-                float distance = SimVector2.SqrDistance(robot.Position, building.Position);
-                if (distance < nearestDistance)
-                {
-                    nearest = building;
-                    nearestDistance = distance;
-                }
-            }
-            return nearest;
-        }
-
-        private RobotState FindNearestEnemy(RobotState robot)
-        {
-            RobotState nearest = null;
-            float nearestDistance = float.MaxValue;
-            foreach (var candidate in _matchState.Robots.Values)
-            {
-                if (!candidate.IsAlive || candidate.Owner == robot.Owner) continue;
-                float distance = SimVector2.SqrDistance(robot.Position, candidate.Position);
-                if (distance < nearestDistance)
-                {
-                    nearest = candidate;
-                    nearestDistance = distance;
-                }
-            }
-            return nearest;
-        }
-
-        private SimVector2 GetScoutDestination(RobotState robot, int patrolStep = 0)
-        {
-            // Разведка ведёт в сектора у противника, но не к скалам карты и не под базу.
-            float x = robot.Owner == PlayerId.Player1 ? _mapDefinition.Width - 9f : 8f;
-            float y = 6f + ((robot.Id.Value + patrolStep) % 3) * 9f;
-            return new SimVector2(x, y);
-        }
-
+        /// <summary>Ручное управление отправляет команду только при смене направления, поэтому попадает в replay.</summary>
         private void UpdateDirectControl()
         {
-            if (_isOrderMode || _currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1 || Keyboard.current == null)
+            RobotState robot = !_isOrderMode && _currentlySelectedRobot != null && _currentlySelectedRobot.Owner == PlayerId.Player1
+                ? _currentlySelectedRobot.State
+                : null;
+
+            SimVector2 direction = SimVector2.Zero;
+            if (robot != null && Keyboard.current != null)
             {
-                return;
+                float x = 0f, y = 0f;
+                if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) y += 1f;
+                if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) y -= 1f;
+                if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) x -= 1f;
+                if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) x += 1f;
+                direction = new SimVector2(x, y);
             }
 
-            Vector2 direction = Vector2.zero;
-            if (Keyboard.current.wKey.isPressed || Keyboard.current.upArrowKey.isPressed) direction.y += 1f;
-            if (Keyboard.current.sKey.isPressed || Keyboard.current.downArrowKey.isPressed) direction.y -= 1f;
-            if (Keyboard.current.aKey.isPressed || Keyboard.current.leftArrowKey.isPressed) direction.x -= 1f;
-            if (Keyboard.current.dKey.isPressed || Keyboard.current.rightArrowKey.isPressed) direction.x += 1f;
+            // Отпускаем робота, которым управляли раньше, если выбор или режим сменился.
+            if (_drivenRobot != null && _drivenRobot != robot)
+            {
+                StopDriving();
+            }
+            if (robot == null || direction.Equals(_lastDriveDirection)) return;
 
-            _currentlySelectedRobot.MoveDirect(direction);
+            // Пока клавиши не нажимали, робот выполняет свой приказ.
+            if (_drivenRobot == null && direction.SqrMagnitude < 0.001f) return;
+            if (!robot.IsAlive) return;
+
+            _simulation.Issue(new OrderDriveCommand
+            {
+                PlayerId = PlayerId.Player1,
+                RobotIds = new List<EntityId> { robot.Id },
+                Direction = direction
+            });
+            _drivenRobot = robot;
+            _lastDriveDirection = direction;
+        }
+
+        private void StopDriving()
+        {
+            if (_drivenRobot != null && _drivenRobot.IsAlive && _drivenRobot.DriveDirection.SqrMagnitude > 0.001f)
+            {
+                _simulation.Issue(new OrderDriveCommand
+                {
+                    PlayerId = PlayerId.Player1,
+                    RobotIds = new List<EntityId> { _drivenRobot.Id },
+                    Direction = SimVector2.Zero
+                });
+            }
+            _drivenRobot = null;
+            _lastDriveDirection = SimVector2.Zero;
         }
 
         private void UpdateControlMode()
@@ -703,65 +441,21 @@ namespace Game.Presentation.Controllers
 
             if (_currentlySelectedRobot != null && _currentlySelectedRobot.Owner == PlayerId.Player1)
             {
-                if (Keyboard.current.cKey.wasPressedThisFrame)
+                OrderType? hotkeyOrder =
+                    Keyboard.current.cKey.wasPressedThisFrame ? OrderType.Capture :
+                    Keyboard.current.hKey.wasPressedThisFrame ? OrderType.Hunt :
+                    Keyboard.current.rKey.wasPressedThisFrame ? OrderType.Scout :
+                    Keyboard.current.fKey.wasPressedThisFrame ? OrderType.Defend :
+                    _isOrderMode && Keyboard.current.sKey.wasPressedThisFrame ? OrderType.Stop :
+                    (OrderType?)null;
+
+                if (hotkeyOrder.HasValue)
                 {
-                    _isOrderMode = true;
-                    _selectionController.SetOrderMode(true);
-                    _hudView.SetOrderMode(true);
-                    _commandDispatcher.Dispatch(new OrderCaptureCommand
-                    {
-                        PlayerId = PlayerId.Player1,
-                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
-                        TargetBuildingId = EntityId.None
-                    }, _matchState);
-                }
-                else if (Keyboard.current.hKey.wasPressedThisFrame)
-                {
-                    _isOrderMode = true;
-                    _selectionController.SetOrderMode(true);
-                    _hudView.SetOrderMode(true);
-                    _commandDispatcher.Dispatch(new OrderHuntCommand
-                    {
-                        PlayerId = PlayerId.Player1,
-                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id }
-                    }, _matchState);
-                }
-                else if (Keyboard.current.rKey.wasPressedThisFrame)
-                {
-                    _isOrderMode = true;
-                    _selectionController.SetOrderMode(true);
-                    _hudView.SetOrderMode(true);
-                    _commandDispatcher.Dispatch(new OrderScoutCommand
-                    {
-                        PlayerId = PlayerId.Player1,
-                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
-                        TargetPosition = GetScoutDestination(_currentlySelectedRobot.State)
-                    }, _matchState);
-                }
-                else if (Keyboard.current.fKey.wasPressedThisFrame)
-                {
-                    _isOrderMode = true;
-                    _selectionController.SetOrderMode(true);
-                    _hudView.SetOrderMode(true);
-                    _currentlySelectedRobot.StopMovement();
-                    _commandDispatcher.Dispatch(new OrderDefendCommand
-                    {
-                        PlayerId = PlayerId.Player1,
-                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
-                        TargetPosition = _currentlySelectedRobot.State.Position
-                    }, _matchState);
-                }
-                else if (_isOrderMode && Keyboard.current.sKey.wasPressedThisFrame)
-                {
-                    var result = _commandDispatcher.Dispatch(new OrderStopCommand
-                    {
-                        PlayerId = PlayerId.Player1,
-                        RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id }
-                    }, _matchState);
-                    if (result.IsSuccess)
-                    {
-                        _currentlySelectedRobot.StopMovement();
-                    }
+                    if (hotkeyOrder.Value != OrderType.Stop) SetOrderMode(true);
+                    // Новый приказ сам сбрасывает ручной привод, поэтому повторная команда остановки не нужна.
+                    _drivenRobot = null;
+                    _lastDriveDirection = SimVector2.Zero;
+                    IssueForRobot(CreateRobotOrderCommand(hotkeyOrder.Value, _currentlySelectedRobot.State), "Приказ отклонён");
                 }
             }
 
@@ -770,13 +464,16 @@ namespace Game.Presentation.Controllers
                 return;
             }
 
-            _isOrderMode = !_isOrderMode;
-            _selectionController.SetOrderMode(_isOrderMode);
-            _hudView.SetOrderMode(_isOrderMode);
-            Debug.Log($"[Battle] Р РµР¶РёРј СѓРїСЂР°РІР»РµРЅРёСЏ: {(_isOrderMode ? "РїСЂРёРєР°Р·С‹" : "СЂСѓС‡РЅРѕР№")}.");
+            SetOrderMode(!_isOrderMode);
+            Debug.Log($"[Battle] Режим управления: {(_isOrderMode ? "приказы" : "ручной")}.");
         }
 
-
+        private void SetOrderMode(bool isOrderMode)
+        {
+            _isOrderMode = isOrderMode;
+            _selectionController.SetOrderMode(isOrderMode);
+            _hudView.SetOrderMode(isOrderMode);
+        }
 
         public BuildingView GetPlayer1BaseView()
         {
@@ -790,6 +487,5 @@ namespace Game.Presentation.Controllers
             }
             return null;
         }
-
     }
 }

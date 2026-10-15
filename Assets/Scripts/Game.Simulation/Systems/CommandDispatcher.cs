@@ -37,6 +37,7 @@ namespace Game.Simulation.Systems
                 OrderStopCommand stop => HandleStop(stop, state),
                 OrderHuntCommand hunt => HandleHunt(hunt, state),
                 OrderScoutCommand scout => HandleScout(scout, state),
+                OrderDriveCommand drive => HandleDrive(drive, state),
                 _ => CommandResult.Fail($"Неизвестный тип команды: {command.GetType().Name}")
             };
         }
@@ -86,7 +87,7 @@ namespace Game.Simulation.Systems
             float buildTime = GetBuildTimeSeconds(cmd.Blueprint, validation.TotalCost);
             var order = new ProductionOrder
             {
-                OrderId = Guid.NewGuid().ToString("N"),
+                OrderId = $"order-{state.NextProductionOrderId++}",
                 Blueprint = cmd.Blueprint,
                 Cost = validation.TotalCost,
                 TotalBuildTimeSeconds = buildTime,
@@ -140,7 +141,7 @@ namespace Game.Simulation.Systems
 
             foreach (var robot in robots)
             {
-                robot.CurrentOrder = RobotOrder.MoveTo(cmd.TargetPosition);
+                AssignOrder(robot, RobotOrder.MoveTo(cmd.TargetPosition));
             }
             return CommandResult.Success();
         }
@@ -162,7 +163,7 @@ namespace Game.Simulation.Systems
 
             foreach (var robot in robots)
             {
-                robot.CurrentOrder = RobotOrder.Attack(cmd.TargetEntityId);
+                AssignOrder(robot, RobotOrder.Attack(cmd.TargetEntityId));
             }
             return CommandResult.Success();
         }
@@ -185,7 +186,7 @@ namespace Game.Simulation.Systems
 
             foreach (var robot in robots)
             {
-                robot.CurrentOrder = RobotOrder.Capture(cmd.TargetBuildingId);
+                AssignOrder(robot, RobotOrder.Capture(cmd.TargetBuildingId));
             }
             return CommandResult.Success();
         }
@@ -197,7 +198,7 @@ namespace Game.Simulation.Systems
 
             foreach (var robot in robots)
             {
-                robot.CurrentOrder = RobotOrder.Defend(cmd.TargetPosition);
+                AssignOrder(robot, RobotOrder.Defend(cmd.TargetPosition));
             }
             return CommandResult.Success();
         }
@@ -209,7 +210,7 @@ namespace Game.Simulation.Systems
 
             foreach (var robot in robots)
             {
-                robot.CurrentOrder = RobotOrder.Stop();
+                AssignOrder(robot, RobotOrder.Stop());
             }
             return CommandResult.Success();
         }
@@ -218,7 +219,7 @@ namespace Game.Simulation.Systems
         {
             var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
             if (error != null) return CommandResult.Fail(error);
-            foreach (var robot in robots) robot.CurrentOrder = RobotOrder.Hunt();
+            foreach (var robot in robots) AssignOrder(robot, RobotOrder.Hunt());
             return CommandResult.Success();
         }
 
@@ -229,9 +230,34 @@ namespace Game.Simulation.Systems
             foreach (var robot in robots)
             {
                 robot.ScoutPatrolStep = 0;
-                robot.CurrentOrder = RobotOrder.Scout(cmd.TargetPosition);
+                AssignOrder(robot, RobotOrder.Scout(cmd.TargetPosition));
             }
             return CommandResult.Success();
+        }
+
+        private CommandResult HandleDrive(OrderDriveCommand cmd, MatchState state)
+        {
+            var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
+            if (error != null) return CommandResult.Fail(error);
+
+            SimVector2 direction = cmd.Direction;
+            float length = direction.Magnitude;
+            direction = length > 0.001f ? direction / length : SimVector2.Zero;
+            foreach (var robot in robots)
+            {
+                AssignOrder(robot, RobotOrder.Stop());
+                robot.DriveDirection = direction;
+            }
+            return CommandResult.Success();
+        }
+
+        /// <summary>Новый приказ отменяет старый маршрут и ручной привод; путь строит планировщик симуляции.</summary>
+        private static void AssignOrder(RobotState robot, RobotOrder order)
+        {
+            robot.CurrentOrder = order;
+            robot.ClearPath();
+            robot.DriveDirection = SimVector2.Zero;
+            robot.NextManeuverSeconds = 0f;
         }
 
         private List<RobotState> ValidateAndGetOwnedRobots(List<EntityId> ids, PlayerId expectedOwner, MatchState state, out string error)

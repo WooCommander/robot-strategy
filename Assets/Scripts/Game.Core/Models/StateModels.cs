@@ -41,7 +41,26 @@ namespace Game.Core.Models
         public int ScoutPatrolStep { get; set; }
         public RobotOrder CurrentOrder { get; set; } = new RobotOrder();
 
+        // Движение принадлежит симуляции: путь A*, ручной привод и расписание боевого манёвра.
+        public System.Collections.Generic.List<SimVector2> Path { get; set; } = new System.Collections.Generic.List<SimVector2>();
+        public int PathIndex { get; set; }
+        public SimVector2 DriveDirection { get; set; }
+        public float NextManeuverSeconds { get; set; }
+
         public bool IsAlive => CurrentHealth > 0;
+        public bool HasPath => Path != null && PathIndex < Path.Count;
+
+        public void SetPath(System.Collections.Generic.List<SimVector2> waypoints)
+        {
+            Path = waypoints ?? new System.Collections.Generic.List<SimVector2>();
+            PathIndex = 0;
+        }
+
+        public void ClearPath()
+        {
+            Path?.Clear();
+            PathIndex = 0;
+        }
     }
 
     [Serializable]
@@ -133,6 +152,8 @@ namespace Game.Core.Models
         public float MatchTimeSeconds { get; set; } = 0f;
         public MatchResult Result { get; set; } = MatchResult.InProgress;
         public bool IsPaused { get; set; } = false;
+        public int NextRobotId { get; set; } = 1000;
+        public int NextProductionOrderId { get; set; } = 1;
 
         public PlayerState Player1 { get; set; } = new PlayerState { Id = PlayerId.Player1 };
         public PlayerState Player2 { get; set; } = new PlayerState { Id = PlayerId.Player2 };

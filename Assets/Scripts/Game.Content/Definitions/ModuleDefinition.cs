@@ -16,6 +16,7 @@ namespace Game.Content.Definitions
         public int HealthBonus { get; set; }
         public float Speed { get; set; }
         public int MaxLoadCapacity { get; set; } // Только для Chassis
+        public int WeaponSlots { get; set; } = 1; // Только для корпуса
 
         // Для корпуса, оружия и управляющего модуля
         public ControlTier MaxSupportedControlTier { get; set; }
@@ -64,7 +65,7 @@ namespace Game.Content.Definitions
                     Cost = 120,
                     Mass = 60,
                     Speed = 3.0f,
-                    MaxLoadCapacity = 230
+                    MaxLoadCapacity = 260
                 },
                 [ChassisBiped] = new ModuleDefinition
                 {
@@ -86,7 +87,8 @@ namespace Game.Content.Definitions
                     Cost = 100,
                     Mass = 30,
                     HealthBonus = 120,
-                    MaxSupportedControlTier = ControlTier.Tactical
+                    MaxSupportedControlTier = ControlTier.Tactical,
+                    WeaponSlots = 1
                 },
                 [BodyHeavy] = new ModuleDefinition
                 {
@@ -96,7 +98,8 @@ namespace Game.Content.Definitions
                     Cost = 220,
                     Mass = 80,
                     HealthBonus = 260,
-                    MaxSupportedControlTier = ControlTier.Guidance
+                    MaxSupportedControlTier = ControlTier.Guidance,
+                    WeaponSlots = 2
                 },
 
                 // Оружие

@@ -96,8 +96,8 @@ namespace Game.Core.Commands
     [Serializable]
     public sealed class ReplayBlueprint
     {
-        public string Id; public string Name; public string ChassisId; public string BodyId; public string WeaponId; public string ControlModuleId; public string EquipmentId;
-        public static ReplayBlueprint From(RobotBlueprint blueprint) => blueprint == null ? null : new ReplayBlueprint { Id = blueprint.Id, Name = blueprint.Name, ChassisId = blueprint.ChassisId, BodyId = blueprint.BodyId, WeaponId = blueprint.WeaponId, ControlModuleId = blueprint.ControlModuleId, EquipmentId = blueprint.EquipmentId };
-        public RobotBlueprint ToBlueprint() => new RobotBlueprint(Id, Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId);
+        public string Id; public string Name; public string ChassisId; public string BodyId; public string WeaponId; public string SecondaryWeaponId; public string ControlModuleId; public string EquipmentId;
+        public static ReplayBlueprint From(RobotBlueprint blueprint) => blueprint == null ? null : new ReplayBlueprint { Id = blueprint.Id, Name = blueprint.Name, ChassisId = blueprint.ChassisId, BodyId = blueprint.BodyId, WeaponId = blueprint.WeaponId, SecondaryWeaponId = blueprint.SecondaryWeaponId, ControlModuleId = blueprint.ControlModuleId, EquipmentId = blueprint.EquipmentId };
+        public RobotBlueprint ToBlueprint() => new RobotBlueprint(Id, Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId, SecondaryWeaponId);
     }
 }

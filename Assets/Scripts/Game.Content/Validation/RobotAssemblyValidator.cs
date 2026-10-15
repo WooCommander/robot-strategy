@@ -81,6 +81,18 @@ namespace Game.Content.Validation
             {
                 errors.Add($"Модуль оружия '{blueprint.WeaponId}' не найден или некорректен.");
             }
+            ModuleDefinition secondaryWeapon = null;
+            if (!string.IsNullOrEmpty(blueprint.SecondaryWeaponId))
+            {
+                if (!catalog.TryGetValue(blueprint.SecondaryWeaponId, out secondaryWeapon) || secondaryWeapon.SlotType != ModuleSlotType.Weapon)
+                {
+                    errors.Add($"Второе оружие '{blueprint.SecondaryWeaponId}' не найдено или некорректно.");
+                }
+                else if (body.WeaponSlots < 2)
+                {
+                    errors.Add($"Корпус '{body.Name}' поддерживает только {body.WeaponSlots} оружейный слот.");
+                }
+            }
             if (!catalog.TryGetValue(blueprint.ControlModuleId, out var control) || control.SlotType != ModuleSlotType.Control)
             {
                 errors.Add($"Модуль управления '{blueprint.ControlModuleId}' не найден или некорректен.");
@@ -110,8 +122,8 @@ namespace Game.Content.Validation
                 errors.Add($"Оружие '{weapon.Name}' требует уровень управления не ниже '{weapon.MinimumControlTier}'.");
             }
 
-            int totalCost = chassis.Cost + body.Cost + weapon.Cost + control.Cost + (equip?.Cost ?? 0);
-            int totalMass = chassis.Mass + body.Mass + weapon.Mass + control.Mass + (equip?.Mass ?? 0);
+            int totalCost = chassis.Cost + body.Cost + weapon.Cost + (secondaryWeapon?.Cost ?? 0) + control.Cost + (equip?.Cost ?? 0);
+            int totalMass = chassis.Mass + body.Mass + weapon.Mass + (secondaryWeapon?.Mass ?? 0) + control.Mass + (equip?.Mass ?? 0);
             int totalHealth = body.HealthBonus + (equip?.HealthBonus ?? 0);
             float speed = chassis.Speed;
             int maxLoad = chassis.MaxLoadCapacity;

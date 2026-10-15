@@ -177,6 +177,22 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void SecondaryWeapon_RequiresHeavyBodyAndAddsToAssemblyCost()
+        {
+            var light = new RobotBlueprint("light_two_weapons", "Лёгкий", DefaultContentCatalog.ChassisTracks,
+                DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlBasic,
+                secondaryWeaponId: DefaultContentCatalog.WeaponMissiles);
+            var heavy = new RobotBlueprint("heavy_two_weapons", "Тяжёлый", DefaultContentCatalog.ChassisTracks,
+                DefaultContentCatalog.BodyHeavy, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlTactical,
+                secondaryWeaponId: DefaultContentCatalog.WeaponMissiles);
+
+            Assert.IsFalse(RobotAssemblyValidator.Validate(light, _catalog).IsValid);
+            var validation = RobotAssemblyValidator.Validate(heavy, _catalog);
+            Assert.IsTrue(validation.IsValid);
+            Assert.AreEqual(790, validation.TotalCost);
+        }
+
+        [Test]
         public void ConstructorDraft_ShouldBuildAndValidateSelectedModules()
         {
             var draft = new RobotConstructorDraft(_catalog);

@@ -43,6 +43,19 @@ namespace Game.Core.Models
         public bool IsAlive => CurrentHealth > 0;
     }
 
+    [Serializable]
+    public class ProjectileState
+    {
+        public EntityId SourceRobotId { get; set; }
+        public EntityId TargetRobotId { get; set; }
+        public PlayerId Owner { get; set; }
+        public WeaponType WeaponType { get; set; }
+        public int Damage { get; set; }
+        public float SplashRadius { get; set; }
+        public SimVector2 ImpactPosition { get; set; }
+        public float RemainingTravelSeconds { get; set; }
+    }
+
     public enum OrderProductionStatus : byte
     {
         InProgress = 0,
@@ -127,6 +140,9 @@ namespace Game.Core.Models
 
         public System.Collections.Generic.Dictionary<int, BuildingState> Buildings { get; set; } 
             = new System.Collections.Generic.Dictionary<int, BuildingState>();
+
+        public System.Collections.Generic.List<ProjectileState> Projectiles { get; set; }
+            = new System.Collections.Generic.List<ProjectileState>();
 
         public PlayerState GetPlayer(PlayerId id) => id switch
         {

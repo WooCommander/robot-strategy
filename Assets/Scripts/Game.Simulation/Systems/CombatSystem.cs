@@ -12,6 +12,7 @@ namespace Game.Simulation.Systems
 
         public event Action<RobotState, RobotState> OnRobotDestroyed;
         public event Action<RobotState, RobotState, WeaponType> OnWeaponFired;
+        public event Action<RobotState, SimVector2, WeaponType> OnProjectileImpact;
 
         public CombatSystem(IReadOnlyDictionary<string, ModuleDefinition> catalog)
         {
@@ -35,6 +36,7 @@ namespace Game.Simulation.Systems
                 attacker.WeaponCooldownRemaining = Math.Max(0f, attacker.WeaponCooldownRemaining - deltaSeconds);
                 TryAttack(attacker, state);
             }
+            UpdateProjectiles(state, deltaSeconds);
         }
 
         private void TryAttack(RobotState attacker, MatchState state)
@@ -64,24 +66,60 @@ namespace Game.Simulation.Systems
 
             attacker.WeaponCooldownRemaining = weapon.CooldownSeconds;
             OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
-            if (weapon.WeaponType == WeaponType.AreaMissile)
+            float speed = Math.Max(0.1f, weapon.ProjectileSpeed);
+            state.Projectiles.Add(new ProjectileState
             {
-                ApplySplashDamage(attacker, target.Position, weapon, state);
-            }
-            else
+                SourceRobotId = attacker.Id,
+                TargetRobotId = target.Id,
+                Owner = attacker.Owner,
+                WeaponType = weapon.WeaponType,
+                Damage = weapon.Damage,
+                SplashRadius = weapon.SplashRadius,
+                ImpactPosition = target.Position,
+                RemainingTravelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed
+            });
+        }
+
+        private void UpdateProjectiles(MatchState state, float deltaSeconds)
+        {
+            for (int index = state.Projectiles.Count - 1; index >= 0; index--)
             {
-                ApplyDamage(attacker, target, weapon.Damage, state);
+                ProjectileState projectile = state.Projectiles[index];
+                projectile.RemainingTravelSeconds -= deltaSeconds;
+                if (projectile.RemainingTravelSeconds > 0f) continue;
+
+                state.Projectiles.RemoveAt(index);
+                state.Robots.TryGetValue(projectile.SourceRobotId.Value, out RobotState attacker);
+                OnProjectileImpact?.Invoke(attacker, projectile.ImpactPosition, projectile.WeaponType);
+                if (projectile.WeaponType == WeaponType.AreaMissile)
+                {
+                    ApplySplashDamage(attacker, projectile, state);
+                }
+                else
+                {
+                    ApplyDirectHit(attacker, projectile, state);
+                }
             }
         }
 
-        private void ApplySplashDamage(RobotState attacker, SimVector2 impactPosition, ModuleDefinition weapon, MatchState state)
+        private void ApplyDirectHit(RobotState attacker, ProjectileState projectile, MatchState state)
         {
-            float splashRadiusSq = weapon.SplashRadius * weapon.SplashRadius;
+            const float hitRadius = 0.9f;
+            if (state.Robots.TryGetValue(projectile.TargetRobotId.Value, out RobotState target) && target.IsAlive &&
+                target.Owner != projectile.Owner && SimVector2.SqrDistance(target.Position, projectile.ImpactPosition) <= hitRadius * hitRadius)
+            {
+                ApplyDamage(attacker, target, projectile.Damage, state);
+            }
+        }
+
+        private void ApplySplashDamage(RobotState attacker, ProjectileState projectile, MatchState state)
+        {
+            float splashRadiusSq = projectile.SplashRadius * projectile.SplashRadius;
             var targets = new List<RobotState>();
             foreach (var candidate in state.Robots.Values)
             {
-                if (candidate.IsAlive && candidate.Owner != attacker.Owner &&
-                    SimVector2.SqrDistance(candidate.Position, impactPosition) <= splashRadiusSq)
+                if (candidate.IsAlive && candidate.Owner != projectile.Owner &&
+                    SimVector2.SqrDistance(candidate.Position, projectile.ImpactPosition) <= splashRadiusSq)
                 {
                     targets.Add(candidate);
                 }
@@ -89,7 +127,7 @@ namespace Game.Simulation.Systems
 
             foreach (var target in targets)
             {
-                ApplyDamage(attacker, target, weapon.Damage, state);
+                ApplyDamage(attacker, target, projectile.Damage, state);
             }
         }
 

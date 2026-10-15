@@ -66,12 +66,14 @@ namespace Game.Persistence
             public PlayerSnapshot Player1; public PlayerSnapshot Player2;
             public List<RobotSnapshot> Robots = new List<RobotSnapshot>();
             public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
+            public List<ProjectileSnapshot> Projectiles = new List<ProjectileSnapshot>();
 
             public static MatchSnapshot FromState(MatchState state)
             {
                 var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2) };
                 foreach (RobotState robot in state.Robots.Values) snapshot.Robots.Add(RobotSnapshot.FromState(robot));
                 foreach (BuildingState building in state.Buildings.Values) snapshot.Buildings.Add(BuildingSnapshot.FromState(building));
+                foreach (ProjectileState projectile in state.Projectiles) snapshot.Projectiles.Add(ProjectileSnapshot.FromState(projectile));
                 return snapshot;
             }
 
@@ -80,6 +82,7 @@ namespace Game.Persistence
                 var state = new MatchState { Tick = Tick, MatchTimeSeconds = MatchTimeSeconds, Result = Result, IsPaused = IsPaused, Player1 = Player1?.ToState() ?? new PlayerState { Id = PlayerId.Player1 }, Player2 = Player2?.ToState() ?? new PlayerState { Id = PlayerId.Player2 } };
                 foreach (RobotSnapshot robot in Robots ?? new List<RobotSnapshot>()) { RobotState restored = robot.ToState(); state.Robots[restored.Id.Value] = restored; }
                 foreach (BuildingSnapshot building in Buildings ?? new List<BuildingSnapshot>()) { BuildingState restored = building.ToState(); state.Buildings[restored.Id.Value] = restored; }
+                foreach (ProjectileSnapshot projectile in Projectiles ?? new List<ProjectileSnapshot>()) state.Projectiles.Add(projectile.ToState());
                 return state;
             }
         }
@@ -116,6 +119,14 @@ namespace Game.Persistence
                 foreach (ProductionSnapshot order in ProductionQueue ?? new List<ProductionSnapshot>()) state.ProductionQueue.Add(order.ToState());
                 return state;
             }
+        }
+
+        [Serializable]
+        private sealed class ProjectileSnapshot
+        {
+            public int SourceRobotId; public int TargetRobotId; public PlayerId Owner; public WeaponType WeaponType; public int Damage; public float SplashRadius; public VectorSnapshot ImpactPosition; public float RemainingTravelSeconds;
+            public static ProjectileSnapshot FromState(ProjectileState state) => new ProjectileSnapshot { SourceRobotId = state.SourceRobotId.Value, TargetRobotId = state.TargetRobotId.Value, Owner = state.Owner, WeaponType = state.WeaponType, Damage = state.Damage, SplashRadius = state.SplashRadius, ImpactPosition = VectorSnapshot.From(state.ImpactPosition), RemainingTravelSeconds = state.RemainingTravelSeconds };
+            public ProjectileState ToState() => new ProjectileState { SourceRobotId = new EntityId(SourceRobotId), TargetRobotId = new EntityId(TargetRobotId), Owner = Owner, WeaponType = WeaponType, Damage = Damage, SplashRadius = SplashRadius, ImpactPosition = ImpactPosition.ToState(), RemainingTravelSeconds = RemainingTravelSeconds };
         }
 
         [Serializable]

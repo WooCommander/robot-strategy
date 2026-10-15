@@ -40,6 +40,7 @@ namespace Game.Presentation.Controllers
         private BuildingView _currentlySelectedBuilding;
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
+        private WeaponEffectsPool _weaponEffects;
         private bool _isOrderMode;
         private float _nextAutonomousOrderUpdate;
         private bool _matchResultReported;
@@ -82,10 +83,13 @@ namespace Game.Presentation.Controllers
             _combatSystem = new CombatSystem(_moduleCatalog);
             _combatSystem.OnRobotDestroyed += HandleRobotDestroyed;
             _combatSystem.OnWeaponFired += HandleWeaponFired;
+            _combatSystem.OnProjectileImpact += HandleProjectileImpact;
             _captureSystem = new CaptureSystem();
             _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
             _aiCommander = new AiCommander(_commandDispatcher, _moduleCatalog);
             _persistence = new MatchPersistenceService();
+            _weaponEffects = gameObject.AddComponent<WeaponEffectsPool>();
+            _weaponEffects.Initialize();
 
             // 3. Построение визуала карты
             if (_mapRenderer == null)
@@ -286,32 +290,12 @@ namespace Game.Presentation.Controllers
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
         {
-            Vector3 start = new Vector3(attacker.Position.X, 1.1f, attacker.Position.Y);
-            Vector3 end = new Vector3(target.Position.X, 1.1f, target.Position.Y);
-            Color color = weaponType == WeaponType.AreaMissile ? new Color(1f, 0.3f, 0.1f) : new Color(1f, 0.85f, 0.2f);
+            _weaponEffects.PlayLaunch(attacker.Position, target.Position, weaponType);
+        }
 
-            var shot = new GameObject("WeaponTrace");
-            var line = shot.AddComponent<LineRenderer>();
-            line.positionCount = 2;
-            line.SetPosition(0, start);
-            line.SetPosition(1, end);
-            line.startWidth = weaponType == WeaponType.AreaMissile ? 0.16f : 0.08f;
-            line.endWidth = line.startWidth;
-            line.startColor = color;
-            line.endColor = color;
-            line.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
-            Destroy(shot, 0.12f);
-
-            var impact = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            impact.name = "WeaponImpact";
-            impact.transform.position = end;
-            impact.transform.localScale = Vector3.one * (weaponType == WeaponType.AreaMissile ? 0.8f : 0.35f);
-            var collider = impact.GetComponent<Collider>();
-            if (collider != null) collider.enabled = false;
-            var renderer = impact.GetComponent<MeshRenderer>();
-            renderer.sharedMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color"));
-            renderer.sharedMaterial.color = color;
-            Destroy(impact, 0.12f);
+        private void HandleProjectileImpact(RobotState attacker, SimVector2 impactPosition, WeaponType weaponType)
+        {
+            _weaponEffects.PlayImpact(impactPosition, weaponType);
         }
 
         private void HandleBuildingSelected(BuildingView view)
@@ -467,13 +451,19 @@ namespace Game.Presentation.Controllers
                     robot.CurrentOrder.TargetEntityId = target.Id;
                     if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
                 }
+                else if (robot.CurrentOrder.Type == OrderType.Attack)
+                {
+                    if (_matchState.Robots.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out var target) && target.IsAlive)
+                    {
+                        UpdateCombatManeuver(view, robot, target);
+                    }
+                }
                 else if (robot.CurrentOrder.Type == OrderType.Hunt)
                 {
                     var target = FindNearestEnemy(robot);
                     if (target == null) continue;
-                    bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
                     robot.CurrentOrder.TargetEntityId = target.Id;
-                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
+                    UpdateCombatManeuver(view, robot, target);
                 }
                 else if (robot.CurrentOrder.Type == OrderType.Defend)
                 {
@@ -504,6 +494,18 @@ namespace Game.Presentation.Controllers
             if (_pathfinder.TryFindPath(view.State.Position, target, out var waypoints))
             {
                 view.SetMovementPath(waypoints);
+            }
+        }
+
+        private void UpdateCombatManeuver(RobotView view, RobotState robot, RobotState target)
+        {
+            if (!CombatRangePlanner.TryGetManeuverDestination(robot, target, _moduleCatalog, out var destination)) return;
+
+            bool destinationChanged = SimVector2.SqrDistance(robot.CurrentOrder.TargetPosition, destination) > 1f;
+            robot.CurrentOrder.TargetPosition = destination;
+            if (destinationChanged || !view.IsMovingAlongPath)
+            {
+                RouteRobotTo(view, destination);
             }
         }
 

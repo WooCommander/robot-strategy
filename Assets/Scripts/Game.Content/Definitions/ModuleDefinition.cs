@@ -23,6 +23,7 @@ namespace Game.Content.Definitions
         public float Range { get; set; }
         public float CooldownSeconds { get; set; }
         public float SplashRadius { get; set; }
+        public float ProjectileSpeed { get; set; }
     }
 
     public static class DefaultContentCatalog
@@ -96,7 +97,8 @@ namespace Game.Content.Definitions
                     Damage = 35,
                     Range = 6.0f,
                     CooldownSeconds = 1.5f,
-                    SplashRadius = 0f
+                    SplashRadius = 0f,
+                    ProjectileSpeed = 18f
                 },
                 [WeaponMissiles] = new ModuleDefinition
                 {
@@ -109,7 +111,8 @@ namespace Game.Content.Definitions
                     Damage = 50,
                     Range = 9.0f,
                     CooldownSeconds = 3.5f,
-                    SplashRadius = 2.0f
+                    SplashRadius = 2.0f,
+                    ProjectileSpeed = 10f
                 },
 
                 // Оборудование

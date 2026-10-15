@@ -24,6 +24,8 @@ namespace Game.Core.Tests
             Assert.AreEqual(1, restored.Buildings[1].ProductionQueue.Count);
             Assert.AreEqual("order-1", restored.Buildings[1].ProductionQueue[0].OrderId);
             Assert.AreEqual(7.5f, restored.Buildings[1].ProductionQueue[0].RemainingBuildTimeSeconds);
+            Assert.AreEqual(1, restored.Projectiles.Count);
+            Assert.AreEqual(0.2f, restored.Projectiles[0].RemainingTravelSeconds);
         }
 
         [Test]
@@ -55,6 +57,7 @@ namespace Game.Core.Tests
             state.Player2 = new PlayerState { Id = PlayerId.Player2, Metal = 321 };
             state.Robots[10] = new RobotState { Id = new EntityId(10), Owner = PlayerId.Player1, CurrentHealth = 90, MaxHealth = 120, Position = new SimVector2(4.5f, 9.5f), CurrentOrder = RobotOrder.Capture(new EntityId(101)) };
             state.Robots[20] = new RobotState { Id = new EntityId(20), Owner = PlayerId.Player2, CurrentHealth = 120, MaxHealth = 120, Position = new SimVector2(30f, 9.5f), CurrentOrder = RobotOrder.Defend(new SimVector2(31f, 10f)) };
+            state.Projectiles.Add(new ProjectileState { SourceRobotId = new EntityId(10), TargetRobotId = new EntityId(20), Owner = PlayerId.Player1, WeaponType = WeaponType.DirectCannon, Damage = 35, ImpactPosition = new SimVector2(30f, 9.5f), RemainingTravelSeconds = 0.2f });
             var baseBuilding = new BuildingState { Id = new EntityId(1), Type = BuildingType.Base, Owner = PlayerId.Player1, Position = new SimVector2(3f, 8f), SpawnPoint = new SimVector2(5f, 8f) };
             baseBuilding.ProductionQueue.Add(new ProductionOrder { OrderId = "order-1", Cost = 350, TotalBuildTimeSeconds = 8f, RemainingBuildTimeSeconds = 7.5f, Status = OrderProductionStatus.InProgress });
             state.Buildings[1] = baseBuilding;

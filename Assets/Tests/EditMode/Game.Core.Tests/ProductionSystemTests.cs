@@ -45,7 +45,8 @@ namespace Game.Core.Tests
                 "Разведчик",
                 DefaultContentCatalog.ChassisBiped,
                 DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon
+                DefaultContentCatalog.WeaponCannon,
+                DefaultContentCatalog.ControlBasic
             );
 
             var cmd = new EnqueueProductionCommand

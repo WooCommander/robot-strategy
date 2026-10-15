@@ -17,6 +17,11 @@ namespace Game.Content.Definitions
         public float Speed { get; set; }
         public int MaxLoadCapacity { get; set; } // Только для Chassis
 
+        // Для корпуса, оружия и управляющего модуля
+        public ControlTier MaxSupportedControlTier { get; set; }
+        public ControlTier MinimumControlTier { get; set; }
+        public ControlTier ControlTier { get; set; }
+
         // Для оружия
         public WeaponType WeaponType { get; set; }
         public int Damage { get; set; }
@@ -36,6 +41,10 @@ namespace Game.Content.Definitions
 
         public const string WeaponCannon = "weapon_cannon";
         public const string WeaponMissiles = "weapon_missiles";
+
+        public const string ControlBasic = "control_basic";
+        public const string ControlTactical = "control_tactical";
+        public const string ControlGuidance = "control_guidance";
 
         public const string EquipArmor = "equip_armor";
 
@@ -73,7 +82,8 @@ namespace Game.Content.Definitions
                     SlotType = ModuleSlotType.Body,
                     Cost = 100,
                     Mass = 30,
-                    HealthBonus = 120
+                    HealthBonus = 120,
+                    MaxSupportedControlTier = ControlTier.Tactical
                 },
                 [BodyHeavy] = new ModuleDefinition
                 {
@@ -82,7 +92,8 @@ namespace Game.Content.Definitions
                     SlotType = ModuleSlotType.Body,
                     Cost = 220,
                     Mass = 80,
-                    HealthBonus = 260
+                    HealthBonus = 260,
+                    MaxSupportedControlTier = ControlTier.Guidance
                 },
 
                 // Оружие
@@ -98,7 +109,8 @@ namespace Game.Content.Definitions
                     Range = 6.0f,
                     CooldownSeconds = 1.5f,
                     SplashRadius = 0f,
-                    ProjectileSpeed = 18f
+                    ProjectileSpeed = 18f,
+                    MinimumControlTier = ControlTier.Basic
                 },
                 [WeaponMissiles] = new ModuleDefinition
                 {
@@ -112,7 +124,25 @@ namespace Game.Content.Definitions
                     Range = 9.0f,
                     CooldownSeconds = 3.5f,
                     SplashRadius = 2.0f,
-                    ProjectileSpeed = 10f
+                    ProjectileSpeed = 10f,
+                    MinimumControlTier = ControlTier.Basic
+                },
+
+                // Управляющие модули
+                [ControlBasic] = new ModuleDefinition
+                {
+                    Id = ControlBasic, Name = "Базовый контроллер", SlotType = ModuleSlotType.Control,
+                    Cost = 40, Mass = 8, ControlTier = ControlTier.Basic
+                },
+                [ControlTactical] = new ModuleDefinition
+                {
+                    Id = ControlTactical, Name = "Тактический контроллер", SlotType = ModuleSlotType.Control,
+                    Cost = 80, Mass = 12, ControlTier = ControlTier.Tactical
+                },
+                [ControlGuidance] = new ModuleDefinition
+                {
+                    Id = ControlGuidance, Name = "Контроллер наведения", SlotType = ModuleSlotType.Control,
+                    Cost = 140, Mass = 18, ControlTier = ControlTier.Guidance
                 },
 
                 // Оборудование

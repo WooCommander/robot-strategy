@@ -11,17 +11,19 @@ namespace Game.Core.Models
         public string ChassisId { get; set; }
         public string BodyId { get; set; }
         public string WeaponId { get; set; }
+        public string ControlModuleId { get; set; }
         public string EquipmentId { get; set; }
 
         public RobotBlueprint() { }
 
-        public RobotBlueprint(string id, string name, string chassisId, string bodyId, string weaponId, string equipmentId = null)
+        public RobotBlueprint(string id, string name, string chassisId, string bodyId, string weaponId, string controlModuleId, string equipmentId = null)
         {
             Id = id;
             Name = name;
             ChassisId = chassisId;
             BodyId = bodyId;
             WeaponId = weaponId;
+            ControlModuleId = controlModuleId;
             EquipmentId = equipmentId;
         }
 
@@ -30,6 +32,7 @@ namespace Game.Core.Models
             if (!string.IsNullOrEmpty(ChassisId)) yield return ChassisId;
             if (!string.IsNullOrEmpty(BodyId)) yield return BodyId;
             if (!string.IsNullOrEmpty(WeaponId)) yield return WeaponId;
+            if (!string.IsNullOrEmpty(ControlModuleId)) yield return ControlModuleId;
             if (!string.IsNullOrEmpty(EquipmentId)) yield return EquipmentId;
         }
     }

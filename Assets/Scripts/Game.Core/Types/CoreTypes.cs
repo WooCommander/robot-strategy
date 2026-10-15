@@ -35,7 +35,15 @@ namespace Game.Core.Types
         Chassis = 0,
         Body = 1,
         Weapon = 2,
-        Equipment = 3
+        Equipment = 3,
+        Control = 4
+    }
+
+    public enum ControlTier : byte
+    {
+        Basic = 0,
+        Tactical = 1,
+        Guidance = 2
     }
 
     public enum OrderType : byte

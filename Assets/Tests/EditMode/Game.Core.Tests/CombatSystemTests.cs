@@ -137,7 +137,7 @@ namespace Game.Core.Tests
                 CurrentHealth = 100,
                 MaxHealth = 100,
                 Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBiped,
-                    DefaultContentCatalog.BodyLight, weaponId)
+                    DefaultContentCatalog.BodyLight, weaponId, DefaultContentCatalog.ControlBasic)
             };
         }
     }

@@ -14,10 +14,11 @@ namespace Game.Content.Definitions
         public string ChassisId { get; set; }
         public string BodyId { get; set; }
         public string WeaponId { get; set; }
+        public string ControlModuleId { get; set; }
         public string EquipmentId { get; set; }
 
         public RobotBlueprint CreateBlueprint() => new RobotBlueprint(
-            $"{Id}_{Guid.NewGuid():N}", Name, ChassisId, BodyId, WeaponId, EquipmentId);
+            $"{Id}_{Guid.NewGuid():N}", Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId);
 
         public int GetCost(IReadOnlyDictionary<string, ModuleDefinition> modules)
         {
@@ -31,7 +32,7 @@ namespace Game.Content.Definitions
 
         public bool Matches(RobotBlueprint blueprint) => blueprint != null &&
             blueprint.ChassisId == ChassisId && blueprint.BodyId == BodyId &&
-            blueprint.WeaponId == WeaponId && blueprint.EquipmentId == EquipmentId;
+            blueprint.WeaponId == WeaponId && blueprint.ControlModuleId == ControlModuleId && blueprint.EquipmentId == EquipmentId;
     }
 
     public static class RobotPresetCatalog
@@ -39,17 +40,17 @@ namespace Game.Content.Definitions
         public static readonly RobotPresetDefinition Scout = new RobotPresetDefinition
         {
             Id = "scout", Name = "Разведчик", CardTitle = "РАЗВЕДЧИК", ModulesLabel = "Ноги + Пушка", BuildTimeSeconds = 8f,
-            ChassisId = DefaultContentCatalog.ChassisBiped, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponCannon
+            ChassisId = DefaultContentCatalog.ChassisBiped, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponCannon, ControlModuleId = DefaultContentCatalog.ControlBasic
         };
         public static readonly RobotPresetDefinition Tank = new RobotPresetDefinition
         {
             Id = "tank", Name = "Танк", CardTitle = "ТЯЖЁЛЫЙ ТАНК", ModulesLabel = "Гусеницы + Броня", BuildTimeSeconds = 12f,
-            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyHeavy, WeaponId = DefaultContentCatalog.WeaponCannon, EquipmentId = DefaultContentCatalog.EquipArmor
+            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyHeavy, WeaponId = DefaultContentCatalog.WeaponCannon, ControlModuleId = DefaultContentCatalog.ControlTactical, EquipmentId = DefaultContentCatalog.EquipArmor
         };
         public static readonly RobotPresetDefinition Missile = new RobotPresetDefinition
         {
             Id = "missile", Name = "Ракетчик", CardTitle = "РАКЕТЧИК", ModulesLabel = "Гусеницы + Ракеты", BuildTimeSeconds = 10f,
-            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponMissiles
+            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponMissiles, ControlModuleId = DefaultContentCatalog.ControlBasic
         };
 
         private static readonly RobotPresetDefinition[] Presets = { Scout, Tank, Missile };

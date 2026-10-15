@@ -29,6 +29,7 @@ namespace Game.Core.Tests
                 DefaultContentCatalog.ChassisTracks,
                 DefaultContentCatalog.BodyHeavy,
                 DefaultContentCatalog.WeaponCannon,
+                DefaultContentCatalog.ControlTactical,
                 DefaultContentCatalog.EquipArmor
             );
 
@@ -37,11 +38,11 @@ namespace Game.Core.Tests
             Assert.IsTrue(res.IsValid, "Сборка должна быть валидной");
             Assert.AreEqual(0, res.Errors.Count);
 
-            // Cost: 120 (chassis) + 220 (heavy) + 150 (cannon) + 80 (armor) = 570
-            Assert.AreEqual(570, res.TotalCost);
+            // Cost: 120 (chassis) + 220 (heavy) + 150 (cannon) + 80 (control) + 80 (armor) = 650
+            Assert.AreEqual(650, res.TotalCost);
 
-            // Mass: 60 + 80 + 40 + 35 = 215 кг (лимит гусениц 230 кг)
-            Assert.AreEqual(215, res.TotalMass);
+            // Mass: 60 + 80 + 40 + 12 + 35 = 227 кг (лимит гусениц 230 кг)
+            Assert.AreEqual(227, res.TotalMass);
             Assert.IsTrue(res.TotalMass <= res.MaxLoadCapacity);
 
             // Health: 260 (heavy) + 80 (armor) = 340
@@ -53,13 +54,14 @@ namespace Game.Core.Tests
         public void OverloadedBlueprint_ShouldFail_DueToMassLimit()
         {
             // Двуногое шасси имеет лимит 160 кг
-            // Biped (40) + Heavy (80) + Missiles (55) + Armor (35) = 210 кг > 160 кг!
+            // Biped (40) + Heavy (80) + Missiles (55) + Basic control (8) + Armor (35) = 218 кг > 160 кг!
             var bp = new RobotBlueprint(
                 "bp_overload",
                 "Перегруженный робот",
                 DefaultContentCatalog.ChassisBiped,
                 DefaultContentCatalog.BodyHeavy,
                 DefaultContentCatalog.WeaponMissiles,
+                DefaultContentCatalog.ControlBasic,
                 DefaultContentCatalog.EquipArmor
             );
 
@@ -77,7 +79,8 @@ namespace Game.Core.Tests
                 "Безоружный",
                 DefaultContentCatalog.ChassisTracks,
                 DefaultContentCatalog.BodyLight,
-                null
+                null,
+                DefaultContentCatalog.ControlBasic
             );
 
             var res = RobotAssemblyValidator.Validate(bp, _catalog);
@@ -97,8 +100,9 @@ namespace Game.Core.Tests
                 "Разведчик",
                 DefaultContentCatalog.ChassisBiped,
                 DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon
-            ); // Стоимость: 100 + 100 + 150 = 350 металла
+                DefaultContentCatalog.WeaponCannon,
+                DefaultContentCatalog.ControlBasic
+            ); // Стоимость: 100 + 100 + 150 + 40 = 390 металла
 
             var cmd = new EnqueueProductionCommand
             {
@@ -111,7 +115,7 @@ namespace Game.Core.Tests
             var res = dispatcher.Dispatch(cmd, state);
 
             Assert.IsTrue(res.IsSuccess);
-            Assert.AreEqual(startMetal - 350, state.Player1.Metal);
+            Assert.AreEqual(startMetal - 390, state.Player1.Metal);
             Assert.AreEqual(1, state.Buildings[1].ProductionQueue.Count);
             Assert.AreEqual(1, state.Player1.QueuedRobotsCount);
         }
@@ -128,8 +132,9 @@ namespace Game.Core.Tests
                 "Разведчик",
                 DefaultContentCatalog.ChassisBiped,
                 DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon
-            ); // 350 металла
+                DefaultContentCatalog.WeaponCannon,
+                DefaultContentCatalog.ControlBasic
+            ); // 390 металла
 
             var cmd = new EnqueueProductionCommand
             {
@@ -143,6 +148,32 @@ namespace Game.Core.Tests
             Assert.IsFalse(res.IsSuccess);
             Assert.AreEqual(100, state.Player1.Metal);
             Assert.AreEqual(0, state.Buildings[1].ProductionQueue.Count);
+        }
+
+        [Test]
+        public void MissingControlModule_ShouldFailValidation()
+        {
+            var bp = new RobotBlueprint("bp_no_control", "Без контроллера",
+                DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight,
+                DefaultContentCatalog.WeaponCannon, null);
+
+            var res = RobotAssemblyValidator.Validate(bp, _catalog);
+
+            Assert.IsFalse(res.IsValid);
+            Assert.IsTrue(res.Errors.Exists(e => e.Contains("обязательный модуль управления")));
+        }
+
+        [Test]
+        public void GuidanceControl_OnLightBody_ShouldFailCompatibility()
+        {
+            var bp = new RobotBlueprint("bp_incompatible_control", "Несовместимый",
+                DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight,
+                DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlGuidance);
+
+            var res = RobotAssemblyValidator.Validate(bp, _catalog);
+
+            Assert.IsFalse(res.IsValid);
+            Assert.IsTrue(res.Errors.Exists(e => e.Contains("не поддерживает уровень управления")));
         }
 
         [Test]

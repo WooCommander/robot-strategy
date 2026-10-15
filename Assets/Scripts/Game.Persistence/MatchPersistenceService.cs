@@ -140,9 +140,9 @@ namespace Game.Persistence
         [Serializable]
         private sealed class BlueprintSnapshot
         {
-            public string Id; public string Name; public string ChassisId; public string BodyId; public string WeaponId; public string EquipmentId;
-            public static BlueprintSnapshot FromState(RobotBlueprint state) => state == null ? null : new BlueprintSnapshot { Id = state.Id, Name = state.Name, ChassisId = state.ChassisId, BodyId = state.BodyId, WeaponId = state.WeaponId, EquipmentId = state.EquipmentId };
-            public RobotBlueprint ToState() => new RobotBlueprint(Id, Name, ChassisId, BodyId, WeaponId, EquipmentId);
+            public string Id; public string Name; public string ChassisId; public string BodyId; public string WeaponId; public string ControlModuleId; public string EquipmentId;
+            public static BlueprintSnapshot FromState(RobotBlueprint state) => state == null ? null : new BlueprintSnapshot { Id = state.Id, Name = state.Name, ChassisId = state.ChassisId, BodyId = state.BodyId, WeaponId = state.WeaponId, ControlModuleId = state.ControlModuleId, EquipmentId = state.EquipmentId };
+            public RobotBlueprint ToState() => new RobotBlueprint(Id, Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId);
         }
 
         [Serializable]

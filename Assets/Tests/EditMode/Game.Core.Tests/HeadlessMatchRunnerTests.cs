@@ -62,7 +62,7 @@ namespace Game.Core.Tests
         private static RobotState CreateRobot(int id, PlayerId owner, float x) => new RobotState
         {
             Id = new EntityId(id), Owner = owner, Position = new SimVector2(x, 0f), CurrentHealth = 100, MaxHealth = 100,
-            Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon),
+            Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlBasic),
             CurrentOrder = new RobotOrder()
         };
     }

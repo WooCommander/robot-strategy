@@ -58,6 +58,10 @@ namespace Game.Content.Validation
             {
                 errors.Add("Не выбрано обязательное оружие.");
             }
+            if (string.IsNullOrEmpty(blueprint.ControlModuleId))
+            {
+                errors.Add("Не выбран обязательный модуль управления.");
+            }
 
             if (errors.Count > 0)
             {
@@ -77,6 +81,10 @@ namespace Game.Content.Validation
             {
                 errors.Add($"Модуль оружия '{blueprint.WeaponId}' не найден или некорректен.");
             }
+            if (!catalog.TryGetValue(blueprint.ControlModuleId, out var control) || control.SlotType != ModuleSlotType.Control)
+            {
+                errors.Add($"Модуль управления '{blueprint.ControlModuleId}' не найден или некорректен.");
+            }
 
             ModuleDefinition equip = null;
             if (!string.IsNullOrEmpty(blueprint.EquipmentId))
@@ -93,8 +101,17 @@ namespace Game.Content.Validation
             }
 
             // 3. Расчет характеристик
-            int totalCost = chassis.Cost + body.Cost + weapon.Cost + (equip?.Cost ?? 0);
-            int totalMass = chassis.Mass + body.Mass + weapon.Mass + (equip?.Mass ?? 0);
+            if (control.ControlTier > body.MaxSupportedControlTier)
+            {
+                errors.Add($"Корпус '{body.Name}' не поддерживает уровень управления '{control.ControlTier}'.");
+            }
+            if (control.ControlTier < weapon.MinimumControlTier)
+            {
+                errors.Add($"Оружие '{weapon.Name}' требует уровень управления не ниже '{weapon.MinimumControlTier}'.");
+            }
+
+            int totalCost = chassis.Cost + body.Cost + weapon.Cost + control.Cost + (equip?.Cost ?? 0);
+            int totalMass = chassis.Mass + body.Mass + weapon.Mass + control.Mass + (equip?.Mass ?? 0);
             int totalHealth = body.HealthBonus + (equip?.HealthBonus ?? 0);
             float speed = chassis.Speed;
             int maxLoad = chassis.MaxLoadCapacity;

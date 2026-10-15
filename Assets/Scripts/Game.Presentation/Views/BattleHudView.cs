@@ -472,7 +472,7 @@ namespace Game.Presentation.Views
             _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstructor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.78f));
             var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                Vector2.zero, new Vector2(790f, 610f), new Color(0.06f, 0.10f, 0.18f, 1f));
+                Vector2.zero, new Vector2(790f, 660f), new Color(0.06f, 0.10f, 0.18f, 1f));
             CreateLabel(card.transform, "Title", "КОНСТРУКТОР РОБОТА", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(24f, -20f), new Vector2(-150f, -55f), 24, FontStyle.Bold, new Color(0.35f, 0.85f, 1f), TextAnchor.MiddleLeft);
             var close = CreateButton(card.transform, "Close", "×", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(-34f, -34f), new Vector2(50f, 42f), new Color(0.38f, 0.16f, 0.18f), 22);
             close.onClick.AddListener(() => _constructorOverlay.SetActive(false));
@@ -482,7 +482,7 @@ namespace Game.Presentation.Views
             CreateConstructorRow(card.transform, "ОРУЖИЕ", ModuleSlotType.Weapon, new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponMissiles }, 325f);
             CreateConstructorRow(card.transform, "УПРАВЛЕНИЕ", ModuleSlotType.Control, new[] { DefaultContentCatalog.ControlBasic, DefaultContentCatalog.ControlTactical, DefaultContentCatalog.ControlGuidance }, 415f);
 
-            _constructorSummary = CreateLabel(card.transform, "Summary", string.Empty, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 75f), new Vector2(-24f, 145f), 16, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
+            _constructorSummary = CreateLabel(card.transform, "Summary", string.Empty, new Vector2(0f, 0f), new Vector2(1f, 0f), new Vector2(24f, 75f), new Vector2(-24f, 185f), 15, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
             var produce = CreateButton(card.transform, "Produce", "ПОСТАВИТЬ В ОЧЕРЕДЬ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 35f), new Vector2(330f, 52f), new Color(0.12f, 0.48f, 0.30f), 16);
             produce.onClick.AddListener(() =>
             {
@@ -500,8 +500,8 @@ namespace Game.Presentation.Views
             for (int i = 0; i < modules.Length; i++)
             {
                 string id = modules[i];
-                string name = _moduleCatalog[id].Name;
-                var button = CreateButton(parent, $"{slot}_{id}", name, new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(320f + i * 155f, -y - 24f), new Vector2(145f, 48f), new Color(0.13f, 0.27f, 0.43f), 12);
+                ModuleDefinition module = _moduleCatalog[id];
+                var button = CreateButton(parent, $"{slot}_{id}", FormatModuleButton(module), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(320f + i * 155f, -y - 24f), new Vector2(145f, 58f), new Color(0.13f, 0.27f, 0.43f), 11);
                 button.onClick.AddListener(() => { _constructorDraft.Select(slot, id); RefreshConstructorSummary(); });
             }
         }
@@ -511,10 +511,23 @@ namespace Game.Presentation.Views
             var validation = _constructorDraft.Validate();
             if (validation.IsValid)
             {
-                _constructorSummary.text = $"<b>Сборка готова</b>  •  Цена: <color=#FFD700>{validation.TotalCost} М</color>  •  Масса: {validation.TotalMass}/{validation.MaxLoadCapacity} кг  •  Прочность: {validation.TotalHealth}";
+                _constructorSummary.text = $"<b>Сборка готова</b>  •  Цена: <color=#FFD700>{validation.TotalCost} М</color>  •  Масса: {validation.TotalMass}/{validation.MaxLoadCapacity} кг  •  Прочность: {validation.TotalHealth}\nВыбранные параметры указаны на карточках модулей.";
                 return;
             }
             _constructorSummary.text = $"<color=#FF7777>{string.Join("\n", validation.Errors)}</color>";
+        }
+
+        private static string FormatModuleButton(ModuleDefinition module)
+        {
+            string common = $"<color=#FFD700>{module.Cost} М</color> • {module.Mass} кг";
+            return module.SlotType switch
+            {
+                ModuleSlotType.Chassis => $"<b>{module.Name}</b>\n{common}\nСкорость {module.Speed:F1}, лимит {module.MaxLoadCapacity}",
+                ModuleSlotType.Body => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}, слотов {module.WeaponSlots}",
+                ModuleSlotType.Weapon => $"<b>{module.Name}</b>\n{common}\nУрон {module.Damage}, дальн. {module.Range:F0}, КД {module.CooldownSeconds:F1}",
+                ModuleSlotType.Control => $"<b>{module.Name}</b>\n{common}\nУпрежд. {module.LeadPredictionSeconds:F1}с, манёвр {module.CombatManeuverIntervalSeconds:F2}с",
+                _ => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}"
+            };
         }
 
         // Вспомогательные методы построения UGUI элементов

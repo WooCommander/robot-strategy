@@ -1,3 +1,4 @@
+using System.Linq;
 using NUnit.Framework;
 using Game.Content.Definitions;
 using Game.Core.Commands;
@@ -76,6 +77,9 @@ namespace Game.Core.Tests
             // 7. Робот должен успешно появиться на поле, а очередь очиститься
             Assert.AreEqual(0, baseBuilding.ProductionQueue.Count, "Заказ должен завершиться");
             Assert.AreEqual(2, state.Robots.Count, "Должен появиться новый произведенный робот");
+            RobotState producedRobot = state.Robots.Values.First(robot => robot.Id.Value != blockingRobot.Id.Value);
+            Assert.AreEqual(OrderType.Defend, producedRobot.CurrentOrder.Type);
+            Assert.AreEqual(baseBuilding.Position, producedRobot.CurrentOrder.TargetPosition);
         }
     }
 }

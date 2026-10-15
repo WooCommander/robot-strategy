@@ -139,6 +139,7 @@ namespace Game.Simulation.Systems
                 Mass = val.TotalMass,
                 TotalCost = val.TotalCost
             };
+            newRobot.CurrentOrder = RobotOrder.Defend(building.Position);
 
             state.Robots[newRobot.Id.Value] = newRobot;
             OnRobotSpawned?.Invoke(newRobot);

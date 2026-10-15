@@ -17,6 +17,7 @@ namespace Game.Presentation.Views
         [SerializeField] private LineRenderer _healthBarBg;
         [SerializeField] private LineRenderer _healthBarFill;
         private Transform _healthBarRoot;
+        private TextMesh _healthLabel;
 
         private RobotState _state;
         private bool _isSelected;
@@ -100,6 +101,7 @@ namespace Game.Presentation.Views
             bgGo.transform.SetParent(hbObj.transform, false);
             _healthBarBg = bgGo.AddComponent<LineRenderer>();
             _healthBarBg.useWorldSpace = false;
+            _healthBarBg.alignment = LineAlignment.TransformZ;
             _healthBarBg.startWidth = 0.12f;
             _healthBarBg.endWidth = 0.12f;
             _healthBarBg.material = new Material(shader);
@@ -115,6 +117,7 @@ namespace Game.Presentation.Views
             fillGo.transform.localPosition = new Vector3(0f, 0.01f, 0f);
             _healthBarFill = fillGo.AddComponent<LineRenderer>();
             _healthBarFill.useWorldSpace = false;
+            _healthBarFill.alignment = LineAlignment.TransformZ;
             _healthBarFill.startWidth = 0.08f;
             _healthBarFill.endWidth = 0.08f;
             _healthBarFill.material = new Material(shader);
@@ -123,6 +126,16 @@ namespace Game.Presentation.Views
             _healthBarFill.positionCount = 2;
             _healthBarFill.SetPosition(0, new Vector3(-0.5f, 0f, 0f));
             _healthBarFill.SetPosition(1, new Vector3(0.5f, 0f, 0f));
+
+            var label = new GameObject("HealthText");
+            label.transform.SetParent(hbObj.transform, false);
+            label.transform.localPosition = new Vector3(0f, 0.16f, 0f);
+            _healthLabel = label.AddComponent<TextMesh>();
+            _healthLabel.fontSize = 24;
+            _healthLabel.characterSize = 0.07f;
+            _healthLabel.anchor = TextAnchor.MiddleCenter;
+            _healthLabel.alignment = TextAlignment.Center;
+            _healthLabel.color = Color.white;
         }
 
         public void SetSelected(bool selected)
@@ -225,6 +238,11 @@ namespace Game.Presentation.Views
             Color col = ratio > 0.5f ? Color.green : (ratio > 0.25f ? Color.yellow : Color.red);
             _healthBarFill.startColor = col;
             _healthBarFill.endColor = col;
+            if (_healthLabel != null)
+            {
+                _healthLabel.text = $"{_state.CurrentHealth}/{_state.MaxHealth}";
+                _healthLabel.color = col;
+            }
         }
 
         private float GetTerrainSpeedMultiplier(SimVector2 position)

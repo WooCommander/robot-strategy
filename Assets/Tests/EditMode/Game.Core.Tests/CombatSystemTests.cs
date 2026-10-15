@@ -85,6 +85,23 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void BasicController_LeadsTargetForProjectileTravelTime()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon);
+            var target = CreateRobot(2, PlayerId.Player2, 5f, DefaultContentCatalog.WeaponCannon);
+            target.Velocity = new SimVector2(0f, 3f);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+            var combat = new CombatSystem(_catalog);
+
+            combat.Update(state, 0.1f);
+            target.Position = new SimVector2(5f, 5f / 18f * 3f);
+            combat.Update(state, 0.3f);
+
+            Assert.AreEqual(65, target.CurrentHealth);
+        }
+
+        [Test]
         public void UnguidedMissile_ExplodesAtOriginalAimPoint_WhenTargetMovesAway()
         {
             var state = CreateState(CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles),

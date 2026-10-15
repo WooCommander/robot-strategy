@@ -227,14 +227,18 @@ namespace Game.Presentation.Views
                 transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRot, 360f * Time.deltaTime);
             }
 
+            // Симуляция боя, навигация и визуальная модель должны использовать одну позицию.
+            // Раньше состояние обновлялось только на границе клетки A*, из-за чего выстрелы
+            // летели в устаревшую точку, пока робот визуально уже маневрировал дальше.
+            if (_state != null)
+            {
+                _state.Position = new SimVector2(transform.position.x, transform.position.z);
+                _state.RotationDegrees = transform.eulerAngles.y;
+            }
+
             if (Vector3.Distance(transform.position, targetWorld) < 0.1f)
             {
                 _currentPathIndex++;
-                if (_state != null)
-                {
-                    _state.Position = new SimVector2(transform.position.x, transform.position.z);
-                    _state.RotationDegrees = transform.eulerAngles.y;
-                }
             }
         }
 

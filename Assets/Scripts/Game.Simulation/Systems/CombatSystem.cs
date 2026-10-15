@@ -72,8 +72,12 @@ namespace Game.Simulation.Systems
             {
                 _catalog.TryGetValue(attacker.Blueprint.ControlModuleId, out controller);
             }
-            float leadSeconds = controller?.LeadPredictionSeconds ?? 0f;
             float speed = Math.Max(0.1f, weapon.ProjectileSpeed);
+            float travelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed;
+            // Даже базовый контроллер знает время полёта. Дополнительное упреждение
+            // от модуля применяется только если оно больше физически необходимого.
+            // При резкой смене траектории цель всё ещё может уйти от неуправляемого снаряда.
+            float leadSeconds = Math.Max(travelSeconds, controller?.LeadPredictionSeconds ?? 0f);
             state.Projectiles.Add(new ProjectileState
             {
                 SourceRobotId = attacker.Id,
@@ -83,7 +87,7 @@ namespace Game.Simulation.Systems
                 Damage = weapon.Damage,
                 SplashRadius = weapon.SplashRadius,
                 ImpactPosition = target.Position + target.Velocity * leadSeconds,
-                RemainingTravelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed,
+                RemainingTravelSeconds = travelSeconds,
                 IsGuided = weapon.WeaponType == WeaponType.AreaMissile && (controller?.CanGuideMissiles ?? false)
             });
         }

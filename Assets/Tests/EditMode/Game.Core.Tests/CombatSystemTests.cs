@@ -18,6 +18,13 @@ namespace Game.Core.Tests
             _catalog = DefaultContentCatalog.CreateDefaultModules();
         }
 
+        // Ожидания считаются из каталога: ребаланс цифр не должен ломать проверки механики.
+        private ModuleDefinition CannonDef => _catalog[DefaultContentCatalog.WeaponCannon];
+        private ModuleDefinition MissileDef => _catalog[DefaultContentCatalog.WeaponMissiles];
+        private ModuleDefinition PhaserDef => _catalog[DefaultContentCatalog.WeaponPhasers];
+        private float CannonTravel(float distance) => distance / CannonDef.ProjectileSpeed;
+        private float MissileTravel(float distance) => distance / MissileDef.ProjectileSpeed;
+
         [Test]
         public void CannonAttack_DamagesOnlyTarget_WhenTargetIsInRange()
         {
@@ -30,10 +37,10 @@ namespace Game.Core.Tests
 
             Assert.AreEqual(100, state.Robots[2].CurrentHealth, "Кинетический снаряд не должен попадать мгновенно.");
             Assert.AreEqual(1, state.Projectiles.Count);
-            combat.Update(state, 0.2f);
+            combat.Update(state, CannonTravel(5f));
 
-            Assert.AreEqual(65, state.Robots[2].CurrentHealth);
-            Assert.AreEqual(1.3f, state.Robots[1].WeaponCooldowns[0], 0.001f);
+            Assert.AreEqual(100 - CannonDef.Damage, state.Robots[2].CurrentHealth);
+            Assert.AreEqual(CannonDef.CooldownSeconds - CannonTravel(5f), state.Robots[1].WeaponCooldowns[0], 0.001f);
         }
 
         [Test]
@@ -46,11 +53,25 @@ namespace Game.Core.Tests
                 CreateRobot(4, PlayerId.Player1, 8.5f, DefaultContentCatalog.WeaponCannon));
             state.Robots[1].CurrentOrder = RobotOrder.Attack(new EntityId(2));
 
-            new CombatSystem(_catalog).Update(state, 1.0f);
+            new CombatSystem(_catalog).Update(state, MissileTravel(8f) + 0.05f);
 
-            Assert.AreEqual(50, state.Robots[2].CurrentHealth);
-            Assert.AreEqual(50, state.Robots[3].CurrentHealth);
+            Assert.AreEqual(100 - MissileDef.Damage, state.Robots[2].CurrentHealth);
+            Assert.AreEqual(100 - MissileDef.Damage, state.Robots[3].CurrentHealth);
             Assert.AreEqual(100, state.Robots[4].CurrentHealth);
+        }
+
+        [Test]
+        public void Missiles_DoNotFireInsideMinimumRange()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles);
+            var target = CreateRobot(2, PlayerId.Player2, MissileDef.MinRange - 1f, DefaultContentCatalog.WeaponCannon);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+
+            new CombatSystem(_catalog).Update(state, 0.05f);
+
+            Assert.AreEqual(0, state.Projectiles.Count, "Вплотную ракеты молчат.");
+            Assert.AreEqual(0f, attacker.WeaponCooldowns[0]);
         }
 
         [Test]
@@ -61,9 +82,9 @@ namespace Game.Core.Tests
             state.Robots[1].CurrentOrder = RobotOrder.Attack(new EntityId(2));
             var combat = new CombatSystem(_catalog);
 
-            combat.Update(state, 0.1f);
+            combat.Update(state, 0.05f);
             state.Robots[2].Position = new SimVector2(5f, 3f);
-            combat.Update(state, 0.2f);
+            combat.Update(state, CannonTravel(5f));
 
             Assert.AreEqual(100, state.Robots[2].CurrentHealth);
             Assert.AreEqual(0, state.Projectiles.Count);
@@ -77,28 +98,32 @@ namespace Game.Core.Tests
             state.Robots[1].CurrentOrder = RobotOrder.Attack(new EntityId(2));
             var combat = new CombatSystem(_catalog);
 
-            combat.Update(state, 0.1f);
-            state.Robots[2].Position = new SimVector2(5f, 1.1f);
-            combat.Update(state, 0.2f);
+            combat.Update(state, 0.05f);
+            state.Robots[2].Position = new SimVector2(5f, 0.9f);
+            combat.Update(state, CannonTravel(5f));
 
-            Assert.AreEqual(65, state.Robots[2].CurrentHealth);
+            Assert.AreEqual(100 - CannonDef.Damage, state.Robots[2].CurrentHealth);
         }
 
-        [Test]
-        public void Cannon_LeadsTargetForProjectileTravelTime()
+        [TestCase(null)]
+        [TestCase(DefaultContentCatalog.Electronics)]
+        public void Cannon_LeadsMovingTargetForProjectileTravelTime(string electronicsId)
         {
-            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon);
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon, electronicsId);
             var target = CreateRobot(2, PlayerId.Player2, 5f, DefaultContentCatalog.WeaponCannon);
             target.Velocity = new SimVector2(0f, 3f);
             var state = CreateState(attacker, target);
             attacker.CurrentOrder = RobotOrder.Attack(target.Id);
             var combat = new CombatSystem(_catalog);
 
-            combat.Update(state, 0.1f);
-            target.Position = new SimVector2(5f, 5f / 18f * 3f);
-            combat.Update(state, 0.3f);
+            combat.Update(state, 0.01f);
+            ProjectileState shot = state.Projectiles[0];
+            Assert.Greater(shot.ImpactPosition.Y, 0.5f, "Снаряд летит в упреждённую точку, а не в текущую позицию.");
+            float remaining = shot.RemainingTravelSeconds;
+            target.Position += target.Velocity * (remaining + 0.01f);
+            combat.Update(state, remaining);
 
-            Assert.AreEqual(65, target.CurrentHealth);
+            Assert.AreEqual(100 - CannonDef.Damage, target.CurrentHealth);
         }
 
         [Test]
@@ -109,9 +134,9 @@ namespace Game.Core.Tests
             state.Robots[1].CurrentOrder = RobotOrder.Attack(new EntityId(2));
             var combat = new CombatSystem(_catalog);
 
-            combat.Update(state, 0.1f);
-            state.Robots[2].Position = new SimVector2(8f, 4f);
-            combat.Update(state, 0.8f);
+            combat.Update(state, 0.05f);
+            state.Robots[2].Position = new SimVector2(8f, MissileDef.SplashRadius + 1.5f);
+            combat.Update(state, MissileTravel(8f));
 
             Assert.AreEqual(100, state.Robots[2].CurrentHealth);
             Assert.AreEqual(0, state.Projectiles.Count);
@@ -126,28 +151,11 @@ namespace Game.Core.Tests
             attacker.CurrentOrder = RobotOrder.Attack(target.Id);
             var combat = new CombatSystem(_catalog);
 
-            combat.Update(state, 0.1f);
-            target.Position = new SimVector2(8f, 4f);
-            combat.Update(state, 0.8f);
+            combat.Update(state, 0.05f);
+            target.Position = new SimVector2(8f, MissileDef.SplashRadius + 1.5f);
+            combat.Update(state, MissileTravel(8f));
 
-            Assert.AreEqual(50, target.CurrentHealth);
-        }
-
-        [Test]
-        public void Electronics_CannonStillLeadsMovingTarget()
-        {
-            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.Electronics);
-            var target = CreateRobot(2, PlayerId.Player2, 5f, DefaultContentCatalog.WeaponCannon);
-            target.Velocity = new SimVector2(0f, 3f);
-            var state = CreateState(attacker, target);
-            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
-            var combat = new CombatSystem(_catalog);
-
-            combat.Update(state, 0.1f);
-            target.Position = new SimVector2(5f, 0.9f);
-            combat.Update(state, 0.2f);
-
-            Assert.AreEqual(65, target.CurrentHealth);
+            Assert.AreEqual(100 - MissileDef.Damage, target.CurrentHealth);
         }
 
         [Test]
@@ -155,12 +163,12 @@ namespace Game.Core.Tests
         {
             var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon);
             var target = CreateRobot(2, PlayerId.Player2, 2f, DefaultContentCatalog.WeaponCannon);
-            target.CurrentHealth = 35;
+            target.CurrentHealth = CannonDef.Damage;
             var state = CreateState(attacker, target);
             state.Player2.ActiveRobotsCount = 1;
             attacker.CurrentOrder = RobotOrder.Attack(target.Id);
 
-            new CombatSystem(_catalog).Update(state, 0.2f);
+            new CombatSystem(_catalog).Update(state, CannonTravel(2f) + 0.05f);
 
             Assert.AreEqual(0, target.CurrentHealth);
             Assert.AreEqual(0, state.Player2.ActiveRobotsCount);
@@ -176,20 +184,26 @@ namespace Game.Core.Tests
             Assert.IsTrue(CombatRangePlanner.TryGetManeuverDestination(attacker, target, _catalog, out var retreat));
             Assert.Less(retreat.X, attacker.Position.X, "При стрельбе в упор робот должен отступать.");
 
-            attacker.Position = new SimVector2(5.8f, 0f);
+            float effectiveRange = CannonDef.Range * 0.8f;
+            attacker.Position = new SimVector2(1f + effectiveRange, 0f);
             Assert.IsTrue(CombatRangePlanner.TryGetManeuverDestination(attacker, target, _catalog, out var maneuver));
-            Assert.AreEqual(4.8f, SimVector2.Distance(maneuver, target.Position), 0.05f, "Манёвр должен сохранять эффективную дальность пушки.");
+            Assert.AreEqual(effectiveRange, SimVector2.Distance(maneuver, target.Position), 0.05f, "Манёвр должен сохранять эффективную дальность пушки.");
             Assert.AreNotEqual(0f, maneuver.Y, "В рабочей зоне робот должен двигаться по дуге, а не останавливаться.");
         }
 
-        private static MatchState CreateState(params RobotState[] robots)
+        [Test]
+        public void CombatRangePlanner_MissileCarrierHoldsGround_AndLeavesOnlyTheDeadZone()
         {
-            var state = new MatchState();
-            foreach (var robot in robots)
-            {
-                state.Robots[robot.Id.Value] = robot;
-            }
-            return state;
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles);
+            var target = CreateRobot(2, PlayerId.Player2, MissileDef.MinRange + 2f, DefaultContentCatalog.WeaponCannon);
+
+            Assert.IsTrue(CombatRangePlanner.TryGetManeuverDestination(attacker, target, _catalog, out var hold));
+            Assert.AreEqual(MissileDef.MinRange + 2f, SimVector2.Distance(hold, target.Position), 0.05f,
+                "Ракетчик не убегает от сближения: иначе равный по скорости противник с пушкой никогда не выстрелит.");
+
+            target.Position = new SimVector2(MissileDef.MinRange - 1f, 0f);
+            Assert.IsTrue(CombatRangePlanner.TryGetManeuverDestination(attacker, target, _catalog, out var escape));
+            Assert.Greater(SimVector2.Distance(escape, target.Position), MissileDef.MinRange, "Из «мёртвой зоны» ракетчик отходит.");
         }
 
         [Test]
@@ -204,9 +218,9 @@ namespace Game.Core.Tests
             int hits = 0;
             var combat = new CombatSystem(_catalog);
             combat.OnDamageDealt += (robot, damage) => { if (robot == target) hits++; };
-            for (int tick = 0; tick < 600 && target.IsAlive; tick++) combat.Update(state, 0.02f);
+            for (int tick = 0; tick < 1000 && target.IsAlive; tick++) combat.Update(state, 0.02f);
             Assert.AreEqual(0, target.CurrentHealth);
-            Assert.AreEqual(3, hits);
+            Assert.AreEqual((int)System.Math.Ceiling(120f / MissileDef.Damage), hits);
             Assert.AreEqual(0, state.Player2.ActiveRobotsCount);
             Assert.AreEqual(OrderType.Capture, attacker.CurrentOrder.Type);
             Assert.AreEqual(new EntityId(101), attacker.CurrentOrder.TargetEntityId);
@@ -224,10 +238,10 @@ namespace Game.Core.Tests
             combat.Update(state, 0.01f);
             var shot = state.Projectiles[0];
             float flight = shot.RemainingTravelSeconds + 0.01f;
-            Assert.AreEqual(SimVector2.Distance(attacker.Position, shot.ImpactPosition) / 18f, flight, 0.001f);
+            Assert.AreEqual(SimVector2.Distance(attacker.Position, shot.ImpactPosition) / CannonDef.ProjectileSpeed, flight, 0.001f);
             target.Position += target.Velocity * flight;
             combat.Update(state, flight);
-            Assert.AreEqual(65, target.CurrentHealth);
+            Assert.AreEqual(100 - CannonDef.Damage, target.CurrentHealth);
         }
 
         [Test]
@@ -239,8 +253,8 @@ namespace Game.Core.Tests
             attacker.CurrentOrder = RobotOrder.Attack(target.Id);
             var combat = new CombatSystem(_catalog);
             combat.OnProjectileImpact += (robot, point, weapon) => throw new System.InvalidOperationException("VFX failure");
-            Assert.Throws<System.InvalidOperationException>(() => combat.Update(state, 0.2f));
-            Assert.AreEqual(65, target.CurrentHealth);
+            Assert.Throws<System.InvalidOperationException>(() => combat.Update(state, CannonTravel(2f) + 0.05f));
+            Assert.AreEqual(100 - CannonDef.Damage, target.CurrentHealth);
         }
 
         [Test]
@@ -253,7 +267,7 @@ namespace Game.Core.Tests
 
             new CombatSystem(_catalog).Update(state, 0.05f);
 
-            Assert.AreEqual(70, target.CurrentHealth);
+            Assert.AreEqual(100 - PhaserDef.Damage, target.CurrentHealth);
             Assert.AreEqual(0, state.Projectiles.Count);
         }
 
@@ -268,13 +282,13 @@ namespace Game.Core.Tests
             var combat = new CombatSystem(_catalog);
 
             combat.Update(state, 0.05f);
-            Assert.AreEqual(170, target.CurrentHealth, "Фазер попадает сразу.");
+            Assert.AreEqual(200 - PhaserDef.Damage, target.CurrentHealth, "Фазер попадает сразу.");
             Assert.AreEqual(1, state.Projectiles.Count, "Пушка выстрелила в том же тике.");
-            Assert.AreEqual(2.0f, attacker.WeaponCooldowns[0], 0.001f);
-            Assert.AreEqual(1.5f, attacker.WeaponCooldowns[1], 0.001f);
+            Assert.AreEqual(PhaserDef.CooldownSeconds, attacker.WeaponCooldowns[0], 0.001f);
+            Assert.AreEqual(CannonDef.CooldownSeconds, attacker.WeaponCooldowns[1], 0.001f);
 
-            combat.Update(state, 0.3f);
-            Assert.AreEqual(135, target.CurrentHealth, "Снаряд пушки долетел.");
+            combat.Update(state, CannonTravel(5f));
+            Assert.AreEqual(200 - PhaserDef.Damage - CannonDef.Damage, target.CurrentHealth, "Снаряд пушки долетел.");
         }
 
         [Test]
@@ -301,6 +315,16 @@ namespace Game.Core.Tests
             Assert.IsTrue(enemyFar.IsAlive);
             Assert.AreEqual(0, state.Player1.ActiveRobotsCount);
             Assert.AreEqual(1, state.Player2.ActiveRobotsCount);
+        }
+
+        private static MatchState CreateState(params RobotState[] robots)
+        {
+            var state = new MatchState();
+            foreach (var robot in robots)
+            {
+                state.Robots[robot.Id.Value] = robot;
+            }
+            return state;
         }
 
         private static RobotState CreateRobot(int id, PlayerId owner, float x, string weaponId, string electronicsId = null) =>

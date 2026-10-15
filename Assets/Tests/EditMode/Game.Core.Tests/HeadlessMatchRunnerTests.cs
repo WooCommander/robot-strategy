@@ -27,7 +27,7 @@ namespace Game.Core.Tests
             Assert.AreEqual(5, state.Tick);
             Assert.AreEqual(0.5f, state.MatchTimeSeconds, 0.001f);
             Assert.AreEqual(OrderType.Attack, state.Robots[1].CurrentOrder.Type);
-            Assert.AreEqual(65, state.Robots[2].CurrentHealth);
+            Assert.AreEqual(100 - catalog[DefaultContentCatalog.WeaponCannon].Damage, state.Robots[2].CurrentHealth);
             int commandsAtTickOne = 0;
             foreach (ReplayCommandRecord ignored in log.GetForTick(1)) commandsAtTickOne++;
             Assert.AreEqual(1, commandsAtTickOne, "Журнал должен хранить команды без обращения к Unity.");

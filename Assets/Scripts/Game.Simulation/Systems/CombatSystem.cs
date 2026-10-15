@@ -9,7 +9,7 @@ namespace Game.Simulation.Systems
     public sealed class CombatSystem
     {
         /// <summary>Попадание пушки проверяется по габариту корпуса, а не по точке в центре.</summary>
-        private const float CannonHitRadius = 1.6f;
+        private const float CannonHitRadius = 1.2f;
 
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
         private readonly List<RobotState> _blastTargets = new List<RobotState>();
@@ -80,16 +80,20 @@ namespace Game.Simulation.Systems
             {
                 // Захват сохраняет ID здания в приказе; боевую цель каждое орудие выбирает в своей дальности.
                 float nearest = weapon.Range * weapon.Range;
+                float minRangeSq = weapon.MinRange * weapon.MinRange;
                 foreach (var candidate in state.Robots.Values)
                 {
                     if (!candidate.IsAlive || candidate.Owner == attacker.Owner) continue;
                     float distance = SimVector2.SqrDistance(attacker.Position, candidate.Position);
-                    if (distance > nearest) continue;
+                    if (distance > nearest || distance < minRangeSq) continue;
                     nearest = distance;
                     target = candidate;
                 }
             }
-            if (target == null || SimVector2.SqrDistance(attacker.Position, target.Position) > weapon.Range * weapon.Range) return;
+            if (target == null) return;
+            float targetDistanceSq = SimVector2.SqrDistance(attacker.Position, target.Position);
+            // Ракета не успевает взвестись вплотную: в «мёртвой зоне» орудие молчит.
+            if (targetDistanceSq > weapon.Range * weapon.Range || targetDistanceSq < weapon.MinRange * weapon.MinRange) return;
 
             attacker.WeaponCooldowns[weaponIndex] = weapon.CooldownSeconds;
             if (weapon.ProjectileSpeed <= 0f)

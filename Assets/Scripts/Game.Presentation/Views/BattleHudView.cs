@@ -406,8 +406,9 @@ namespace Game.Presentation.Views
                 icon.GetComponent<Image>().raycastTarget = false;
                 var glyph = CreateText(icon.transform, "Glyph", GetModuleGlyph(module), new Vector2(0f, 0f), new Vector2(76f, 76f), 26, FontStyle.Bold, Color.black, TextAnchor.MiddleCenter);
                 glyph.raycastTarget = false;
-                CreateText(rowButton.transform, "Name", module.ShortName, new Vector2(116f, -8f), new Vector2(400f, 46f), 30, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft).raycastTarget = false;
-                CreateText(rowButton.transform, "Price", $"{module.Cost}  <size=16><color=#8090A0>{DefaultContentCatalog.GetResourceName(module.Resource).ToLowerInvariant()}</color></size>", new Vector2(116f, -50f), new Vector2(400f, 40f), 28, FontStyle.Bold, PriceColor, TextAnchor.MiddleLeft).raycastTarget = false;
+                CreateText(rowButton.transform, "Name", module.ShortName, new Vector2(116f, -4f), new Vector2(400f, 36f), 28, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft).raycastTarget = false;
+                CreateText(rowButton.transform, "Role", module.Role, new Vector2(116f, -38f), new Vector2(420f, 22f), 15, FontStyle.Normal, new Color(0.7f, 0.75f, 0.8f), TextAnchor.MiddleLeft).raycastTarget = false;
+                CreateText(rowButton.transform, "Price", $"{module.Cost}  <size=16><color=#8090A0>{DefaultContentCatalog.GetResourceName(module.Resource).ToLowerInvariant()}</color></size>", new Vector2(116f, -60f), new Vector2(400f, 32f), 24, FontStyle.Bold, PriceColor, TextAnchor.MiddleLeft).raycastTarget = false;
                 _partRowMarks[moduleId] = CreateText(rowButton.transform, "Mark", "", new Vector2(520f, -8f), new Vector2(130f, 80f), 34, FontStyle.Bold, StockColor, TextAnchor.MiddleRight);
                 _partRowMarks[moduleId].raycastTarget = false;
                 row++;

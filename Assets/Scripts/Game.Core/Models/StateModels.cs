@@ -27,6 +27,7 @@ namespace Game.Core.Models
         public RobotBlueprint Blueprint { get; set; }
 
         public SimVector2 Position { get; set; }
+        public SimVector2 Velocity { get; set; }
         public float RotationDegrees { get; set; }
 
         public int MaxHealth { get; set; }
@@ -54,6 +55,7 @@ namespace Game.Core.Models
         public float SplashRadius { get; set; }
         public SimVector2 ImpactPosition { get; set; }
         public float RemainingTravelSeconds { get; set; }
+        public bool IsGuided { get; set; }
     }
 
     public enum OrderProductionStatus : byte

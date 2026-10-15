@@ -86,6 +86,39 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void GuidanceController_RetargetsMissileToMovingEnemy()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles, DefaultContentCatalog.ControlGuidance);
+            var target = CreateRobot(2, PlayerId.Player2, 8f, DefaultContentCatalog.WeaponCannon);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+            var combat = new CombatSystem(_catalog);
+
+            combat.Update(state, 0.1f);
+            target.Position = new SimVector2(8f, 4f);
+            combat.Update(state, 0.8f);
+
+            Assert.AreEqual(50, target.CurrentHealth);
+        }
+
+        [Test]
+        public void TacticalController_LeadsMovingTarget()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlTactical);
+            var target = CreateRobot(2, PlayerId.Player2, 5f, DefaultContentCatalog.WeaponCannon);
+            target.Velocity = new SimVector2(0f, 3f);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Attack(target.Id);
+            var combat = new CombatSystem(_catalog);
+
+            combat.Update(state, 0.1f);
+            target.Position = new SimVector2(5f, 0.9f);
+            combat.Update(state, 0.2f);
+
+            Assert.AreEqual(65, target.CurrentHealth);
+        }
+
+        [Test]
         public void LethalAttack_SetsHealthToZero_AndDecrementsArmy()
         {
             var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon);
@@ -127,7 +160,7 @@ namespace Game.Core.Tests
             return state;
         }
 
-        private static RobotState CreateRobot(int id, PlayerId owner, float x, string weaponId)
+        private static RobotState CreateRobot(int id, PlayerId owner, float x, string weaponId, string controlId = DefaultContentCatalog.ControlBasic)
         {
             return new RobotState
             {
@@ -137,7 +170,7 @@ namespace Game.Core.Tests
                 CurrentHealth = 100,
                 MaxHealth = 100,
                 Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBiped,
-                    DefaultContentCatalog.BodyLight, weaponId, DefaultContentCatalog.ControlBasic)
+                    DefaultContentCatalog.BodyLight, weaponId, controlId)
             };
         }
     }

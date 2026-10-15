@@ -66,6 +66,12 @@ namespace Game.Simulation.Systems
 
             attacker.WeaponCooldownRemaining = weapon.CooldownSeconds;
             OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
+            ModuleDefinition controller = null;
+            if (!string.IsNullOrEmpty(attacker.Blueprint.ControlModuleId))
+            {
+                _catalog.TryGetValue(attacker.Blueprint.ControlModuleId, out controller);
+            }
+            float leadSeconds = controller?.LeadPredictionSeconds ?? 0f;
             float speed = Math.Max(0.1f, weapon.ProjectileSpeed);
             state.Projectiles.Add(new ProjectileState
             {
@@ -75,8 +81,9 @@ namespace Game.Simulation.Systems
                 WeaponType = weapon.WeaponType,
                 Damage = weapon.Damage,
                 SplashRadius = weapon.SplashRadius,
-                ImpactPosition = target.Position,
-                RemainingTravelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed
+                ImpactPosition = target.Position + target.Velocity * leadSeconds,
+                RemainingTravelSeconds = SimVector2.Distance(attacker.Position, target.Position) / speed,
+                IsGuided = weapon.WeaponType == WeaponType.AreaMissile && (controller?.CanGuideMissiles ?? false)
             });
         }
 
@@ -85,6 +92,10 @@ namespace Game.Simulation.Systems
             for (int index = state.Projectiles.Count - 1; index >= 0; index--)
             {
                 ProjectileState projectile = state.Projectiles[index];
+                if (projectile.IsGuided && state.Robots.TryGetValue(projectile.TargetRobotId.Value, out var guidedTarget) && guidedTarget.IsAlive)
+                {
+                    projectile.ImpactPosition = guidedTarget.Position;
+                }
                 projectile.RemainingTravelSeconds -= deltaSeconds;
                 if (projectile.RemainingTravelSeconds > 0f) continue;
 

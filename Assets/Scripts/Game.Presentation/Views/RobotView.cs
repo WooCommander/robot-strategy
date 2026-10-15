@@ -23,6 +23,7 @@ namespace Game.Presentation.Views
         private List<SimVector2> _currentPath = new List<SimVector2>();
         private int _currentPathIndex = 0;
         private System.Func<SimVector2, float> _terrainSpeedProvider;
+        private SimVector2 _lastStatePosition;
 
         public int EntityId => _entityId;
         public PlayerId Owner => _owner;
@@ -35,6 +36,7 @@ namespace Game.Presentation.Views
             _state = state;
             _entityId = state.Id.Value;
             _owner = state.Owner;
+            _lastStatePosition = state.Position;
 
             transform.position = new Vector3(state.Position.X, 0f, state.Position.Y);
             transform.rotation = Quaternion.Euler(0f, state.RotationDegrees, 0f);
@@ -169,6 +171,11 @@ namespace Game.Presentation.Views
         private void Update()
         {
             MoveAlongPath();
+            if (_state != null && Time.deltaTime > 0f)
+            {
+                _state.Velocity = (_state.Position - _lastStatePosition) / Time.deltaTime;
+                _lastStatePosition = _state.Position;
+            }
         }
 
         private void LateUpdate()

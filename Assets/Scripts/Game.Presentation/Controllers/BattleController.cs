@@ -37,6 +37,7 @@ namespace Game.Presentation.Controllers
         private Dictionary<string, ModuleDefinition> _moduleCatalog;
 
         private readonly Dictionary<int, RobotView> _spawnedRobots = new Dictionary<int, RobotView>();
+        private readonly Dictionary<int, float> _nextCombatManeuverAt = new Dictionary<int, float>();
         private BuildingView _currentlySelectedBuilding;
         private RobotView _currentlySelectedRobot;
         private BattleHudView _hudView;
@@ -529,7 +530,18 @@ namespace Game.Presentation.Controllers
 
         private void UpdateCombatManeuver(RobotView view, RobotState robot, RobotState target)
         {
+            if (_nextCombatManeuverAt.TryGetValue(robot.Id.Value, out float nextUpdate) && Time.time < nextUpdate)
+            {
+                return;
+            }
             if (!CombatRangePlanner.TryGetManeuverDestination(robot, target, _moduleCatalog, out var destination)) return;
+
+            float interval = 0.5f;
+            if (_moduleCatalog.TryGetValue(robot.Blueprint.ControlModuleId, out var controller))
+            {
+                interval = Mathf.Max(0.05f, controller.CombatManeuverIntervalSeconds);
+            }
+            _nextCombatManeuverAt[robot.Id.Value] = Time.time + interval;
 
             bool destinationChanged = SimVector2.SqrDistance(robot.CurrentOrder.TargetPosition, destination) > 1f;
             robot.CurrentOrder.TargetPosition = destination;

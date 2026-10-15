@@ -21,6 +21,9 @@ namespace Game.Content.Definitions
         public ControlTier MaxSupportedControlTier { get; set; }
         public ControlTier MinimumControlTier { get; set; }
         public ControlTier ControlTier { get; set; }
+        public float LeadPredictionSeconds { get; set; }
+        public float CombatManeuverIntervalSeconds { get; set; } = 0.5f;
+        public bool CanGuideMissiles { get; set; }
 
         // Для оружия
         public WeaponType WeaponType { get; set; }
@@ -132,17 +135,20 @@ namespace Game.Content.Definitions
                 [ControlBasic] = new ModuleDefinition
                 {
                     Id = ControlBasic, Name = "Базовый контроллер", SlotType = ModuleSlotType.Control,
-                    Cost = 40, Mass = 8, ControlTier = ControlTier.Basic
+                    Cost = 40, Mass = 8, ControlTier = ControlTier.Basic,
+                    LeadPredictionSeconds = 0f, CombatManeuverIntervalSeconds = 0.55f
                 },
                 [ControlTactical] = new ModuleDefinition
                 {
                     Id = ControlTactical, Name = "Тактический контроллер", SlotType = ModuleSlotType.Control,
-                    Cost = 80, Mass = 12, ControlTier = ControlTier.Tactical
+                    Cost = 80, Mass = 12, ControlTier = ControlTier.Tactical,
+                    LeadPredictionSeconds = 0.3f, CombatManeuverIntervalSeconds = 0.25f
                 },
                 [ControlGuidance] = new ModuleDefinition
                 {
                     Id = ControlGuidance, Name = "Контроллер наведения", SlotType = ModuleSlotType.Control,
-                    Cost = 140, Mass = 18, ControlTier = ControlTier.Guidance
+                    Cost = 140, Mass = 18, ControlTier = ControlTier.Guidance,
+                    LeadPredictionSeconds = 0.5f, CombatManeuverIntervalSeconds = 0.12f, CanGuideMissiles = true
                 },
 
                 // Оборудование

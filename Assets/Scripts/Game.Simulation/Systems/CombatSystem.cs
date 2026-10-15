@@ -122,7 +122,7 @@ namespace Game.Simulation.Systems
         {
             // Попадание проверяется по габариту корпуса, а не по математической точке в центре.
             // Манёвр всё ещё позволяет уйти от снаряда.
-            const float hitRadius = 1.25f;
+            const float hitRadius = 1.6f;
             if (state.Robots.TryGetValue(projectile.TargetRobotId.Value, out RobotState target) && target.IsAlive &&
                 target.Owner != projectile.Owner && SimVector2.SqrDistance(target.Position, projectile.ImpactPosition) <= hitRadius * hitRadius)
             {

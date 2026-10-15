@@ -68,6 +68,22 @@ namespace Game.Simulation.Navigation
             return _speedMultipliers[y * _width + x];
         }
 
+        public void BlockCircle(SimVector2 center, float radius)
+        {
+            float radiusSq = radius * radius;
+            for (int y = 0; y < _height; y++)
+            {
+                for (int x = 0; x < _width; x++)
+                {
+                    SimVector2 cellCenter = GridToWorld(new GridCoord(x, y));
+                    if (SimVector2.SqrDistance(cellCenter, center) > radiusSq) continue;
+                    int index = y * _width + x;
+                    _walkability[index] = 0;
+                    _speedMultipliers[index] = 0f;
+                }
+            }
+        }
+
         public GridCoord WorldToGrid(SimVector2 worldPos) => GridCoord.FromSimVector2(worldPos, _tileSize);
         public SimVector2 GridToWorld(GridCoord grid) => grid.ToSimVector2(_tileSize);
     }

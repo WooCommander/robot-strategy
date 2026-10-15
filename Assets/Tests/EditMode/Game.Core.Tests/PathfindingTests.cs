@@ -60,5 +60,18 @@ namespace Game.Core.Tests
             var end = nav.WorldToGrid(waypoints[waypoints.Count - 1]);
             Assert.IsTrue(nav.IsWalkable(end.X, end.Y), "Финиш должен оставаться в проходимой клетке.");
         }
+
+        [Test]
+        public void BlockCircle_MakesBuildingFootprintUnwalkable()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            var nav = new NavigationGrid(map);
+            var factory = map.Buildings[2];
+
+            nav.BlockCircle(factory.Position, 1.65f);
+
+            GridCoord center = nav.WorldToGrid(factory.Position);
+            Assert.IsFalse(nav.IsWalkable(center.X, center.Y));
+        }
     }
 }

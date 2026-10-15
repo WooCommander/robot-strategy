@@ -58,6 +58,10 @@ namespace Game.Presentation.Controllers
             _moduleCatalog = DefaultContentCatalog.CreateDefaultModules();
             _mapDefinition = DefaultMapFactory.CreatePrototypeMap();
             _navigationGrid = new NavigationGrid(_mapDefinition);
+            foreach (BuildingSpawnDefinition building in _mapDefinition.Buildings)
+            {
+                _navigationGrid.BlockCircle(building.Position, building.Type == BuildingType.Base ? 2.35f : 1.65f);
+            }
             _pathfinder = new AStarPathfinder(_navigationGrid);
 
             // 2. Инициализация состояния матча
@@ -325,11 +329,12 @@ namespace Game.Presentation.Controllers
 
         private Vector3 ResolveRobotMovement(RobotView movingRobot, Vector3 desiredPosition)
         {
-            const float collisionRadius = 1.35f;
+            const float collisionRadius = 1.7f;
+            Vector3 resolvedPosition = desiredPosition;
             foreach (var other in _spawnedRobots.Values)
             {
                 if (other == null || other == movingRobot || !other.State.IsAlive) continue;
-                Vector3 separation = desiredPosition - other.transform.position;
+                Vector3 separation = resolvedPosition - other.transform.position;
                 separation.y = 0f;
                 if (separation.sqrMagnitude >= collisionRadius * collisionRadius) continue;
 
@@ -339,28 +344,32 @@ namespace Game.Presentation.Controllers
                 }
                 Vector3 tangent = Vector3.Cross(Vector3.up, separation.normalized) * (movingRobot.EntityId % 2 == 0 ? 1f : -1f);
                 Vector3 detour = other.transform.position + separation.normalized * collisionRadius + tangent * 0.25f;
-                if (Vector3.Distance(detour, other.transform.position) >= collisionRadius) return detour;
-                return movingRobot.transform.position;
+                resolvedPosition = Vector3.Distance(detour, other.transform.position) >= collisionRadius ? detour : movingRobot.transform.position;
             }
 
             foreach (var building in _matchState.Buildings.Values)
             {
                 float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
-                Vector3 center = new Vector3(building.Position.X, desiredPosition.y, building.Position.Y);
-                Vector3 separation = desiredPosition - center;
+                Vector3 center = new Vector3(building.Position.X, resolvedPosition.y, building.Position.Y);
+                Vector3 separation = resolvedPosition - center;
                 separation.y = 0f;
                 if (separation.sqrMagnitude >= clearance * clearance) continue;
                 if (separation.sqrMagnitude < 0.001f) separation = Vector3.right;
-                return center + separation.normalized * clearance;
+                resolvedPosition = center + separation.normalized * clearance;
             }
-            return desiredPosition;
+            return resolvedPosition;
         }
 
-        private static SimVector2 GetBuildingApproachPoint(SimVector2 robotPosition, BuildingState building)
+        private static SimVector2 GetBuildingApproachPoint(RobotState robot, BuildingState building)
         {
-            SimVector2 direction = robotPosition - building.Position;
+            SimVector2 direction = robot.Position - building.Position;
             if (direction.SqrMagnitude < 0.001f) direction = new SimVector2(1f, 0f);
-            float approachDistance = building.Type == BuildingType.Base ? 2.55f : 1.85f;
+            direction /= direction.Magnitude;
+            float angle = (robot.Id.Value % 6 - 2.5f) * 0.28f;
+            float cosine = Mathf.Cos(angle);
+            float sine = Mathf.Sin(angle);
+            direction = new SimVector2(direction.X * cosine - direction.Y * sine, direction.X * sine + direction.Y * cosine);
+            float approachDistance = building.Type == BuildingType.Base ? 3.0f : 2.1f;
             return building.Position + direction / direction.Magnitude * approachDistance;
         }
 
@@ -492,7 +501,7 @@ namespace Game.Presentation.Controllers
                 TargetBuildingId = new EntityId(target.EntityId)
             };
             var result = _commandDispatcher.Dispatch(command, _matchState);
-            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, GetBuildingApproachPoint(robot.State.Position, _matchState.Buildings[target.EntityId]), out var waypoints))
+            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, GetBuildingApproachPoint(robot.State, _matchState.Buildings[target.EntityId]), out var waypoints))
             {
                 robot.SetMovementPath(waypoints);
                 Debug.Log($"[Battle] Робот #{robot.EntityId} получил приказ захватить здание #{target.EntityId}.");
@@ -530,7 +539,7 @@ namespace Game.Presentation.Controllers
                     if (target == null) continue;
                     bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
                     robot.CurrentOrder.TargetEntityId = target.Id;
-                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, GetBuildingApproachPoint(robot.Position, target));
+                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, GetBuildingApproachPoint(robot, target));
                 }
                 else if (robot.CurrentOrder.Type == OrderType.Attack)
                 {

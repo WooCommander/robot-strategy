@@ -131,7 +131,7 @@ namespace Game.Simulation.Systems
                 Id = new EntityId(++_nextEntityId),
                 Owner = building.Owner,
                 Blueprint = order.Blueprint,
-                Position = GetReleasePosition(building),
+                Position = GetReleasePosition(building, _nextEntityId),
                 RotationDegrees = building.Owner == PlayerId.Player1 ? 0f : 180f,
                 MaxHealth = val.TotalHealth,
                 CurrentHealth = val.TotalHealth,
@@ -145,7 +145,7 @@ namespace Game.Simulation.Systems
             OnRobotSpawned?.Invoke(newRobot);
         }
 
-        private static SimVector2 GetReleasePosition(BuildingState building)
+        private static SimVector2 GetReleasePosition(BuildingState building, int robotId)
         {
             SimVector2 direction = building.SpawnPoint - building.Position;
             if (direction.SqrMagnitude < 0.001f)
@@ -155,7 +155,10 @@ namespace Game.Simulation.Systems
                     : new SimVector2(1f, 0f);
             }
 
-            return building.SpawnPoint + direction / direction.Magnitude * SpawnExitClearance;
+            direction /= direction.Magnitude;
+            SimVector2 tangent = new SimVector2(-direction.Y, direction.X);
+            float laneOffset = (robotId % 5 - 2) * 1.8f;
+            return building.SpawnPoint + direction * SpawnExitClearance + tangent * laneOffset;
         }
     }
 }

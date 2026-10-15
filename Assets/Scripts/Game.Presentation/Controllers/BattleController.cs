@@ -252,6 +252,7 @@ namespace Game.Presentation.Controllers
             var view = go.AddComponent<RobotView>();
             view.Initialize(robotState);
             view.SetTerrainSpeedProvider(GetTerrainSpeedMultiplier);
+            view.SetMovementResolver(ResolveRobotMovement);
 
             _spawnedRobots[robotState.Id.Value] = view;
             if (robotState.Owner == PlayerId.Player2)
@@ -320,6 +321,28 @@ namespace Game.Presentation.Controllers
                     view.UpdateCaptureVisual(building);
                 }
             }
+        }
+
+        private Vector3 ResolveRobotMovement(RobotView movingRobot, Vector3 desiredPosition)
+        {
+            const float collisionRadius = 1.35f;
+            foreach (var other in _spawnedRobots.Values)
+            {
+                if (other == null || other == movingRobot || !other.State.IsAlive) continue;
+                Vector3 separation = desiredPosition - other.transform.position;
+                separation.y = 0f;
+                if (separation.sqrMagnitude >= collisionRadius * collisionRadius) continue;
+
+                if (separation.sqrMagnitude < 0.001f)
+                {
+                    separation = movingRobot.EntityId < other.EntityId ? Vector3.right : Vector3.left;
+                }
+                Vector3 tangent = Vector3.Cross(Vector3.up, separation.normalized) * (movingRobot.EntityId % 2 == 0 ? 1f : -1f);
+                Vector3 detour = other.transform.position + separation.normalized * collisionRadius + tangent * 0.25f;
+                if (Vector3.Distance(detour, other.transform.position) >= collisionRadius) return detour;
+                return movingRobot.transform.position;
+            }
+            return desiredPosition;
         }
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)

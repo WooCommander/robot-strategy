@@ -24,6 +24,7 @@ namespace Game.Presentation.Views
         private List<SimVector2> _currentPath = new List<SimVector2>();
         private int _currentPathIndex = 0;
         private System.Func<SimVector2, float> _terrainSpeedProvider;
+        private System.Func<RobotView, Vector3, Vector3> _movementResolver;
         private SimVector2 _lastStatePosition;
 
         public int EntityId => _entityId;
@@ -165,6 +166,11 @@ namespace Game.Presentation.Views
             _terrainSpeedProvider = terrainSpeedProvider;
         }
 
+        public void SetMovementResolver(System.Func<RobotView, Vector3, Vector3> movementResolver)
+        {
+            _movementResolver = movementResolver;
+        }
+
         public void MoveDirect(Vector2 inputDirection)
         {
             if (_state == null || inputDirection.sqrMagnitude < 0.001f)
@@ -176,7 +182,8 @@ namespace Game.Presentation.Views
             _state.CurrentOrder = RobotOrder.Stop();
 
             Vector3 direction = new Vector3(inputDirection.x, 0f, inputDirection.y).normalized;
-            transform.position += direction * (_state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) * Time.deltaTime);
+            Vector3 nextPosition = transform.position + direction * (_state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) * Time.deltaTime);
+            transform.position = _movementResolver?.Invoke(this, nextPosition) ?? nextPosition;
             transform.rotation = Quaternion.LookRotation(direction);
             _state.Position = new SimVector2(transform.position.x, transform.position.z);
             _state.RotationDegrees = transform.eulerAngles.y;
@@ -209,7 +216,8 @@ namespace Game.Presentation.Views
             Vector3 targetWorld = new Vector3(target2D.X, 0f, target2D.Y);
 
             float speed = _state != null ? _state.MoveSpeed * GetTerrainSpeedMultiplier(_state.Position) : 3.5f;
-            transform.position = Vector3.MoveTowards(transform.position, targetWorld, speed * Time.deltaTime);
+            Vector3 nextPosition = Vector3.MoveTowards(transform.position, targetWorld, speed * Time.deltaTime);
+            transform.position = _movementResolver?.Invoke(this, nextPosition) ?? nextPosition;
 
             Vector3 dir = (targetWorld - transform.position);
             dir.y = 0f;

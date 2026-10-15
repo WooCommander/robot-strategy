@@ -48,17 +48,30 @@ namespace Game.AI
         {
             if (!state.Player2.CanBuildMoreRobots || baseBuilding.ProductionQueue.Count >= BuildingState.MaxQueueSize) return;
             RobotPresetDefinition preset = ChooseProductionPreset(state, baseBuilding.Position);
-            if (state.Player2.Metal < preset.GetCost(_moduleCatalog)) return;
+            if (preset == null) return;
             _dispatcher.Dispatch(new EnqueueProductionCommand { PlayerId = PlayerId.Player2, BaseBuildingId = baseBuilding.Id, Blueprint = preset.CreateBlueprint() }, state);
         }
 
+        /// <summary>
+        /// Выбирает доступный пресет, который лучше всего тратит накопленные заводами ресурсы:
+        /// каждая единица General ценится вдвое, поэтому склад специализированных деталей не простаивает.
+        /// </summary>
         private RobotPresetDefinition ChooseProductionPreset(MatchState state, SimVector2 basePosition)
         {
             bool underThreat = FindNearestEnemy(state, basePosition, BaseThreatRadius) != null;
-            if (underThreat && state.Player2.Metal >= RobotPresetCatalog.Tank.GetCost(_moduleCatalog)) return RobotPresetCatalog.Tank;
-            if (state.Player1.ActiveRobotsCount >= 3 && state.Player2.Metal >= RobotPresetCatalog.Missile.GetCost(_moduleCatalog)) return RobotPresetCatalog.Missile;
-            if (state.Player2.ActiveRobotsCount < state.Player1.ActiveRobotsCount && state.Player2.Metal >= RobotPresetCatalog.Tank.GetCost(_moduleCatalog)) return RobotPresetCatalog.Tank;
-            return RobotPresetCatalog.Scout;
+            RobotPresetDefinition best = null;
+            int bestScore = int.MinValue;
+            foreach (RobotPresetDefinition preset in RobotPresetCatalog.All)
+            {
+                int[] cost = preset.GetCostByType(_moduleCatalog);
+                if (!state.Player2.Resources.TryPlanPayment(cost, out int[] payment)) continue;
+                int totalCost = 0;
+                foreach (int amount in cost) totalCost += amount;
+                // Под угрозой базы важнее быстро выставить робота, чем экономить General.
+                int score = underThreat ? -(int)(preset.BuildTimeSeconds * 10f) : totalCost - 2 * payment[(int)ResourceType.General];
+                if (score > bestScore) { best = preset; bestScore = score; }
+            }
+            return best;
         }
 
         private static BuildingState ChooseObjective(MatchState state, SimVector2 from, int armySize, PlayerId owner)

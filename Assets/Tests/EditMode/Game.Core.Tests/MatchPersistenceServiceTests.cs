@@ -1,5 +1,6 @@
 using System.IO;
 using NUnit.Framework;
+using Game.Content.Definitions;
 using Game.Core.Models;
 using Game.Core.Types;
 using Game.Persistence;
@@ -18,7 +19,15 @@ namespace Game.Core.Tests
             MatchState restored = service.Deserialize(service.Serialize(source));
 
             Assert.AreEqual(42, restored.Tick);
-            Assert.AreEqual(777, restored.Player1.Metal);
+            Assert.AreEqual(17, restored.Player1.Resources[ResourceType.General]);
+            Assert.AreEqual(4, restored.Player1.Resources[ResourceType.Nuclear]);
+            Assert.AreEqual(3, restored.Player2.Resources[ResourceType.Missiles]);
+            Assert.AreEqual(6, restored.IncomeHoursPaid);
+            Assert.AreEqual(ResourceType.Phasers, restored.Buildings[101].ProducedResource);
+            Assert.AreEqual(2, restored.Buildings[1].ProductionQueue[0].Payment[(int)ResourceType.Chassis]);
+            CollectionAssert.AreEqual(new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponPhasers }, restored.Robots[10].Blueprint.WeaponIds);
+            Assert.AreEqual(DefaultContentCatalog.Nuclear, restored.Robots[10].Blueprint.NuclearId);
+            CollectionAssert.AreEqual(new[] { 0.5f, 1.25f }, restored.Robots[10].WeaponCooldowns);
             Assert.AreEqual(2, restored.Robots.Count);
             Assert.AreEqual(new EntityId(101), restored.Robots[10].CurrentOrder.TargetEntityId);
             Assert.AreEqual(1, restored.Buildings[1].ProductionQueue.Count);
@@ -77,16 +86,27 @@ namespace Game.Core.Tests
 
         private static MatchState CreateState()
         {
-            var state = new MatchState { Tick = 42, MatchTimeSeconds = 91.5f, IsPaused = true };
-            state.Player1 = new PlayerState { Id = PlayerId.Player1, Metal = 777, MetalFraction = 0.25f, ActiveRobotsCount = 1, QueuedRobotsCount = 1 };
-            state.Player2 = new PlayerState { Id = PlayerId.Player2, Metal = 321 };
-            state.Robots[10] = new RobotState { Id = new EntityId(10), Owner = PlayerId.Player1, CurrentHealth = 90, MaxHealth = 120, Position = new SimVector2(4.5f, 9.5f), CurrentOrder = RobotOrder.Capture(new EntityId(101)) };
+            var state = new MatchState { Tick = 42, MatchTimeSeconds = 91.5f, IsPaused = true, IncomeHoursPaid = 6 };
+            state.Player1 = new PlayerState { Id = PlayerId.Player1, ActiveRobotsCount = 1, QueuedRobotsCount = 1 };
+            state.Player1.Resources[ResourceType.General] = 17;
+            state.Player1.Resources[ResourceType.Nuclear] = 4;
+            state.Player2 = new PlayerState { Id = PlayerId.Player2 };
+            state.Player2.Resources[ResourceType.Missiles] = 3;
+            state.Robots[10] = new RobotState
+            {
+                Id = new EntityId(10), Owner = PlayerId.Player1, CurrentHealth = 90, MaxHealth = 120, Position = new SimVector2(4.5f, 9.5f), CurrentOrder = RobotOrder.Capture(new EntityId(101)),
+                Blueprint = new RobotBlueprint("bp", "Тест", DefaultContentCatalog.ChassisTracks, new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponPhasers }, nuclearId: DefaultContentCatalog.Nuclear),
+                WeaponCooldowns = new System.Collections.Generic.List<float> { 0.5f, 1.25f }
+            };
             state.Robots[20] = new RobotState { Id = new EntityId(20), Owner = PlayerId.Player2, CurrentHealth = 120, MaxHealth = 120, Position = new SimVector2(30f, 9.5f), CurrentOrder = RobotOrder.Defend(new SimVector2(31f, 10f)) };
             state.Projectiles.Add(new ProjectileState { SourceRobotId = new EntityId(10), TargetRobotId = new EntityId(20), Owner = PlayerId.Player1, WeaponType = WeaponType.DirectCannon, Damage = 35, ImpactPosition = new SimVector2(30f, 9.5f), RemainingTravelSeconds = 0.2f });
             var baseBuilding = new BuildingState { Id = new EntityId(1), Type = BuildingType.Base, Owner = PlayerId.Player1, Position = new SimVector2(3f, 8f), SpawnPoint = new SimVector2(5f, 8f) };
-            baseBuilding.ProductionQueue.Add(new ProductionOrder { OrderId = "order-1", Cost = 350, TotalBuildTimeSeconds = 8f, RemainingBuildTimeSeconds = 7.5f, Status = OrderProductionStatus.InProgress });
+            var payment = new int[ResourceStock.TypeCount];
+            payment[(int)ResourceType.Chassis] = 2;
+            payment[(int)ResourceType.General] = 3;
+            baseBuilding.ProductionQueue.Add(new ProductionOrder { OrderId = "order-1", Payment = payment, TotalBuildTimeSeconds = 8f, RemainingBuildTimeSeconds = 7.5f, Status = OrderProductionStatus.InProgress });
             state.Buildings[1] = baseBuilding;
-            state.Buildings[101] = new BuildingState { Id = new EntityId(101), Type = BuildingType.Factory, Owner = PlayerId.Neutral, Position = new SimVector2(16f, 8f) };
+            state.Buildings[101] = new BuildingState { Id = new EntityId(101), Type = BuildingType.Factory, Owner = PlayerId.Neutral, Position = new SimVector2(16f, 8f), ProducedResource = ResourceType.Phasers };
             return state;
         }
     }

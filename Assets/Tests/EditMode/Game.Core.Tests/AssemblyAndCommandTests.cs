@@ -21,101 +21,76 @@ namespace Game.Core.Tests
         }
 
         [Test]
-        public void ValidBlueprint_ShouldPassValidation_AndCalculateCorrectStats()
+        public void ValidBlueprint_ShouldPassValidation_AndCalculateCostByResourceType()
         {
-            var bp = new RobotBlueprint(
-                "bp_1",
-                "Танк",
-                DefaultContentCatalog.ChassisTracks,
-                DefaultContentCatalog.BodyHeavy,
-                DefaultContentCatalog.WeaponCannon,
-                DefaultContentCatalog.ControlTactical,
-                DefaultContentCatalog.EquipArmor
-            );
+            var bp = new RobotBlueprint("bp_1", "Танк", DefaultContentCatalog.ChassisTracks,
+                new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponPhasers }, DefaultContentCatalog.Electronics);
 
             var res = RobotAssemblyValidator.Validate(bp, _catalog);
 
-            Assert.IsTrue(res.IsValid, "Сборка должна быть валидной");
-            Assert.AreEqual(0, res.Errors.Count);
-
-            // Cost: 120 (chassis) + 220 (heavy) + 150 (cannon) + 80 (control) + 80 (armor) = 650
-            Assert.AreEqual(650, res.TotalCost);
-
-            // Mass: 60 + 80 + 40 + 12 + 35 = 227 кг (лимит гусениц 230 кг)
-            Assert.AreEqual(227, res.TotalMass);
-            Assert.IsTrue(res.TotalMass <= res.MaxLoadCapacity);
-
-            // Health: 260 (heavy) + 80 (armor) = 340
-            Assert.AreEqual(340, res.TotalHealth);
-            Assert.AreEqual(3.0f, res.Speed);
+            Assert.IsTrue(res.IsValid, string.Join("; ", res.Errors));
+            Assert.AreEqual(5, res.CostByType[(int)ResourceType.Chassis]);
+            Assert.AreEqual(2, res.CostByType[(int)ResourceType.Cannon]);
+            Assert.AreEqual(4, res.CostByType[(int)ResourceType.Phasers]);
+            Assert.AreEqual(3, res.CostByType[(int)ResourceType.Electronics]);
+            Assert.AreEqual(14, res.TotalCost);
+            Assert.AreEqual(160, res.TotalHealth, "Гусеницы 140 + по 10 за каждое орудие.");
+            Assert.AreEqual(3.6f, res.Speed);
         }
 
         [Test]
-        public void OverloadedBlueprint_ShouldFail_DueToMassLimit()
+        public void SameWeaponTwice_ShouldFailValidation()
         {
-            // Двуногое шасси имеет лимит 160 кг
-            // Biped (40) + Heavy (80) + Missiles (55) + Basic control (8) + Armor (35) = 218 кг > 160 кг!
-            var bp = new RobotBlueprint(
-                "bp_overload",
-                "Перегруженный робот",
-                DefaultContentCatalog.ChassisBiped,
-                DefaultContentCatalog.BodyHeavy,
-                DefaultContentCatalog.WeaponMissiles,
-                DefaultContentCatalog.ControlBasic,
-                DefaultContentCatalog.EquipArmor
-            );
-
-            var res = RobotAssemblyValidator.Validate(bp, _catalog);
-
-            Assert.IsFalse(res.IsValid, "Сборка с перегрузом должна быть отклонена");
-            Assert.IsTrue(res.Errors.Exists(e => e.Contains("Превышена грузоподъёмность")));
-        }
-
-        [Test]
-        public void MissingWeapon_ShouldFailValidation()
-        {
-            var bp = new RobotBlueprint(
-                "bp_no_gun",
-                "Безоружный",
-                DefaultContentCatalog.ChassisTracks,
-                DefaultContentCatalog.BodyLight,
-                null,
-                DefaultContentCatalog.ControlBasic
-            );
+            var bp = new RobotBlueprint("bp_dup", "Две пушки", DefaultContentCatalog.ChassisBipod,
+                new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponCannon });
 
             var res = RobotAssemblyValidator.Validate(bp, _catalog);
 
             Assert.IsFalse(res.IsValid);
-            Assert.IsTrue(res.Errors.Exists(e => e.Contains("Не выбрано обязательное оружие")));
+            Assert.IsTrue(res.Errors.Exists(e => e.Contains("только один раз")));
         }
 
         [Test]
-        public void A01_EnqueueProduction_WithEnoughResources_ShouldDeductMetalAndEnqueue()
+        public void MissingChassis_ShouldFailValidation()
+        {
+            var res = RobotAssemblyValidator.Validate(new RobotBlueprint("bp", "Без шасси", null, new[] { DefaultContentCatalog.WeaponCannon }), _catalog);
+
+            Assert.IsFalse(res.IsValid);
+            Assert.IsTrue(res.Errors.Exists(e => e.Contains("Не выбрано шасси")));
+        }
+
+        [Test]
+        public void RobotWithoutWeaponOrNuclear_ShouldFail_ButNuclearOnlyIsValid()
+        {
+            var unarmed = new RobotBlueprint("bp_unarmed", "Безоружный", DefaultContentCatalog.ChassisBipod, new string[0], DefaultContentCatalog.Electronics);
+            var bomber = new RobotBlueprint("bp_bomber", "Камикадзе", DefaultContentCatalog.ChassisAntiGrav, new string[0], nuclearId: DefaultContentCatalog.Nuclear);
+
+            Assert.IsFalse(RobotAssemblyValidator.Validate(unarmed, _catalog).IsValid);
+            var bomberResult = RobotAssemblyValidator.Validate(bomber, _catalog);
+            Assert.IsTrue(bomberResult.IsValid);
+            Assert.AreEqual(30, bomberResult.TotalCost);
+        }
+
+        [Test]
+        public void A01_EnqueueProduction_PaysWithOwnResourceTypeFirst_ThenGeneral()
         {
             var dispatcher = new CommandDispatcher(_catalog);
             var state = CreateTestMatch();
+            state.Player1.Resources[ResourceType.General] = 10;
+            state.Player1.Resources[ResourceType.Cannon] = 1;
+            state.Player1.Resources[ResourceType.Chassis] = 5;
 
-            var bp = new RobotBlueprint(
-                "bp_scout",
-                "Разведчик",
-                DefaultContentCatalog.ChassisBiped,
-                DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon,
-                DefaultContentCatalog.ControlBasic
-            ); // Стоимость: 100 + 100 + 150 + 40 = 390 металла
-
-            var cmd = new EnqueueProductionCommand
+            var res = dispatcher.Dispatch(new EnqueueProductionCommand
             {
                 PlayerId = PlayerId.Player1,
                 BaseBuildingId = new EntityId(1),
-                Blueprint = bp
-            };
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint() // двуногое 3 шасси + пушка 2
+            }, state);
 
-            int startMetal = state.Player1.Metal; // 600
-            var res = dispatcher.Dispatch(cmd, state);
-
-            Assert.IsTrue(res.IsSuccess);
-            Assert.AreEqual(startMetal - 390, state.Player1.Metal);
+            Assert.IsTrue(res.IsSuccess, res.ErrorReason);
+            Assert.AreEqual(2, state.Player1.Resources[ResourceType.Chassis], "Шасси оплачено своим ресурсом.");
+            Assert.AreEqual(0, state.Player1.Resources[ResourceType.Cannon], "Единственная «пушечная» единица потрачена.");
+            Assert.AreEqual(9, state.Player1.Resources[ResourceType.General], "Недостающую единицу пушки покрыл General.");
             Assert.AreEqual(1, state.Buildings[1].ProductionQueue.Count);
             Assert.AreEqual(1, state.Player1.QueuedRobotsCount);
         }
@@ -125,87 +100,76 @@ namespace Game.Core.Tests
         {
             var dispatcher = new CommandDispatcher(_catalog);
             var state = CreateTestMatch();
-            state.Player1.Metal = 100; // Меньше стоимости сборки
+            state.Player1.Resources[ResourceType.General] = 4;
 
-            var bp = new RobotBlueprint(
-                "bp_scout",
-                "Разведчик",
-                DefaultContentCatalog.ChassisBiped,
-                DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon,
-                DefaultContentCatalog.ControlBasic
-            ); // 390 металла
-
-            var cmd = new EnqueueProductionCommand
+            var res = dispatcher.Dispatch(new EnqueueProductionCommand
             {
                 PlayerId = PlayerId.Player1,
                 BaseBuildingId = new EntityId(1),
-                Blueprint = bp
-            };
-
-            var res = dispatcher.Dispatch(cmd, state);
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint()
+            }, state);
 
             Assert.IsFalse(res.IsSuccess);
-            Assert.AreEqual(100, state.Player1.Metal);
+            Assert.AreEqual(4, state.Player1.Resources[ResourceType.General]);
             Assert.AreEqual(0, state.Buildings[1].ProductionQueue.Count);
         }
 
         [Test]
-        public void MissingControlModule_ShouldFailValidation()
+        public void CancelProduction_RefundsExactlyWhatWasPaid()
         {
-            var bp = new RobotBlueprint("bp_no_control", "Без контроллера",
-                DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon, null);
+            var dispatcher = new CommandDispatcher(_catalog);
+            var state = CreateTestMatch();
+            state.Player1.Resources[ResourceType.General] = 10;
+            state.Player1.Resources[ResourceType.Chassis] = 2;
+            int[] before = state.Player1.Resources.ToArray();
+            dispatcher.Dispatch(new EnqueueProductionCommand { PlayerId = PlayerId.Player1, BaseBuildingId = new EntityId(1), Blueprint = RobotPresetCatalog.Scout.CreateBlueprint() }, state);
+            string orderId = state.Buildings[1].ProductionQueue[0].OrderId;
 
-            var res = RobotAssemblyValidator.Validate(bp, _catalog);
+            var res = dispatcher.Dispatch(new CancelProductionCommand { PlayerId = PlayerId.Player1, BaseBuildingId = new EntityId(1), OrderId = orderId }, state);
 
-            Assert.IsFalse(res.IsValid);
-            Assert.IsTrue(res.Errors.Exists(e => e.Contains("обязательный модуль управления")));
+            Assert.IsTrue(res.IsSuccess, res.ErrorReason);
+            CollectionAssert.AreEqual(before, state.Player1.Resources.ToArray());
         }
 
         [Test]
-        public void GuidanceControl_OnLightBody_ShouldFailCompatibility()
-        {
-            var bp = new RobotBlueprint("bp_incompatible_control", "Несовместимый",
-                DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight,
-                DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlGuidance);
-
-            var res = RobotAssemblyValidator.Validate(bp, _catalog);
-
-            Assert.IsFalse(res.IsValid);
-            Assert.IsTrue(res.Errors.Exists(e => e.Contains("не поддерживает уровень управления")));
-        }
-
-        [Test]
-        public void SecondaryWeapon_RequiresHeavyBodyAndAddsToAssemblyCost()
-        {
-            var light = new RobotBlueprint("light_two_weapons", "Лёгкий", DefaultContentCatalog.ChassisTracks,
-                DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlBasic,
-                secondaryWeaponId: DefaultContentCatalog.WeaponMissiles);
-            var heavy = new RobotBlueprint("heavy_two_weapons", "Тяжёлый", DefaultContentCatalog.ChassisTracks,
-                DefaultContentCatalog.BodyHeavy, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlTactical,
-                secondaryWeaponId: DefaultContentCatalog.WeaponMissiles);
-
-            Assert.IsFalse(RobotAssemblyValidator.Validate(light, _catalog).IsValid);
-            var validation = RobotAssemblyValidator.Validate(heavy, _catalog);
-            Assert.IsTrue(validation.IsValid);
-            Assert.AreEqual(790, validation.TotalCost);
-        }
-
-        [Test]
-        public void ConstructorDraft_ShouldBuildAndValidateSelectedModules()
+        public void ConstructorDraft_TogglesPartsLikeOriginalScreen()
         {
             var draft = new RobotConstructorDraft(_catalog);
-            Assert.IsTrue(draft.Select(ModuleSlotType.Chassis, DefaultContentCatalog.ChassisBiped));
-            Assert.IsTrue(draft.Select(ModuleSlotType.Body, DefaultContentCatalog.BodyLight));
-            Assert.IsTrue(draft.Select(ModuleSlotType.Weapon, DefaultContentCatalog.WeaponCannon));
-            Assert.IsTrue(draft.Select(ModuleSlotType.Control, DefaultContentCatalog.ControlBasic));
 
+            Assert.IsTrue(draft.Toggle(DefaultContentCatalog.ChassisBipod));
+            Assert.IsTrue(draft.Toggle(DefaultContentCatalog.ChassisTracks));
+            Assert.AreEqual(DefaultContentCatalog.ChassisTracks, draft.ChassisId, "Шасси одно: новое заменяет прежнее.");
+
+            draft.Toggle(DefaultContentCatalog.WeaponCannon);
+            draft.Toggle(DefaultContentCatalog.WeaponPhasers);
+            draft.Toggle(DefaultContentCatalog.WeaponMissiles);
+            draft.Toggle(DefaultContentCatalog.WeaponCannon);
+            CollectionAssert.AreEqual(new[] { DefaultContentCatalog.WeaponPhasers, DefaultContentCatalog.WeaponMissiles }, draft.WeaponIds);
+
+            draft.Toggle(DefaultContentCatalog.Electronics);
             var validation = draft.Validate();
 
             Assert.IsTrue(validation.IsValid);
-            Assert.AreEqual(390, validation.TotalCost);
-            Assert.IsFalse(draft.Select(ModuleSlotType.Control, DefaultContentCatalog.WeaponCannon));
+            Assert.AreEqual(16, validation.TotalCost);
+            Assert.AreEqual("ГУСЕНИЦЫ + ЭЛЕКТРОНИКА + ФАЗЕР + РАКЕТЫ", draft.DescribeSelection());
+        }
+
+        [Test]
+        public void ResourceStock_PlansPaymentWithoutChangingStock()
+        {
+            var stock = new ResourceStock();
+            stock[ResourceType.General] = 3;
+            stock[ResourceType.Nuclear] = 18;
+            var cost = new int[ResourceStock.TypeCount];
+            cost[(int)ResourceType.Nuclear] = 20;
+
+            Assert.IsTrue(stock.TryPlanPayment(cost, out int[] payment));
+            Assert.AreEqual(18, payment[(int)ResourceType.Nuclear]);
+            Assert.AreEqual(2, payment[(int)ResourceType.General]);
+            Assert.AreEqual(18, stock[ResourceType.Nuclear], "Планирование ничего не списывает.");
+
+            stock[ResourceType.General] = 1;
+            Assert.IsFalse(stock.TryPlanPayment(cost, out _));
         }
 
         [Test]
@@ -213,38 +177,40 @@ namespace Game.Core.Tests
         {
             var dispatcher = new CommandDispatcher(_catalog);
             var state = CreateTestMatch();
+            state.Robots[100] = new RobotState { Id = new EntityId(100), Owner = PlayerId.Player2, CurrentHealth = 100, Position = new SimVector2(10, 10) };
 
-            // Робот принадлежит Player2
-            var enemyRobot = new RobotState
-            {
-                Id = new EntityId(100),
-                Owner = PlayerId.Player2,
-                CurrentHealth = 100,
-                Position = new SimVector2(10, 10)
-            };
-            state.Robots[100] = enemyRobot;
-
-            // Player1 пытается отдать ему приказ
-            var cmd = new OrderMoveCommand
+            var res = dispatcher.Dispatch(new OrderMoveCommand
             {
                 PlayerId = PlayerId.Player1,
                 RobotIds = new List<EntityId> { new EntityId(100) },
                 TargetPosition = new SimVector2(0, 0)
-            };
-
-            var res = dispatcher.Dispatch(cmd, state);
+            }, state);
 
             Assert.IsFalse(res.IsSuccess);
             Assert.IsTrue(res.ErrorReason.Contains("принадлежит другому игроку"));
         }
 
+        [Test]
+        public void Detonate_RequiresNuclearCharge()
+        {
+            var dispatcher = new CommandDispatcher(_catalog);
+            var state = CreateTestMatch();
+            state.Robots[10] = new RobotState
+            {
+                Id = new EntityId(10), Owner = PlayerId.Player1, CurrentHealth = 100,
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint()
+            };
+
+            var res = dispatcher.Dispatch(new OrderDetonateCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(10) } }, state);
+
+            Assert.IsFalse(res.IsSuccess);
+            Assert.IsTrue(res.ErrorReason.Contains("нет ядерного заряда"));
+        }
+
         private MatchState CreateTestMatch()
         {
             var state = new MatchState();
-            state.Player1.Metal = 600;
-            state.Player2.Metal = 600;
-
-            var base1 = new BuildingState
+            state.Buildings[1] = new BuildingState
             {
                 Id = new EntityId(1),
                 Type = BuildingType.Base,
@@ -252,8 +218,6 @@ namespace Game.Core.Tests
                 Position = new SimVector2(0, 0),
                 SpawnPoint = new SimVector2(2, 0)
             };
-            state.Buildings[1] = base1;
-
             return state;
         }
     }

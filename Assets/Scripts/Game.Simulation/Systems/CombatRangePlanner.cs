@@ -15,13 +15,17 @@ namespace Game.Simulation.Systems
         public static bool TryGetManeuverDestination(RobotState attacker, RobotState target, IReadOnlyDictionary<string, ModuleDefinition> catalog, out SimVector2 destination)
         {
             destination = SimVector2.Zero;
-            if (attacker?.Blueprint == null || target == null || catalog == null ||
-                !catalog.TryGetValue(attacker.Blueprint.WeaponId, out ModuleDefinition weapon) || weapon.Range <= 0f)
-            {
-                return false;
-            }
+            if (attacker?.Blueprint == null || target == null || catalog == null) return false;
 
-            float effectiveRange = weapon.Range * EffectiveRangeFactor;
+            // Держим дальность самого короткого орудия, чтобы в бою участвовали все установленные.
+            float shortestRange = float.MaxValue;
+            foreach (string weaponId in attacker.Blueprint.WeaponIds)
+            {
+                if (catalog.TryGetValue(weaponId, out ModuleDefinition weapon) && weapon.Range > 0f) shortestRange = Math.Min(shortestRange, weapon.Range);
+            }
+            if (shortestRange == float.MaxValue) return false;
+
+            float effectiveRange = shortestRange * EffectiveRangeFactor;
             SimVector2 radial = attacker.Position - target.Position;
             float distance = radial.Magnitude;
             if (distance < 0.01f)

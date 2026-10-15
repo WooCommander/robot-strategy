@@ -22,7 +22,6 @@ namespace Game.Simulation.Systems
     {
         public const int TicksPerSecond = 20;
         public const float FixedDeltaSeconds = 1f / TicksPerSecond;
-        public const int StartingMetal = 600;
         private const int MaxStepsPerFrame = 5;
 
         private readonly List<IMatchAgent> _agents = new List<IMatchAgent>();
@@ -68,8 +67,8 @@ namespace Game.Simulation.Systems
         public static MatchState CreateInitialState(MapDefinition map)
         {
             var state = new MatchState();
-            state.Player1.Metal = StartingMetal;
-            state.Player2.Metal = StartingMetal;
+            state.Player1.Resources[ResourceType.General] = EconomyRules.StartingGeneral;
+            state.Player2.Resources[ResourceType.General] = EconomyRules.StartingGeneral;
             foreach (BuildingSpawnDefinition definition in map.Buildings)
             {
                 state.Buildings[definition.EntityIdValue] = new BuildingState
@@ -79,7 +78,8 @@ namespace Game.Simulation.Systems
                     Owner = definition.InitialOwner,
                     Position = definition.Position,
                     SpawnPoint = definition.SpawnPoint,
-                    CaptureRadius = definition.CaptureRadius
+                    CaptureRadius = definition.CaptureRadius,
+                    ProducedResource = definition.Type == BuildingType.Base ? ResourceType.General : definition.ProducedResource
                 };
             }
             return state;

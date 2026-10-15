@@ -30,11 +30,11 @@ namespace Game.Presentation.Views
         public void PlayLaunch(SimVector2 start, SimVector2 aimPosition, WeaponType weaponType)
         {
             Initialize();
-            Color color = weaponType == WeaponType.AreaMissile ? new Color(1f, 0.3f, 0.1f) : new Color(1f, 0.85f, 0.2f);
+            Color color = GetWeaponColor(weaponType);
             LineRenderer trace = _freeTraces.Count > 0 ? _freeTraces.Dequeue() : CreateTrace();
             trace.startColor = color;
             trace.endColor = color;
-            trace.startWidth = weaponType == WeaponType.AreaMissile ? 0.16f : 0.08f;
+            trace.startWidth = weaponType == WeaponType.AreaMissile ? 0.16f : weaponType == WeaponType.Phaser ? 0.12f : 0.08f;
             trace.endWidth = trace.startWidth;
             trace.SetPosition(0, new Vector3(start.X, 1.1f, start.Y));
             trace.SetPosition(1, new Vector3(aimPosition.X, 1.1f, aimPosition.Y));
@@ -44,24 +44,35 @@ namespace Game.Presentation.Views
 
         public void PlayImpact(SimVector2 impactPosition, WeaponType weaponType)
         {
+            PlayFlash(impactPosition, GetWeaponColor(weaponType), weaponType == WeaponType.AreaMissile ? 0.8f : 0.35f, EffectDuration);
+        }
+
+        public void PlayNuclearBlast(SimVector2 center, float radius)
+        {
+            PlayFlash(center, new Color(1f, 0.95f, 0.6f), radius * 2f, EffectDuration * 4f);
+        }
+
+        private void PlayFlash(SimVector2 position, Color color, float scale, float duration)
+        {
             Initialize();
-            Color color = weaponType == WeaponType.AreaMissile ? new Color(1f, 0.3f, 0.1f) : new Color(1f, 0.85f, 0.2f);
             Transform impact = _freeImpacts.Count > 0 ? _freeImpacts.Dequeue() : null;
-            if (impact == null) impact = CreateImpact();
-            impact.position = new Vector3(impactPosition.X, 1.1f, impactPosition.Y);
-            impact.localScale = Vector3.one * (weaponType == WeaponType.AreaMissile ? 0.8f : 0.35f);
+            // Объект из пула мог быть уничтожен вместе со сценой: создаём новый до настройки.
+            if (impact == null || impact.GetComponent<Renderer>() == null) impact = CreateImpact();
+            impact.position = new Vector3(position.X, 1.1f, position.Y);
+            impact.localScale = Vector3.one * scale;
             _impactProperties.SetColor("_Color", color);
             _impactProperties.SetColor("_BaseColor", color);
-            var impactRenderer = impact.GetComponent<Renderer>();
-            if (impactRenderer == null)
-            {
-                impact = CreateImpact();
-                impactRenderer = impact.GetComponent<Renderer>();
-            }
-            impactRenderer.SetPropertyBlock(_impactProperties);
+            impact.GetComponent<Renderer>().SetPropertyBlock(_impactProperties);
             impact.gameObject.SetActive(true);
-            _active.Add(new ActiveEffect { Impact = impact, ReleaseAt = Time.time + EffectDuration });
+            _active.Add(new ActiveEffect { Impact = impact, ReleaseAt = Time.time + duration });
         }
+
+        private static Color GetWeaponColor(WeaponType weaponType) => weaponType switch
+        {
+            WeaponType.AreaMissile => new Color(1f, 0.3f, 0.1f),
+            WeaponType.Phaser => new Color(0.3f, 0.95f, 1f),
+            _ => new Color(1f, 0.85f, 0.2f)
+        };
 
         private void Update()
         {

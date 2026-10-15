@@ -67,8 +67,8 @@ namespace Game.Core.Tests
         private static MatchState CreateMatch()
         {
             var state = new MatchState();
-            state.Player1.Metal = 600;
-            state.Player2.Metal = 600;
+            state.Player1.Resources[ResourceType.General] = EconomyRules.StartingGeneral;
+            state.Player2.Resources[ResourceType.General] = EconomyRules.StartingGeneral;
             state.Buildings[1] = new BuildingState { Id = new EntityId(1), Type = BuildingType.Base, Owner = PlayerId.Player1, Position = new SimVector2(4f, 15f) };
             state.Buildings[2] = new BuildingState { Id = new EntityId(2), Type = BuildingType.Base, Owner = PlayerId.Player2, Position = new SimVector2(43f, 15f) };
             state.Buildings[101] = new BuildingState { Id = new EntityId(101), Type = BuildingType.Factory, Owner = PlayerId.Neutral, Position = new SimVector2(30f, 15f) };

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using UnityEngine;
 using Game.Content.Definitions;
 using Game.Core.Models;
@@ -7,183 +6,111 @@ using Game.Presentation.Views;
 
 namespace Game.Presentation.Robots
 {
+    /// <summary>
+    /// Собирает модель робота стопкой, как в Nether Earth: шасси внизу, над ним орудия,
+    /// сверху электроника и ядерный заряд. Силуэт сразу показывает состав робота.
+    /// </summary>
     public static class ModularRobotBuilder
     {
         public static GameObject BuildRobotModel(RobotBlueprint blueprint, PlayerId owner)
         {
             var root = new GameObject($"Robot_{blueprint?.Name ?? "Modular"}");
-            Color teamColor = BuildingView.GetPlayerColor(owner);
-            Color darkMetal = new Color(0.2f, 0.22f, 0.25f);
-            Color armorMetal = new Color(0.35f, 0.38f, 0.42f);
+            var teamMat = CreateSimpleMaterial(BuildingView.GetPlayerColor(owner), "Mat_TeamColor");
+            var darkMat = CreateSimpleMaterial(new Color(0.2f, 0.22f, 0.25f), "Mat_DarkMetal");
+            var lightMat = CreateSimpleMaterial(new Color(0.55f, 0.58f, 0.62f), "Mat_LightMetal");
 
-            var teamMat = CreateSimpleMaterial(teamColor, "Mat_TeamColor");
-            var darkMat = CreateSimpleMaterial(darkMetal, "Mat_DarkMetal");
-            var armorMat = CreateSimpleMaterial(armorMetal, "Mat_ArmorMetal");
-
-            // 1. Шасси (Chassis)
-            var chassisGo = new GameObject("Chassis");
-            chassisGo.transform.SetParent(root.transform, false);
-
-            float bodyHeight = 0.5f;
-
-            if (blueprint?.ChassisId == DefaultContentCatalog.ChassisTracks)
+            float height = BuildChassis(root.transform, blueprint?.ChassisId, darkMat, lightMat, teamMat);
+            if (blueprint?.WeaponIds != null)
             {
-                // Гусеничное шасси: центральная база + 2 гусеничных трака
-                bodyHeight = 0.55f;
-
-                var mainChassis = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mainChassis.name = "Chassis_Center";
-                mainChassis.transform.SetParent(chassisGo.transform, false);
-                mainChassis.transform.localScale = new Vector3(0.9f, 0.3f, 1.3f);
-                mainChassis.transform.localPosition = new Vector3(0f, 0.2f, 0f);
-                mainChassis.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-                // Левый трак
-                var leftTrack = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                leftTrack.name = "Track_Left";
-                leftTrack.transform.SetParent(chassisGo.transform, false);
-                leftTrack.transform.localScale = new Vector3(0.3f, 0.45f, 1.5f);
-                leftTrack.transform.localPosition = new Vector3(-0.55f, 0.22f, 0f);
-                leftTrack.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-                // Правый трак
-                var rightTrack = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                rightTrack.name = "Track_Right";
-                rightTrack.transform.SetParent(chassisGo.transform, false);
-                rightTrack.transform.localScale = new Vector3(0.3f, 0.45f, 1.5f);
-                rightTrack.transform.localPosition = new Vector3(0.55f, 0.22f, 0f);
-                rightTrack.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
+                foreach (string weaponId in blueprint.WeaponIds)
+                {
+                    height = BuildWeapon(root.transform, weaponId, height, darkMat, teamMat);
+                }
             }
-            else
+            if (blueprint != null && blueprint.HasElectronics)
             {
-                // Двуногое шасси (Biped): опора + 2 шагающие ноги
-                bodyHeight = 0.75f;
-
-                var hip = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                hip.name = "Chassis_Hip";
-                hip.transform.SetParent(chassisGo.transform, false);
-                hip.transform.localScale = new Vector3(0.8f, 0.25f, 0.6f);
-                hip.transform.localPosition = new Vector3(0f, 0.55f, 0f);
-                hip.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-                // Нога левая
-                var legLeft = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                legLeft.name = "Leg_Left";
-                legLeft.transform.SetParent(chassisGo.transform, false);
-                legLeft.transform.localScale = new Vector3(0.2f, 0.3f, 0.2f);
-                legLeft.transform.localPosition = new Vector3(-0.4f, 0.3f, 0f);
-                legLeft.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-                // Нога правая
-                var legRight = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                legRight.name = "Leg_Right";
-                legRight.transform.SetParent(chassisGo.transform, false);
-                legRight.transform.localScale = new Vector3(0.2f, 0.3f, 0.2f);
-                legRight.transform.localPosition = new Vector3(0.4f, 0.3f, 0f);
-                legRight.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
+                AddPart(root.transform, "Electronics_Box", PrimitiveType.Cube, new Vector3(0f, height + 0.12f, -0.1f), new Vector3(0.45f, 0.24f, 0.4f), lightMat);
+                AddPart(root.transform, "Electronics_Antenna", PrimitiveType.Cylinder, new Vector3(0.15f, height + 0.45f, -0.15f), new Vector3(0.04f, 0.22f, 0.04f), darkMat);
+                height += 0.3f;
+            }
+            if (blueprint != null && blueprint.HasNuclear)
+            {
+                var nuclearMat = CreateSimpleMaterial(new Color(0.95f, 0.8f, 0.1f), "Mat_Nuclear");
+                AddPart(root.transform, "Nuclear_Core", PrimitiveType.Sphere, new Vector3(0f, height + 0.22f, 0f), Vector3.one * 0.45f, nuclearMat);
+                height += 0.45f;
             }
 
-            // 2. Корпус (Body)
-            var bodyGo = new GameObject("Body");
-            bodyGo.transform.SetParent(root.transform, false);
-            bodyGo.transform.localPosition = new Vector3(0f, bodyHeight, 0f);
-
-            float weaponMountHeight = 0.45f;
-
-            if (blueprint?.BodyId == DefaultContentCatalog.BodyHeavy)
-            {
-                // Тяжёлый корпус: массивный блок с бронескосами
-                weaponMountHeight = 0.6f;
-
-                var mainBlock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mainBlock.name = "Body_HeavyMain";
-                mainBlock.transform.SetParent(bodyGo.transform, false);
-                mainBlock.transform.localScale = new Vector3(1.1f, 0.6f, 1.2f);
-                mainBlock.transform.localPosition = new Vector3(0f, 0.3f, 0f);
-                mainBlock.GetComponent<MeshRenderer>().sharedMaterial = teamMat;
-            }
-            else
-            {
-                // Лёгкий корпус: компактный клиновидный блок
-                weaponMountHeight = 0.4f;
-
-                var mainBlock = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mainBlock.name = "Body_LightMain";
-                mainBlock.transform.SetParent(bodyGo.transform, false);
-                mainBlock.transform.localScale = new Vector3(0.8f, 0.4f, 0.9f);
-                mainBlock.transform.localPosition = new Vector3(0f, 0.2f, 0f);
-                mainBlock.GetComponent<MeshRenderer>().sharedMaterial = teamMat;
-            }
-
-            // 3. Оборудование (Броня)
-            if (blueprint?.EquipmentId == DefaultContentCatalog.EquipArmor)
-            {
-                // Бортовые экраны слева и справа
-                var armorLeft = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                armorLeft.name = "Armor_Shield_L";
-                armorLeft.transform.SetParent(bodyGo.transform, false);
-                armorLeft.transform.localScale = new Vector3(0.12f, 0.45f, 1.1f);
-                armorLeft.transform.localPosition = new Vector3(-0.62f, 0.25f, 0f);
-                armorLeft.GetComponent<MeshRenderer>().sharedMaterial = armorMat;
-
-                var armorRight = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                armorRight.name = "Armor_Shield_R";
-                armorRight.transform.SetParent(bodyGo.transform, false);
-                armorRight.transform.localScale = new Vector3(0.12f, 0.45f, 1.1f);
-                armorRight.transform.localPosition = new Vector3(0.62f, 0.25f, 0f);
-                armorRight.GetComponent<MeshRenderer>().sharedMaterial = armorMat;
-            }
-
-            // 4. Оружие (Weapon)
-            var weaponGo = new GameObject("Weapon_Turret");
-            weaponGo.transform.SetParent(bodyGo.transform, false);
-            weaponGo.transform.localPosition = new Vector3(0f, weaponMountHeight, 0.05f);
-
-            // Башенка
-            var turretBase = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            turretBase.name = "Turret_Base";
-            turretBase.transform.SetParent(weaponGo.transform, false);
-            turretBase.transform.localScale = new Vector3(0.5f, 0.15f, 0.5f);
-            turretBase.transform.localPosition = new Vector3(0f, 0.075f, 0f);
-            turretBase.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-            if (blueprint?.WeaponId == DefaultContentCatalog.WeaponMissiles)
-            {
-                // Ракетная установка: пусковой контейнер
-                var launcher = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                launcher.name = "Missile_Pod";
-                launcher.transform.SetParent(weaponGo.transform, false);
-                launcher.transform.localScale = new Vector3(0.6f, 0.35f, 0.7f);
-                launcher.transform.localPosition = new Vector3(0f, 0.3f, 0f);
-                launcher.transform.localRotation = Quaternion.Euler(-15f, 0f, 0f); // Наклон вверх
-                launcher.GetComponent<MeshRenderer>().sharedMaterial = teamMat;
-            }
-            else
-            {
-                // Пушка: танковый ствол
-                var mantlet = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                mantlet.name = "Gun_Mantlet";
-                mantlet.transform.SetParent(weaponGo.transform, false);
-                mantlet.transform.localScale = new Vector3(0.35f, 0.25f, 0.4f);
-                mantlet.transform.localPosition = new Vector3(0f, 0.2f, 0.1f);
-                mantlet.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-
-                var barrel = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                barrel.name = "Gun_Barrel";
-                barrel.transform.SetParent(mantlet.transform, false);
-                barrel.transform.localScale = new Vector3(0.12f, 0.6f, 0.12f);
-                barrel.transform.localPosition = new Vector3(0f, 0f, 0.65f);
-                barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
-                barrel.GetComponent<MeshRenderer>().sharedMaterial = darkMat;
-            }
-
-            // Добавляем CapsuleCollider на корень для выбора юнита
-            var col = root.AddComponent<CapsuleCollider>();
-            col.radius = 0.7f;
-            col.height = bodyHeight + weaponMountHeight + 0.6f;
-            col.center = new Vector3(0f, col.height * 0.5f, 0f);
-
+            var collider = root.AddComponent<CapsuleCollider>();
+            collider.radius = 0.7f;
+            collider.height = height + 0.2f;
+            collider.center = new Vector3(0f, collider.height * 0.5f, 0f);
             return root;
+        }
+
+        /// <summary>Строит шасси и возвращает высоту его верхней площадки.</summary>
+        private static float BuildChassis(Transform root, string chassisId, Material darkMat, Material lightMat, Material teamMat)
+        {
+            if (chassisId == DefaultContentCatalog.ChassisTracks)
+            {
+                AddPart(root, "Track_Left", PrimitiveType.Cube, new Vector3(-0.55f, 0.22f, 0f), new Vector3(0.3f, 0.45f, 1.5f), darkMat);
+                AddPart(root, "Track_Right", PrimitiveType.Cube, new Vector3(0.55f, 0.22f, 0f), new Vector3(0.3f, 0.45f, 1.5f), darkMat);
+                AddPart(root, "Chassis_Deck", PrimitiveType.Cube, new Vector3(0f, 0.4f, 0f), new Vector3(1.0f, 0.2f, 1.2f), teamMat);
+                return 0.5f;
+            }
+            if (chassisId == DefaultContentCatalog.ChassisAntiGrav)
+            {
+                // Антиграв парит над землёй: светлый диск-излучатель и корпус над ним.
+                AddPart(root, "AntiGrav_Emitter", PrimitiveType.Cylinder, new Vector3(0f, 0.25f, 0f), new Vector3(1.2f, 0.06f, 1.2f), lightMat);
+                AddPart(root, "AntiGrav_Deck", PrimitiveType.Cube, new Vector3(0f, 0.45f, 0f), new Vector3(0.9f, 0.25f, 0.9f), teamMat);
+                return 0.58f;
+            }
+
+            AddPart(root, "Leg_Left", PrimitiveType.Cylinder, new Vector3(-0.35f, 0.3f, 0f), new Vector3(0.2f, 0.3f, 0.2f), darkMat);
+            AddPart(root, "Leg_Right", PrimitiveType.Cylinder, new Vector3(0.35f, 0.3f, 0f), new Vector3(0.2f, 0.3f, 0.2f), darkMat);
+            AddPart(root, "Chassis_Hip", PrimitiveType.Cube, new Vector3(0f, 0.68f, 0f), new Vector3(0.8f, 0.25f, 0.65f), teamMat);
+            return 0.8f;
+        }
+
+        /// <summary>Добавляет ярус орудия и возвращает новую высоту стопки.</summary>
+        private static float BuildWeapon(Transform root, string weaponId, float baseHeight, Material darkMat, Material teamMat)
+        {
+            var mount = new GameObject("Weapon_" + weaponId).transform;
+            mount.SetParent(root, false);
+            mount.localPosition = new Vector3(0f, baseHeight, 0f);
+
+            if (weaponId == DefaultContentCatalog.WeaponMissiles)
+            {
+                AddPart(mount, "Missile_Pod", PrimitiveType.Cube, new Vector3(0f, 0.17f, 0f), new Vector3(0.7f, 0.32f, 0.7f), teamMat);
+                for (int index = -1; index <= 1; index++)
+                {
+                    AddPart(mount, "Missile_Tube" + index, PrimitiveType.Cylinder, new Vector3(index * 0.2f, 0.2f, 0.4f), new Vector3(0.12f, 0.12f, 0.12f), darkMat)
+                        .transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                }
+                return baseHeight + 0.34f;
+            }
+            if (weaponId == DefaultContentCatalog.WeaponPhasers)
+            {
+                AddPart(mount, "Phaser_Housing", PrimitiveType.Cube, new Vector3(0f, 0.14f, 0f), new Vector3(0.6f, 0.26f, 0.6f), darkMat);
+                var lens = AddPart(mount, "Phaser_Emitter", PrimitiveType.Cylinder, new Vector3(0f, 0.14f, 0.45f), new Vector3(0.22f, 0.15f, 0.22f), CreateSimpleMaterial(new Color(0.3f, 0.95f, 1f), "Mat_Phaser"));
+                lens.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+                return baseHeight + 0.28f;
+            }
+
+            AddPart(mount, "Gun_Mantlet", PrimitiveType.Cube, new Vector3(0f, 0.13f, 0f), new Vector3(0.5f, 0.26f, 0.5f), teamMat);
+            var barrel = AddPart(mount, "Gun_Barrel", PrimitiveType.Cylinder, new Vector3(0f, 0.13f, 0.55f), new Vector3(0.12f, 0.35f, 0.12f), darkMat);
+            barrel.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
+            return baseHeight + 0.28f;
+        }
+
+        private static GameObject AddPart(Transform parent, string name, PrimitiveType primitive, Vector3 localPosition, Vector3 localScale, Material material)
+        {
+            var part = GameObject.CreatePrimitive(primitive);
+            part.name = name;
+            part.transform.SetParent(parent, false);
+            part.transform.localPosition = localPosition;
+            part.transform.localScale = localScale;
+            part.GetComponent<MeshRenderer>().sharedMaterial = material;
+            return part;
         }
 
         private static Material CreateSimpleMaterial(Color color, string name)

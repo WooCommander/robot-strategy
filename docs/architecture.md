@@ -40,7 +40,7 @@ graph TD
 
 2. **Game.Simulation** (чистый C#)
    - `MatchSimulation`: тактовый цикл с фиксированным шагом (20 тиков/с). Порядок тика: команды replay → агенты (ИИ) → `ProductionSystem` → `OrderPlanner` → `MovementSystem` → `CombatSystem` → `CaptureSystem`. Сцена вызывает `AdvanceFrame(Time.deltaTime)`, `HeadlessMatchRunner` — тот же `Step`, поэтому журнал команд воспроизводит матч независимо от FPS.
-   - `ProductionSystem`: начисление металла, очереди производства, блокировка выходов.
+   - `ProductionSystem`: почасовой доход ресурсов по типам (`GameClock`, `EconomyRules`, `ResourceStock`), очереди производства, блокировка выходов.
    - `NavigationGrid` / `AStarPathfinder` / `BuildingFootprint`: дискретная сетка проходимости с корпусами зданий, расчёт путей.
    - `OrderPlanner`: превращает приказы (захват, оборона, разведка, движение, атака, охота) в маршруты и боевой манёвр.
    - `MovementSystem`: следование по пути и ручной привод, локальный объезд роботов и зданий, скорость и курс.

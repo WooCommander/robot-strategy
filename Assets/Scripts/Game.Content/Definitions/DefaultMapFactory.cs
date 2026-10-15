@@ -114,7 +114,8 @@ namespace Game.Content.Definitions
                 InitialOwner = PlayerId.Neutral,
                 Position = new SimVector2(midX + 0.5f, 24.5f),
                 SpawnPoint = new SimVector2(midX + 0.5f, 23.0f),
-                CaptureRadius = 2.5f
+                CaptureRadius = 2.5f,
+                ProducedResource = ResourceType.Electronics
             });
 
             // 4. Центральный нейтральный завод (у моста)
@@ -125,7 +126,8 @@ namespace Game.Content.Definitions
                 InitialOwner = PlayerId.Neutral,
                 Position = new SimVector2(midX + 0.5f, 15.0f),
                 SpawnPoint = new SimVector2(midX + 0.5f, 13.0f),
-                CaptureRadius = 2.5f
+                CaptureRadius = 2.5f,
+                ProducedResource = ResourceType.Nuclear
             });
 
             // 5. Южный нейтральный завод
@@ -136,10 +138,12 @@ namespace Game.Content.Definitions
                 InitialOwner = PlayerId.Neutral,
                 Position = new SimVector2(midX + 0.5f, 5.5f),
                 SpawnPoint = new SimVector2(midX + 0.5f, 7.0f),
-                CaptureRadius = 2.5f
+                CaptureRadius = 2.5f,
+                ProducedResource = ResourceType.Phasers
             });
 
             int[] flankRows = { 8, 15, 22 };
+            ResourceType[] flankResources = { ResourceType.Missiles, ResourceType.Cannon, ResourceType.Chassis };
             for (int index = flankRows.Length - 1; index > 0; index--)
             {
                 int swapIndex = random.Next(index + 1);
@@ -160,7 +164,8 @@ namespace Game.Content.Definitions
                     InitialOwner = PlayerId.Neutral,
                     Position = new SimVector2(x, flankRows[index] + 0.5f),
                     SpawnPoint = new SimVector2(spawnX, flankRows[index] + 0.5f),
-                    CaptureRadius = 2.5f
+                    CaptureRadius = 2.5f,
+                    ProducedResource = flankResources[index]
                 });
             }
 

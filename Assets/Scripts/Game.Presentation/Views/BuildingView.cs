@@ -1,6 +1,7 @@
 using UnityEngine;
 using Game.Core.Models;
 using Game.Core.Types;
+using Game.Content.Definitions;
 
 namespace Game.Presentation.Views
 {
@@ -11,6 +12,7 @@ namespace Game.Presentation.Views
         [SerializeField] private BuildingType _type;
         [SerializeField] private PlayerId _owner = PlayerId.Neutral;
         [SerializeField] private float _captureRadius = 3f;
+        [SerializeField] private ResourceType _producedResource;
 
         [Header("Visuals")]
         [SerializeField] private MeshRenderer _buildingRenderer;
@@ -24,6 +26,9 @@ namespace Game.Presentation.Views
         public int EntityId => _entityId;
         public BuildingType Type => _type;
         public PlayerId Owner => _owner;
+        public ResourceType ProducedResource => _producedResource;
+        /// <summary>Подпись как в оригинале: завод называется по тому, что производит.</summary>
+        public string DisplayName => _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД: {DefaultContentCatalog.GetResourceName(_producedResource).ToUpperInvariant()}";
 
         public void Initialize(BuildingSpawnDefinition def)
         {
@@ -31,6 +36,7 @@ namespace Game.Presentation.Views
             _type = def.Type;
             _owner = def.InitialOwner;
             _captureRadius = def.CaptureRadius;
+            _producedResource = def.ProducedResource;
 
             transform.position = new Vector3(def.Position.X, 0f, def.Position.Y);
             gameObject.name = $"{def.Type}_{def.EntityIdValue}_{def.InitialOwner}";
@@ -126,7 +132,7 @@ namespace Game.Presentation.Views
                 _nameLabel.characterSize = 0.1f;
                 _nameLabel.alignment = TextAlignment.Center;
                 _nameLabel.anchor = TextAnchor.MiddleCenter;
-                _nameLabel.text = _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД #{_entityId}";
+                _nameLabel.text = DisplayName;
             }
 
             var captureLabelObj = new GameObject("CaptureProgress");
@@ -279,7 +285,7 @@ namespace Game.Presentation.Views
 
             if (_nameLabel != null)
             {
-                string baseName = _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД #{_entityId}";
+                string baseName = DisplayName;
                 _nameLabel.text = selected ? $"★ {baseName} (ВЫБРАН) ★" : baseName;
                 _nameLabel.color = selected ? Color.yellow : Color.white;
             }

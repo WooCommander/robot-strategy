@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using Game.Core.Models;
 
@@ -8,56 +7,68 @@ namespace Game.Content.Definitions
     {
         public string Id { get; set; }
         public string Name { get; set; }
-        public string CardTitle { get; set; }
-        public string ModulesLabel { get; set; }
         public float BuildTimeSeconds { get; set; }
         public string ChassisId { get; set; }
-        public string BodyId { get; set; }
-        public string WeaponId { get; set; }
-        public string ControlModuleId { get; set; }
-        public string EquipmentId { get; set; }
+        public string[] WeaponIds { get; set; } = new string[0];
+        public string ElectronicsId { get; set; }
+        public string NuclearId { get; set; }
 
-        public RobotBlueprint CreateBlueprint() => new RobotBlueprint(
-            $"{Id}_{Guid.NewGuid():N}", Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId);
+        // ID чертежа детерминирован: ИИ заказывает роботов внутри симуляции, и replay должен совпадать.
+        public RobotBlueprint CreateBlueprint() => new RobotBlueprint(Id, Name, ChassisId, WeaponIds, ElectronicsId, NuclearId);
 
-        public int GetCost(IReadOnlyDictionary<string, ModuleDefinition> modules)
+        public int[] GetCostByType(IReadOnlyDictionary<string, ModuleDefinition> modules)
         {
-            int cost = 0;
+            var cost = new int[ResourceStock.TypeCount];
             foreach (string moduleId in CreateBlueprint().GetAllModuleIds())
             {
-                if (modules.TryGetValue(moduleId, out var module)) cost += module.Cost;
+                if (modules.TryGetValue(moduleId, out var module)) cost[(int)module.Resource] += module.Cost;
             }
             return cost;
         }
 
-        public bool Matches(RobotBlueprint blueprint) => blueprint != null &&
-            blueprint.ChassisId == ChassisId && blueprint.BodyId == BodyId &&
-            blueprint.WeaponId == WeaponId && blueprint.ControlModuleId == ControlModuleId && blueprint.EquipmentId == EquipmentId;
+        public bool Matches(RobotBlueprint blueprint)
+        {
+            if (blueprint == null || blueprint.ChassisId != ChassisId || blueprint.ElectronicsId != ElectronicsId || blueprint.NuclearId != NuclearId) return false;
+            if (blueprint.WeaponIds == null || blueprint.WeaponIds.Count != WeaponIds.Length) return false;
+            foreach (string weaponId in WeaponIds)
+            {
+                if (!blueprint.WeaponIds.Contains(weaponId)) return false;
+            }
+            return true;
+        }
     }
 
     public static class RobotPresetCatalog
     {
         public static readonly RobotPresetDefinition Scout = new RobotPresetDefinition
         {
-            Id = "scout", Name = "Разведчик", CardTitle = "РАЗВЕДЧИК", ModulesLabel = "Ноги + Пушка", BuildTimeSeconds = 8f,
-            ChassisId = DefaultContentCatalog.ChassisBiped, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponCannon, ControlModuleId = DefaultContentCatalog.ControlBasic
+            Id = "scout", Name = "Разведчик", BuildTimeSeconds = 6f,
+            ChassisId = DefaultContentCatalog.ChassisBipod, WeaponIds = new[] { DefaultContentCatalog.WeaponCannon }
         };
         public static readonly RobotPresetDefinition Tank = new RobotPresetDefinition
         {
-            Id = "tank", Name = "Танк", CardTitle = "ТЯЖЁЛЫЙ ТАНК", ModulesLabel = "Гусеницы + Броня", BuildTimeSeconds = 12f,
-            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyHeavy, WeaponId = DefaultContentCatalog.WeaponCannon, ControlModuleId = DefaultContentCatalog.ControlTactical, EquipmentId = DefaultContentCatalog.EquipArmor
+            Id = "tank", Name = "Танк", BuildTimeSeconds = 10f,
+            ChassisId = DefaultContentCatalog.ChassisTracks, WeaponIds = new[] { DefaultContentCatalog.WeaponPhasers, DefaultContentCatalog.WeaponCannon }
         };
         public static readonly RobotPresetDefinition Missile = new RobotPresetDefinition
         {
-            Id = "missile", Name = "Ракетчик", CardTitle = "РАКЕТЧИК", ModulesLabel = "Гусеницы + Ракеты", BuildTimeSeconds = 10f,
-            ChassisId = DefaultContentCatalog.ChassisTracks, BodyId = DefaultContentCatalog.BodyLight, WeaponId = DefaultContentCatalog.WeaponMissiles, ControlModuleId = DefaultContentCatalog.ControlBasic
+            Id = "missile", Name = "Ракетчик", BuildTimeSeconds = 9f,
+            ChassisId = DefaultContentCatalog.ChassisTracks, WeaponIds = new[] { DefaultContentCatalog.WeaponMissiles }, ElectronicsId = DefaultContentCatalog.Electronics
         };
 
-        private static readonly RobotPresetDefinition[] Presets = { Scout, Tank, Missile };
+        public static readonly RobotPresetDefinition Heavy = new RobotPresetDefinition
+        {
+            Id = "heavy", Name = "Тяжёлый", BuildTimeSeconds = 12f,
+            ChassisId = DefaultContentCatalog.ChassisTracks,
+            WeaponIds = new[] { DefaultContentCatalog.WeaponPhasers, DefaultContentCatalog.WeaponMissiles, DefaultContentCatalog.WeaponCannon },
+            ElectronicsId = DefaultContentCatalog.Electronics
+        };
+
+        public static readonly RobotPresetDefinition[] All = { Scout, Tank, Missile, Heavy };
 
         public static bool TryFind(RobotBlueprint blueprint, out RobotPresetDefinition preset)
         {
-            foreach (var candidate in Presets)
+            foreach (var candidate in All)
             {
                 if (candidate.Matches(blueprint)) { preset = candidate; return true; }
             }

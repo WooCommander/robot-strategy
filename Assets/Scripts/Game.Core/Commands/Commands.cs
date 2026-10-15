@@ -15,6 +15,7 @@ namespace Game.Core.Commands
         Hunt = 6,
         Scout = 7,
         Drive = 8,
+        Detonate = 9,
         EnqueueProduction = 10,
         CancelProduction = 11
     }
@@ -117,6 +118,16 @@ namespace Game.Core.Commands
         public CommandType Type => CommandType.Scout;
         public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
         public SimVector2 TargetPosition { get; set; }
+    }
+
+    /// <summary>Подрыв ядерного заряда робота: уничтожает всех роботов в радиусе взрыва, включая самого носителя.</summary>
+    [Serializable]
+    public class OrderDetonateCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.Detonate;
+        public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
     }
 
     /// <summary>Ручное управление: робот едет в направлении, пока не придёт новое направление или приказ.</summary>

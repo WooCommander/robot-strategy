@@ -90,8 +90,8 @@ namespace Game.Core.Tests
             runner.RunTicks(replayState, live.CommandLog, live.State.Tick);
 
             Assert.AreEqual(live.State.Tick, replayState.Tick);
-            Assert.AreEqual(live.State.Player1.Metal, replayState.Player1.Metal);
-            Assert.AreEqual(live.State.Player2.Metal, replayState.Player2.Metal);
+            CollectionAssert.AreEqual(live.State.Player1.Resources.ToArray(), replayState.Player1.Resources.ToArray());
+            CollectionAssert.AreEqual(live.State.Player2.Resources.ToArray(), replayState.Player2.Resources.ToArray());
             Assert.AreEqual(live.State.Robots.Count, replayState.Robots.Count);
             Assert.Greater(live.State.Robots.Count, 1, "В прогоне должны участвовать роботы обеих сторон.");
             foreach (RobotState expected in live.State.Robots.Values)

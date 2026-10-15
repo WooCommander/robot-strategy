@@ -53,6 +53,7 @@ namespace Game.Core.Commands
                 case OrderHuntCommand hunt: record.SetRobots(hunt.RobotIds); break;
                 case OrderScoutCommand scout: record.SetRobots(scout.RobotIds); record.SetTarget(scout.TargetPosition); break;
                 case OrderDriveCommand drive: record.SetRobots(drive.RobotIds); record.SetTarget(drive.Direction); break;
+                case OrderDetonateCommand detonate: record.SetRobots(detonate.RobotIds); break;
                 case EnqueueProductionCommand enqueue: record.TargetEntityId = enqueue.BaseBuildingId.Value; record.Blueprint = ReplayBlueprint.From(enqueue.Blueprint); break;
                 case CancelProductionCommand cancel: record.TargetEntityId = cancel.BaseBuildingId.Value; record.OrderId = cancel.OrderId; break;
                 default: throw new NotSupportedException($"Команда {command.GetType().Name} не поддерживается в replay.");
@@ -72,6 +73,7 @@ namespace Game.Core.Commands
                 CommandType.Stop => new OrderStopCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Hunt => new OrderHuntCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Scout => new OrderScoutCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, TargetPosition = TargetPosition },
+                CommandType.Detonate => new OrderDetonateCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Drive => new OrderDriveCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, Direction = TargetPosition },
                 CommandType.EnqueueProduction => new EnqueueProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), Blueprint = Blueprint?.ToBlueprint() },
                 CommandType.CancelProduction => new CancelProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), OrderId = OrderId },
@@ -98,8 +100,8 @@ namespace Game.Core.Commands
     [Serializable]
     public sealed class ReplayBlueprint
     {
-        public string Id; public string Name; public string ChassisId; public string BodyId; public string WeaponId; public string SecondaryWeaponId; public string ControlModuleId; public string EquipmentId;
-        public static ReplayBlueprint From(RobotBlueprint blueprint) => blueprint == null ? null : new ReplayBlueprint { Id = blueprint.Id, Name = blueprint.Name, ChassisId = blueprint.ChassisId, BodyId = blueprint.BodyId, WeaponId = blueprint.WeaponId, SecondaryWeaponId = blueprint.SecondaryWeaponId, ControlModuleId = blueprint.ControlModuleId, EquipmentId = blueprint.EquipmentId };
-        public RobotBlueprint ToBlueprint() => new RobotBlueprint(Id, Name, ChassisId, BodyId, WeaponId, ControlModuleId, EquipmentId, SecondaryWeaponId);
+        public string Id; public string Name; public string ChassisId; public List<string> WeaponIds = new List<string>(); public string ElectronicsId; public string NuclearId;
+        public static ReplayBlueprint From(RobotBlueprint blueprint) => blueprint == null ? null : new ReplayBlueprint { Id = blueprint.Id, Name = blueprint.Name, ChassisId = blueprint.ChassisId, WeaponIds = new List<string>(blueprint.WeaponIds ?? new List<string>()), ElectronicsId = blueprint.ElectronicsId, NuclearId = blueprint.NuclearId };
+        public RobotBlueprint ToBlueprint() => new RobotBlueprint(Id, Name, ChassisId, WeaponIds, ElectronicsId, NuclearId);
     }
 }

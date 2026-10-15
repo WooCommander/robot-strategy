@@ -8,12 +8,18 @@ namespace Game.Simulation.Systems
 {
     public sealed class CombatSystem
     {
+        /// <summary>Попадание пушки проверяется по габариту корпуса, а не по точке в центре.</summary>
+        private const float CannonHitRadius = 1.6f;
+
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
+        private readonly List<RobotState> _blastTargets = new List<RobotState>();
 
         public event Action<RobotState, RobotState> OnRobotDestroyed;
         public event Action<RobotState, RobotState, WeaponType> OnWeaponFired;
         public event Action<RobotState, SimVector2, WeaponType> OnProjectileImpact;
         public event Action<RobotState, int> OnDamageDealt;
+        /// <summary>Носитель, точка и радиус ядерного взрыва.</summary>
+        public event Action<RobotState, SimVector2, float> OnNuclearDetonated;
 
         public CombatSystem(IReadOnlyDictionary<string, ModuleDefinition> catalog)
         {
@@ -27,34 +33,41 @@ namespace Game.Simulation.Systems
                 return;
             }
 
-            foreach (var attacker in state.Robots.Values)
+            foreach (var robot in state.Robots.Values)
             {
-                if (!attacker.IsAlive)
+                if (!robot.IsAlive || robot.Blueprint == null) continue;
+                if (robot.CurrentOrder?.Type == OrderType.Detonate)
                 {
+                    Detonate(robot, state);
                     continue;
                 }
 
-                attacker.WeaponCooldownRemaining = Math.Max(0f, attacker.WeaponCooldownRemaining - deltaSeconds);
-                TryAttack(attacker, state);
+                List<string> weaponIds = robot.Blueprint.WeaponIds;
+                if (weaponIds == null) continue;
+                while (robot.WeaponCooldowns.Count < weaponIds.Count) robot.WeaponCooldowns.Add(0f);
+                for (int index = 0; index < weaponIds.Count && robot.IsAlive; index++)
+                {
+                    robot.WeaponCooldowns[index] = Math.Max(0f, robot.WeaponCooldowns[index] - deltaSeconds);
+                    if (_catalog.TryGetValue(weaponIds[index], out ModuleDefinition weapon) && weapon.SlotType == ModuleSlotType.Weapon)
+                    {
+                        TryFire(robot, weapon, index, state);
+                    }
+                }
             }
             UpdateProjectiles(state, deltaSeconds);
         }
 
-        private void TryAttack(RobotState attacker, MatchState state)
+        private void TryFire(RobotState attacker, ModuleDefinition weapon, int weaponIndex, MatchState state)
         {
-            if ((attacker.CurrentOrder?.Type != OrderType.Attack && attacker.CurrentOrder?.Type != OrderType.Hunt &&
-                 attacker.CurrentOrder?.Type != OrderType.Defend && attacker.CurrentOrder?.Type != OrderType.Capture) ||
-                attacker.WeaponCooldownRemaining > 0f)
+            OrderType order = attacker.CurrentOrder?.Type ?? OrderType.None;
+            if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture) ||
+                attacker.WeaponCooldowns[weaponIndex] > 0f)
             {
                 return;
             }
 
-            if (attacker.Blueprint == null || string.IsNullOrEmpty(attacker.Blueprint.WeaponId) ||
-                !_catalog.TryGetValue(attacker.Blueprint.WeaponId, out var weapon) || weapon.SlotType != ModuleSlotType.Weapon)
-                return;
-
             RobotState target = null;
-            if (attacker.CurrentOrder.Type == OrderType.Attack)
+            if (order == OrderType.Attack)
             {
                 if (!state.Robots.TryGetValue(attacker.CurrentOrder.TargetEntityId.Value, out target) ||
                     !target.IsAlive || target.Owner == attacker.Owner)
@@ -65,7 +78,7 @@ namespace Game.Simulation.Systems
             }
             else
             {
-                // Захват сохраняет ID здания в приказе; боевую цель выбираем отдельно.
+                // Захват сохраняет ID здания в приказе; боевую цель каждое орудие выбирает в своей дальности.
                 float nearest = weapon.Range * weapon.Range;
                 foreach (var candidate in state.Robots.Values)
                 {
@@ -78,14 +91,21 @@ namespace Game.Simulation.Systems
             }
             if (target == null || SimVector2.SqrDistance(attacker.Position, target.Position) > weapon.Range * weapon.Range) return;
 
-            attacker.WeaponCooldownRemaining = weapon.CooldownSeconds;
-            ModuleDefinition controller = null;
-            if (!string.IsNullOrEmpty(attacker.Blueprint.ControlModuleId))
+            attacker.WeaponCooldowns[weaponIndex] = weapon.CooldownSeconds;
+            if (weapon.ProjectileSpeed <= 0f)
             {
-                _catalog.TryGetValue(attacker.Blueprint.ControlModuleId, out controller);
+                // Фазер — мгновенный луч: урон применяется до визуальных событий.
+                OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
+                SimVector2 impact = target.Position;
+                ApplyDamage(attacker, target, weapon.Damage, state);
+                OnProjectileImpact?.Invoke(attacker, impact, weapon.WeaponType);
+                return;
             }
-            float speed = Math.Max(0.1f, weapon.ProjectileSpeed);
-            float travelSeconds = GetInterceptTime(attacker.Position, target.Position, target.Velocity, speed);
+
+            bool canGuide = attacker.Blueprint.HasElectronics &&
+                            _catalog.TryGetValue(attacker.Blueprint.ElectronicsId, out ModuleDefinition electronics) &&
+                            electronics.CanGuideMissiles;
+            float travelSeconds = GetInterceptTime(attacker.Position, target.Position, target.Velocity, weapon.ProjectileSpeed);
             state.Projectiles.Add(new ProjectileState
             {
                 SourceRobotId = attacker.Id,
@@ -96,9 +116,30 @@ namespace Game.Simulation.Systems
                 SplashRadius = weapon.SplashRadius,
                 ImpactPosition = target.Position + target.Velocity * travelSeconds,
                 RemainingTravelSeconds = travelSeconds,
-                IsGuided = weapon.WeaponType == WeaponType.AreaMissile && (controller?.CanGuideMissiles ?? false)
+                IsGuided = weapon.WeaponType == WeaponType.AreaMissile && canGuide
             });
             OnWeaponFired?.Invoke(attacker, target, weapon.WeaponType);
+        }
+
+        private void Detonate(RobotState carrier, MatchState state)
+        {
+            if (!carrier.Blueprint.HasNuclear || !_catalog.TryGetValue(carrier.Blueprint.NuclearId, out ModuleDefinition nuclear))
+            {
+                carrier.CurrentOrder = RobotOrder.Stop();
+                return;
+            }
+
+            SimVector2 center = carrier.Position;
+            float radiusSq = nuclear.BlastRadius * nuclear.BlastRadius;
+            _blastTargets.Clear();
+            foreach (var candidate in state.Robots.Values)
+            {
+                if (candidate != carrier && candidate.IsAlive && SimVector2.SqrDistance(candidate.Position, center) <= radiusSq) _blastTargets.Add(candidate);
+            }
+            // Взрыв не различает своих и чужих; носитель погибает последним, чтобы стать автором всех уничтожений.
+            _blastTargets.Add(carrier);
+            OnNuclearDetonated?.Invoke(carrier, center, nuclear.BlastRadius);
+            foreach (RobotState target in _blastTargets) ApplyDamage(carrier, target, nuclear.BlastDamage, state);
         }
 
         private static float GetInterceptTime(SimVector2 origin, SimVector2 target, SimVector2 velocity, float speed)
@@ -146,11 +187,9 @@ namespace Game.Simulation.Systems
 
         private void ApplyDirectHit(RobotState attacker, ProjectileState projectile, MatchState state)
         {
-            // Попадание проверяется по габариту корпуса, а не по математической точке в центре.
             // Манёвр всё ещё позволяет уйти от снаряда.
-            const float hitRadius = 1.6f;
             if (state.Robots.TryGetValue(projectile.TargetRobotId.Value, out RobotState target) && target.IsAlive &&
-                target.Owner != projectile.Owner && SimVector2.SqrDistance(target.Position, projectile.ImpactPosition) <= hitRadius * hitRadius)
+                target.Owner != projectile.Owner && SimVector2.SqrDistance(target.Position, projectile.ImpactPosition) <= CannonHitRadius * CannonHitRadius)
             {
                 ApplyDamage(attacker, target, projectile.Damage, state);
             }
@@ -177,6 +216,7 @@ namespace Game.Simulation.Systems
 
         private void ApplyDamage(RobotState attacker, RobotState target, int damage, MatchState state)
         {
+            if (!target.IsAlive) return;
             int appliedDamage = Math.Min(target.CurrentHealth, Math.Max(0, damage));
             target.CurrentHealth -= appliedDamage;
             if (target.IsAlive)

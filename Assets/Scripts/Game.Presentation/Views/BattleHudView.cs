@@ -8,61 +8,83 @@ using Game.Content.Definitions;
 using Game.Content.Validation;
 using Game.Core.Models;
 using Game.Core.Types;
-using EntityId = Game.Core.Types.EntityId;
+using Game.Simulation.Systems;
 
 namespace Game.Presentation.Views
 {
+    /// <summary>
+    /// Боевой интерфейс по образцу Nether Earth: часы, статус сторон (базы, заводы по типам, роботы),
+    /// ресурсы игрока по типам и экран сборки робота из деталей.
+    /// </summary>
     public class BattleHudView : MonoBehaviour
     {
+        private const float StatusRefreshSeconds = 0.25f;
+
+        // Палитра в духе оригинала: тёмный фон, голубые названия, зелёные запасы, пурпурные цены.
+        private static readonly Color PanelColor = new Color(0.02f, 0.03f, 0.06f, 0.94f);
+        private static readonly Color HeaderColor = new Color(1f, 0.9f, 0.2f);
+        private static readonly Color NameColor = new Color(0.3f, 0.9f, 1f);
+        private static readonly Color StockColor = new Color(0.3f, 1f, 0.35f);
+        private static readonly Color PriceColor = new Color(1f, 0.35f, 0.95f);
+        private static readonly Color ClockColor = new Color(0.75f, 0.08f, 0.08f, 0.96f);
+        private static readonly Color HumanColor = new Color(0.35f, 0.75f, 1f);
+        private static readonly Color ComputerColor = new Color(1f, 0.4f, 0.4f);
+
+        private static readonly ResourceType[] FactoryTypes =
+        {
+            ResourceType.Electronics, ResourceType.Nuclear, ResourceType.Phasers, ResourceType.Missiles, ResourceType.Cannon, ResourceType.Chassis
+        };
+        private static readonly ResourceType[] AllResourceTypes =
+        {
+            ResourceType.General, ResourceType.Electronics, ResourceType.Nuclear, ResourceType.Phasers, ResourceType.Missiles, ResourceType.Cannon, ResourceType.Chassis
+        };
+
         private Canvas _canvas;
-        private CanvasScaler _scaler;
-        private GraphicRaycaster _raycaster;
+        private Font _uiFont;
+        private IReadOnlyDictionary<string, ModuleDefinition> _moduleCatalog;
+        private MapDefinition _mapDefinition;
+        private bool _isOrderMode;
+        private float _nextStatusRefresh;
 
-        // Элементы Top Bar
-        private Text _metalText;
+        // Часы, статус и ресурсы
+        private Text _clockText;
         private Text _armyText;
+        private Text _statusHumanColumn;
+        private Text _statusComputerColumn;
+        private Text _resourceValues;
 
-        // Элементы Bottom Panel
+        // Нижняя панель выбранного объекта
         private GameObject _bottomPanel;
         private Text _panelTitleText;
         private Text _queueStatusText;
         private RectTransform _progressBarFillRect;
-        private GameObject _progressBarObj;
-
         private Button _constructorBtn;
-        private GameObject _constructorOverlay;
-        private Text _constructorSummary;
-        private RobotConstructorDraft _constructorDraft;
-        private int _constructorStep;
-        private readonly string[] _selectedModules = new string[4];
-        private readonly string[] _stepNames = { "ШАССИ", "КОРПУС", "ОРУЖИЕ", "УПРАВЛЕНИЕ" };
-        private readonly ModuleSlotType[] _stepSlots = { ModuleSlotType.Chassis, ModuleSlotType.Body, ModuleSlotType.Weapon, ModuleSlotType.Control };
-        private Transform _constructorOptions;
-        private Transform _constructorPreview;
-        private Text _constructorStepTitle;
-        private Text _constructorParts;
-        private Button _constructorNext;
-        private Button _constructorBack;
-        private Button _constructorProduce;
-        private PlayerState _constructorPlayer;
-        private BuildingState _constructorBase;
-
-        // Делегат заказа робота
-        public event Action<RobotBlueprint> OnOrderBlueprintRequested;
-        public event Action<OrderType> OnRobotOrderRequested;
-        public event Action OnRestartRequested;
         private readonly Dictionary<OrderType, Button> _orderButtons = new Dictionary<OrderType, Button>();
-        public event Action OnSelectPlayerBaseRequested;
 
-        private Font _uiFont;
-        private bool _isOrderMode;
-        private IReadOnlyDictionary<string, ModuleDefinition> _moduleCatalog;
-        private MapDefinition _mapDefinition;
+        // Экран сборки
+        private GameObject _constructorOverlay;
+        private RobotConstructorDraft _constructorDraft;
+        private Text _constructorResources;
+        private Text _constructorSummary;
+        private Text _constructorName;
+        private Transform _constructorPreview;
+        private Button _constructorProduce;
+        private readonly Dictionary<string, Image> _partRowBackgrounds = new Dictionary<string, Image>();
+        private readonly Dictionary<string, Text> _partRowMarks = new Dictionary<string, Text>();
+        private PlayerState _player;
+        private BuildingState _playerBase;
+
+        // Миникарта и итог матча
         private RectTransform _minimapContent;
         private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
         private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
         private GameObject _resultOverlay;
         private Text _resultTitle;
+
+        public event Action<RobotBlueprint> OnOrderBlueprintRequested;
+        public event Action<OrderType> OnRobotOrderRequested;
+        public event Action OnRestartRequested;
+        public event Action OnSelectPlayerBaseRequested;
 
         public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
         {
@@ -72,7 +94,8 @@ namespace Game.Presentation.Views
             EnsureFont();
             EnsureEventSystem();
             CreateCanvas();
-            CreateTopBar();
+            CreateTopLeftBar();
+            CreateClockAndStatus();
             CreateBottomPanel();
             CreateMinimap();
         }
@@ -80,6 +103,33 @@ namespace Game.Presentation.Views
         public void SetOrderMode(bool isOrderMode)
         {
             _isOrderMode = isOrderMode;
+        }
+
+        public void ShowMatchResult(MatchResult result)
+        {
+            EnsureResultOverlay();
+            _resultTitle.text = result == MatchResult.Player1Won ? "ПОБЕДА" : "ПОРАЖЕНИЕ";
+            _resultTitle.color = result == MatchResult.Player1Won ? new Color(0.25f, 0.9f, 0.45f) : new Color(1f, 0.3f, 0.3f);
+            _resultOverlay.SetActive(true);
+        }
+
+        public void UpdateState(MatchState state, BuildingState activeBuilding, RobotState selectedRobot)
+        {
+            if (state == null) return;
+            _player = state.Player1;
+            _playerBase = FindBase(state, PlayerId.Player1);
+
+            if (Time.unscaledTime >= _nextStatusRefresh)
+            {
+                _nextStatusRefresh = Time.unscaledTime + StatusRefreshSeconds;
+                RefreshClockAndStatus(state);
+                if (_constructorOverlay != null && _constructorOverlay.activeSelf) RefreshConstructor();
+            }
+            if (_constructorOverlay != null && _constructorOverlay.activeSelf && _playerBase == null) _constructorOverlay.SetActive(false);
+
+            if (selectedRobot != null) ShowRobotPanel(selectedRobot);
+            else if (activeBuilding != null) ShowBuildingPanel(activeBuilding);
+            else if (_bottomPanel.activeSelf) _bottomPanel.SetActive(false);
         }
 
         public void UpdateMinimap(MatchState state)
@@ -106,87 +156,415 @@ namespace Game.Presentation.Views
             RemoveMissingRobotMarkers(activeRobotIds);
         }
 
-        public void ShowMatchResult(MatchResult result)
+        // ───────────────────────── Часы, статус, ресурсы ─────────────────────────
+
+        private void CreateTopLeftBar()
         {
-            EnsureResultOverlay();
-            _resultTitle.text = result == MatchResult.Player1Won ? "ПОБЕДА" : "ПОРАЖЕНИЕ";
-            _resultTitle.color = result == MatchResult.Player1Won ? new Color(0.25f, 0.9f, 0.45f) : new Color(1f, 0.3f, 0.3f);
-            _resultOverlay.SetActive(true);
+            var bar = CreatePanel(_canvas.transform, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
+                new Vector2(20f, -20f), new Vector2(330f, 70f), PanelColor);
+            _armyText = CreateText(bar.transform, "Army", "", new Vector2(14f, -8f), new Vector2(190f, 54f), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
+            var selectBase = CreateButton(bar.transform, "SelectBaseBtn", "БАЗА", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-62f, 0f), new Vector2(106f, 54f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 15);
+            selectBase.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
         }
 
-        private void EnsureFont()
+        private void CreateClockAndStatus()
         {
-            if (_uiFont != null) return;
-            _uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") 
-                      ?? Resources.GetBuiltinResource<Font>("Arial.ttf")
-                      ?? Font.CreateDynamicFontFromOSFont("Arial", 16);
+            const float width = 320f;
+            var clock = CreatePanel(_canvas.transform, "Clock", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -20f), new Vector2(width, 64f), ClockColor);
+            _clockText = CreateText(clock.transform, "ClockText", "", new Vector2(12f, -4f), new Vector2(width - 24f, 56f), 22, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+
+            // Статус сторон: слева вы, справа компьютер, посередине названия строк.
+            var status = CreatePanel(_canvas.transform, "Status", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -94f), new Vector2(width, 292f), PanelColor);
+            CreateText(status.transform, "Header", "СТАТУС", new Vector2(0f, -8f), new Vector2(width, 30f), 20, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
+            CreateText(status.transform, "Human", "ВЫ", new Vector2(12f, -38f), new Vector2(60f, 24f), 14, FontStyle.Bold, HumanColor, TextAnchor.MiddleLeft);
+            CreateText(status.transform, "Computer", "ИИ", new Vector2(width - 72f, -38f), new Vector2(60f, 24f), 14, FontStyle.Bold, ComputerColor, TextAnchor.MiddleRight);
+            string rowNames = "БАЗЫ";
+            foreach (ResourceType type in FactoryTypes) rowNames += "\n" + DefaultContentCatalog.GetResourceName(type).ToUpperInvariant();
+            rowNames += "\nРОБОТЫ";
+            CreateText(status.transform, "Rows", rowNames, new Vector2(60f, -64f), new Vector2(width - 120f, 220f), 16, FontStyle.Bold, NameColor, TextAnchor.UpperCenter).lineSpacing = 1.05f;
+            _statusHumanColumn = CreateText(status.transform, "HumanValues", "", new Vector2(12f, -64f), new Vector2(48f, 220f), 16, FontStyle.Bold, HumanColor, TextAnchor.UpperLeft);
+            _statusHumanColumn.lineSpacing = 1.05f;
+            _statusComputerColumn = CreateText(status.transform, "ComputerValues", "", new Vector2(width - 60f, -64f), new Vector2(48f, 220f), 16, FontStyle.Bold, ComputerColor, TextAnchor.UpperRight);
+            _statusComputerColumn.lineSpacing = 1.05f;
+
+            var resources = CreatePanel(_canvas.transform, "Resources", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -396f), new Vector2(width, 236f), PanelColor);
+            CreateText(resources.transform, "Header", "РЕСУРСЫ", new Vector2(0f, -8f), new Vector2(width, 30f), 20, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
+            string resourceNames = "";
+            foreach (ResourceType type in AllResourceTypes) resourceNames += (resourceNames.Length > 0 ? "\n" : "") + DefaultContentCatalog.GetResourceName(type).ToUpperInvariant();
+            CreateText(resources.transform, "Names", resourceNames, new Vector2(16f, -42f), new Vector2(170f, 190f), 16, FontStyle.Bold, StockColor, TextAnchor.UpperLeft).lineSpacing = 1.05f;
+            _resourceValues = CreateText(resources.transform, "Values", "", new Vector2(170f, -42f), new Vector2(width - 186f, 190f), 16, FontStyle.Bold, Color.white, TextAnchor.UpperRight);
+            _resourceValues.lineSpacing = 1.05f;
         }
 
-        private void EnsureEventSystem()
+        private void RefreshClockAndStatus(MatchState state)
         {
-            if (EventSystem.current == null)
+            int hour = GameClock.GetHourOfDay(state.MatchTimeSeconds);
+            _clockText.text = $"ДЕНЬ: {GameClock.GetDay(state.MatchTimeSeconds)}   ВРЕМЯ: {hour:00}:00";
+            _armyText.text = $"Армия: {state.Player1.TotalArmyCount}/{PlayerState.MaxArmyLimit}\n<size=13>в бою {state.Player1.ActiveRobotsCount}, в очереди {state.Player1.QueuedRobotsCount}</size>";
+            _statusHumanColumn.text = BuildStatusColumn(state, PlayerId.Player1);
+            _statusComputerColumn.text = BuildStatusColumn(state, PlayerId.Player2);
+
+            int[] income = ProductionSystem.GetHourlyIncome(state, PlayerId.Player1);
+            string values = "";
+            foreach (ResourceType type in AllResourceTypes)
             {
-                var esGo = new GameObject("EventSystem");
-                esGo.AddComponent<EventSystem>();
-                esGo.AddComponent<InputSystemUIInputModule>();
+                int perHour = income[(int)type];
+                string incomeText = perHour > 0 ? $"<color=#66FF88>+{perHour}/ч</color>" : "<color=#556070>—</color>";
+                values += (values.Length > 0 ? "\n" : "") + $"{state.Player1.Resources[type],3}  {incomeText}";
+            }
+            _resourceValues.text = values;
+        }
+
+        private static string BuildStatusColumn(MatchState state, PlayerId owner)
+        {
+            int bases = 0;
+            var factories = new int[ResourceStock.TypeCount];
+            foreach (BuildingState building in state.Buildings.Values)
+            {
+                if (building.Owner != owner) continue;
+                if (building.Type == BuildingType.Base) bases++;
+                else factories[(int)building.ProducedResource]++;
+            }
+            string column = bases.ToString();
+            foreach (ResourceType type in FactoryTypes) column += "\n" + factories[(int)type];
+            return column + "\n" + state.GetPlayer(owner).ActiveRobotsCount.ToString("00");
+        }
+
+        // ───────────────────────── Нижняя панель ─────────────────────────
+
+        private void CreateBottomPanel()
+        {
+            _bottomPanel = CreatePanel(_canvas.transform, "BottomDeck", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(0f, 18f), new Vector2(980f, 215f), PanelColor);
+            _bottomPanel.SetActive(false);
+
+            _panelTitleText = CreateLabel(_bottomPanel.transform, "Title", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(20f, -12f), new Vector2(-20f, -36f), 18, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
+            _queueStatusText = CreateLabel(_bottomPanel.transform, "QueueStatus", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(20f, -38f), new Vector2(-330f, -96f), 15, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+
+            var progressBar = CreatePanel(_bottomPanel.transform, "ProgressBarBg", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -106f), new Vector2(-40f, 8f), new Color(0.10f, 0.15f, 0.22f, 1f));
+            var fillGo = new GameObject("Fill");
+            fillGo.transform.SetParent(progressBar.transform, false);
+            _progressBarFillRect = fillGo.AddComponent<RectTransform>();
+            _progressBarFillRect.anchorMin = Vector2.zero;
+            _progressBarFillRect.anchorMax = new Vector2(0f, 1f);
+            _progressBarFillRect.pivot = new Vector2(0f, 0.5f);
+            _progressBarFillRect.offsetMin = Vector2.zero;
+            _progressBarFillRect.offsetMax = Vector2.zero;
+            fillGo.AddComponent<Image>().color = new Color(0.15f, 0.80f, 0.95f, 1f);
+            SetProgress(0f);
+
+            _constructorBtn = CreateButton(_bottomPanel.transform, "Btn_Constructor", "СБОРКА РОБОТА", new Vector2(1f, 1f), new Vector2(1f, 1f),
+                new Vector2(-165f, -62f), new Vector2(290f, 64f), new Color(0.22f, 0.45f, 0.62f), 18);
+            _constructorBtn.onClick.AddListener(ShowConstructor);
+
+            CreateOrderButton(OrderType.Capture, "ЗАХВАТ", -375f);
+            CreateOrderButton(OrderType.Hunt, "ОХОТА", -225f);
+            CreateOrderButton(OrderType.Scout, "РАЗВЕДКА", -75f);
+            CreateOrderButton(OrderType.Defend, "ОБОРОНА", 75f);
+            CreateOrderButton(OrderType.Stop, "СТОП", 225f);
+            CreateOrderButton(OrderType.Detonate, "ПОДРЫВ", 375f).GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.05f);
+        }
+
+        private void ShowRobotPanel(RobotState robot)
+        {
+            if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
+            _panelTitleText.text = $"РОБОТ #{robot.Id.Value}: {DescribeBlueprint(robot.Blueprint)}";
+            string controlHint = _isOrderMode
+                ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп" + (robot.Blueprint.HasNuclear ? " | N — подрыв" : "") + "</color>"
+                : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
+            _queueStatusText.text = $"HP: <color=#00FF88><b>{robot.CurrentHealth}/{robot.MaxHealth}</b></color> | Скорость: {robot.MoveSpeed:F1} м/с\n{controlHint}";
+            SetProgress(0f);
+            _constructorBtn.gameObject.SetActive(false);
+            bool own = robot.Owner == PlayerId.Player1;
+            foreach (var pair in _orderButtons)
+            {
+                bool visible = own && (pair.Key != OrderType.Detonate || robot.Blueprint.HasNuclear);
+                pair.Value.gameObject.SetActive(visible);
+                if (pair.Key != OrderType.Detonate)
+                {
+                    pair.Value.GetComponent<Image>().color = pair.Key == robot.CurrentOrder.Type ? new Color(0.15f, 0.65f, 0.95f) : new Color(0.12f, 0.20f, 0.32f);
+                }
             }
         }
 
-        private void CreateCanvas()
+        private void ShowBuildingPanel(BuildingState building)
         {
-            var canvasGo = new GameObject("BattleCanvas", typeof(RectTransform));
+            if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
+            foreach (var button in _orderButtons.Values) button.gameObject.SetActive(false);
+            bool ownBase = building.Type == BuildingType.Base && building.Owner == PlayerId.Player1;
+            _constructorBtn.gameObject.SetActive(ownBase);
 
-            var canvasRect = (RectTransform)canvasGo.transform;
-            canvasRect.anchorMin = Vector2.zero;
-            canvasRect.anchorMax = Vector2.one;
-            canvasRect.offsetMin = Vector2.zero;
-            canvasRect.offsetMax = Vector2.zero;
+            string owner = building.Owner == PlayerId.Player1 ? "ВАШ" : building.Owner == PlayerId.Player2 ? "ВРАЖЕСКИЙ" : "НЕЙТРАЛЬНЫЙ";
+            string produces = $"Производит: <color=#66FF88>{DefaultContentCatalog.GetResourceName(EconomyRules.GetProducedResource(building))} +{EconomyRules.GetHourlyIncome(building)}/ч</color>";
+            if (building.Type == BuildingType.Base)
+            {
+                _panelTitleText.text = building.Owner == PlayerId.Player1 ? "ВАША БАЗА — СБОРКА РОБОТОВ" : $"{owner} БАЗА #{building.Id.Value}";
+            }
+            else
+            {
+                _panelTitleText.text = $"{owner} ЗАВОД: {DefaultContentCatalog.GetResourceName(building.ProducedResource).ToUpperInvariant()}";
+            }
 
-            _canvas = canvasGo.AddComponent<Canvas>();
-            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-            _canvas.sortingOrder = 100;
+            if (building.CaptureProgressSeconds > 0f || building.IsContested)
+            {
+                float capturePercent = Mathf.Clamp01(building.CaptureProgressSeconds / building.CaptureTimeTotal) * 100f;
+                _queueStatusText.text = produces + "\n" + (building.IsContested
+                    ? "<color=#FFD700>ЗАХВАТ ОСПАРИВАЕТСЯ</color>"
+                    : $"<color=#66CCFF>Захват: {capturePercent:0}%</color> игроком {building.CapturingPlayer}");
+                SetProgress(capturePercent / 100f);
+                return;
+            }
 
-            _scaler = canvasGo.AddComponent<CanvasScaler>();
-            _scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-            _scaler.referenceResolution = new Vector2(1920, 1080);
-            _scaler.matchWidthOrHeight = 0.5f;
+            if (!ownBase)
+            {
+                _queueStatusText.text = produces + (building.Owner == PlayerId.Player1 ? "" : "\nПодведите робота с приказом «Захват» в круг здания.");
+                SetProgress(0f);
+                return;
+            }
 
-            _raycaster = canvasGo.AddComponent<GraphicRaycaster>();
+            var queue = building.ProductionQueue;
+            if (queue.Count == 0)
+            {
+                _queueStatusText.text = $"{produces}\nОчередь: 0/{BuildingState.MaxQueueSize}. Нажмите «Сборка робота».";
+                SetProgress(0f);
+            }
+            else if (queue[0].Status == OrderProductionStatus.ExitBlocked)
+            {
+                _queueStatusText.text = "<color=yellow>ВЫХОД ЗАБЛОКИРОВАН — уведите робота с точки выхода.</color>";
+                SetProgress(1f);
+            }
+            else
+            {
+                ProductionOrder first = queue[0];
+                float progress = Mathf.Clamp01(1f - first.RemainingBuildTimeSeconds / Mathf.Max(0.01f, first.TotalBuildTimeSeconds));
+                _queueStatusText.text = $"Сборка: <b>{DescribeBlueprint(first.Blueprint)}</b> (осталось {first.RemainingBuildTimeSeconds:F1} с)\nОчередь: {queue.Count}/{BuildingState.MaxQueueSize}";
+                SetProgress(progress);
+            }
         }
 
-        private void CreateTopBar()
+        private Button CreateOrderButton(OrderType order, string label, float x)
         {
-            // Плашка ресурсов (Pivot 0, 1 - левый верхний угол)
-            var topBar = CreatePanel(_canvas.transform, "TopBar", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(20f, -20f), new Vector2(430f, 110f), new Color(0.06f, 0.10f, 0.18f, 0.94f));
-
-            // Заголовок
-            CreateLabel(topBar.transform, "Title", "★ РЕСУРСЫ ИГРОКА (СИНИЕ) ★", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(15f, -10f), new Vector2(-140f, -32f), 17, FontStyle.Bold, new Color(0.35f, 0.85f, 1f), TextAnchor.MiddleLeft);
-
-            // Металл
-            _metalText = CreateLabel(topBar.transform, "Metal", "💰 Металл: 600 (+5/с)", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(15f, -38f), new Vector2(-140f, -62f), 16, FontStyle.Bold, new Color(1f, 0.85f, 0.15f), TextAnchor.MiddleLeft);
-
-            // Армия
-            _armyText = CreateLabel(topBar.transform, "Army", "🤖 Армия: 0 / 20", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(15f, -68f), new Vector2(-140f, -92f), 15, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
-
-            // Кнопка быстрого выбора базы
-            var selectBaseBtn = CreateButton(topBar.transform, "SelectBaseBtn", "🏛 БАЗА\n<size=11>ВЫБРАТЬ</size>", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-70f, 0f), new Vector2(115f, 80f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 13);
-            selectBaseBtn.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
+            var button = CreateButton(_bottomPanel.transform, "Order_" + order, label, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 50f), new Vector2(140f, 48f), new Color(0.12f, 0.20f, 0.32f), 14);
+            button.onClick.AddListener(() => OnRobotOrderRequested?.Invoke(order));
+            _orderButtons[order] = button;
+            button.gameObject.SetActive(false);
+            return button;
         }
+
+        private void SetProgress(float value)
+        {
+            if (_progressBarFillRect != null) _progressBarFillRect.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);
+        }
+
+        // ───────────────────────── Экран сборки ─────────────────────────
+
+        private void ShowConstructor()
+        {
+            if (_playerBase == null) return;
+            if (_constructorOverlay == null) CreateConstructorOverlay();
+            _constructorDraft.Clear();
+            _constructorOverlay.SetActive(true);
+            RefreshConstructor();
+        }
+
+        private void CreateConstructorOverlay()
+        {
+            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstruction", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.97f));
+            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 900f), Color.black);
+            Transform root = card.transform;
+
+            // Левая половина: заголовок, доступные ресурсы, миниатюра и кнопки.
+            CreateText(root, "Title", "СБОРКА\nРОБОТА", new Vector2(40f, -30f), new Vector2(600f, 140f), 52, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            CreateText(root, "ResourcesHeader", "— ДОСТУПНЫЕ РЕСУРСЫ —", new Vector2(40f, -185f), new Vector2(600f, 40f), 26, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
+            _constructorResources = CreateText(root, "Resources", "", new Vector2(60f, -235f), new Vector2(560f, 330f), 24, FontStyle.Bold, StockColor, TextAnchor.UpperLeft);
+            _constructorResources.lineSpacing = 1.1f;
+
+            _constructorPreview = CreatePanel(root, "Preview", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -585f), new Vector2(230f, 270f), new Color(0.05f, 0.07f, 0.1f)).transform;
+            _constructorName = CreateText(root, "RobotName", "", new Vector2(290f, -585f), new Vector2(350f, 120f), 20, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
+            _constructorSummary = CreateText(root, "Summary", "", new Vector2(290f, -705f), new Vector2(350f, 80f), 17, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+
+            var exit = CreateButton(root, "Exit", "ВЫХОД", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(380f, -830f), new Vector2(160f, 64f), new Color(0.2f, 0.24f, 0.3f), 22);
+            exit.onClick.AddListener(() => _constructorOverlay.SetActive(false));
+            _constructorProduce = CreateButton(root, "Start", "СОБРАТЬ\nРОБОТА", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(560f, -830f), new Vector2(180f, 64f), new Color(0.1f, 0.5f, 0.3f), 20);
+            _constructorProduce.onClick.AddListener(ProduceFromConstructor);
+
+            // Правая половина: детали с ценой, как в оригинальном экране.
+            int row = 0;
+            foreach (ModuleDefinition module in _constructorDraft.GetModulesInDisplayOrder())
+            {
+                string moduleId = module.Id;
+                float y = -40f - row * 104f;
+                var rowButton = CreateButton(root, "Part_" + moduleId, "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(1040f, y - 48f), new Vector2(660f, 96f), new Color(0.04f, 0.05f, 0.08f), 14);
+                rowButton.onClick.AddListener(() => { _constructorDraft.Toggle(moduleId); RefreshConstructor(); });
+                _partRowBackgrounds[moduleId] = rowButton.GetComponent<Image>();
+                var icon = CreatePanel(rowButton.transform, "Icon", new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(0f, 0.5f), new Vector2(16f, 0f), new Vector2(76f, 76f), GetModuleColor(moduleId));
+                icon.GetComponent<Image>().raycastTarget = false;
+                var glyph = CreateText(icon.transform, "Glyph", GetModuleGlyph(module), new Vector2(0f, 0f), new Vector2(76f, 76f), 26, FontStyle.Bold, Color.black, TextAnchor.MiddleCenter);
+                glyph.raycastTarget = false;
+                CreateText(rowButton.transform, "Name", module.ShortName, new Vector2(116f, -8f), new Vector2(400f, 46f), 30, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft).raycastTarget = false;
+                CreateText(rowButton.transform, "Price", $"{module.Cost}  <size=16><color=#8090A0>{DefaultContentCatalog.GetResourceName(module.Resource).ToLowerInvariant()}</color></size>", new Vector2(116f, -50f), new Vector2(400f, 40f), 28, FontStyle.Bold, PriceColor, TextAnchor.MiddleLeft).raycastTarget = false;
+                _partRowMarks[moduleId] = CreateText(rowButton.transform, "Mark", "", new Vector2(520f, -8f), new Vector2(130f, 80f), 34, FontStyle.Bold, StockColor, TextAnchor.MiddleRight);
+                _partRowMarks[moduleId].raycastTarget = false;
+                row++;
+            }
+            _constructorOverlay.SetActive(false);
+        }
+
+        private void RefreshConstructor()
+        {
+            if (_constructorOverlay == null || _player == null) return;
+            AssemblyValidationResult validation = _constructorDraft.Validate();
+            bool hasAnyPart = _constructorDraft.ChassisId != null || _constructorDraft.WeaponIds.Count > 0 || _constructorDraft.ElectronicsId != null || _constructorDraft.NuclearId != null;
+            bool affordable = _player.Resources.TryPlanPayment(validation.CostByType, out int[] payment);
+
+            // Слева — запасы; при выбранных деталях рядом видно, сколько спишется.
+            string text = "";
+            foreach (ResourceType type in AllResourceTypes)
+            {
+                int stock = _player.Resources[type];
+                int spend = payment[(int)type];
+                string spendText = !hasAnyPart || spend == 0 ? "" : type == ResourceType.General && !affordable ? $"  <color=#FF5555>−{spend}</color>" : $"  <color=#FF77EE>−{spend}</color>";
+                text += $"{DefaultContentCatalog.GetResourceName(type).ToUpperInvariant(),-14}{stock,4}{spendText}\n";
+            }
+            text += $"\n<color=#FFFFFF>ИТОГО {_player.Resources.Total,10}</color>";
+            _constructorResources.text = text;
+
+            foreach (var pair in _partRowBackgrounds)
+            {
+                bool selected = _constructorDraft.IsSelected(pair.Key);
+                pair.Value.color = selected ? new Color(0.08f, 0.3f, 0.38f) : new Color(0.04f, 0.05f, 0.08f);
+                _partRowMarks[pair.Key].text = selected ? "✓" : "";
+            }
+
+            RefreshConstructorPreview();
+            _constructorName.text = hasAnyPart ? _constructorDraft.DescribeSelection() : "Выберите детали справа";
+
+            bool queueOpen = _playerBase != null && _playerBase.ProductionQueue.Count < BuildingState.MaxQueueSize;
+            bool canProduce = validation.IsValid && affordable && _player.CanBuildMoreRobots && queueOpen;
+            _constructorProduce.interactable = canProduce;
+            if (!hasAnyPart) _constructorSummary.text = "Шасси обязательно, плюс оружие или ядерный заряд.";
+            else if (!validation.IsValid) _constructorSummary.text = "<color=#FF8888>" + string.Join("\n", validation.Errors) + "</color>";
+            else if (!affordable) _constructorSummary.text = $"<color=#FF8888>Не хватает {payment[(int)ResourceType.General] - _player.Resources[ResourceType.General]} общих ресурсов.</color>";
+            else if (!_player.CanBuildMoreRobots) _constructorSummary.text = "<color=#FF8888>Достигнут лимит армии.</color>";
+            else if (!queueOpen) _constructorSummary.text = "<color=#FF8888>Очередь базы заполнена.</color>";
+            else _constructorSummary.text = $"Цена {validation.TotalCost} • HP {validation.TotalHealth} • скорость {validation.Speed:F1}";
+        }
+
+        private void ProduceFromConstructor()
+        {
+            RefreshConstructor();
+            if (!_constructorProduce.interactable) return;
+            OnOrderBlueprintRequested?.Invoke(_constructorDraft.CreateBlueprint("custom", _constructorDraft.DescribeSelection()));
+            _constructorOverlay.SetActive(false);
+        }
+
+        /// <summary>Миниатюра робота сбоку: детали стоят стопкой, как модель на поле боя.</summary>
+        private void RefreshConstructorPreview()
+        {
+            foreach (Transform child in _constructorPreview) Destroy(child.gameObject);
+            float y = 24f;
+            string chassis = _constructorDraft.ChassisId;
+            if (chassis == DefaultContentCatalog.ChassisBipod)
+            {
+                PreviewPart("LegL", -30f, y, 18f, 46f, Color.gray);
+                PreviewPart("LegR", 30f, y, 18f, 46f, Color.gray);
+                y += 46f;
+            }
+            else if (chassis == DefaultContentCatalog.ChassisTracks)
+            {
+                PreviewPart("Tracks", 0f, y, 150f, 34f, new Color(0.35f, 0.35f, 0.38f));
+                y += 34f;
+            }
+            else if (chassis == DefaultContentCatalog.ChassisAntiGrav)
+            {
+                PreviewPart("Emitter", 0f, y + 8f, 150f, 8f, new Color(0.7f, 0.85f, 1f));
+                y += 28f;
+            }
+            if (chassis != null)
+            {
+                PreviewPart("Deck", 0f, y, 120f, 18f, HumanColor);
+                y += 18f;
+            }
+            foreach (string weaponId in _constructorDraft.WeaponIds)
+            {
+                PreviewPart("Weapon_" + weaponId, 0f, y + 2f, 104f, 30f, GetModuleColor(weaponId));
+                PreviewPart("Barrel_" + weaponId, 66f, y + 12f, 34f, 9f, GetModuleColor(weaponId) * 0.7f);
+                y += 34f;
+            }
+            if (_constructorDraft.ElectronicsId != null)
+            {
+                PreviewPart("Electronics", 0f, y + 2f, 70f, 24f, GetModuleColor(DefaultContentCatalog.Electronics));
+                y += 28f;
+            }
+            if (_constructorDraft.NuclearId != null)
+            {
+                PreviewPart("Nuclear", 0f, y + 2f, 40f, 36f, GetModuleColor(DefaultContentCatalog.Nuclear));
+            }
+        }
+
+        private void PreviewPart(string name, float x, float bottom, float width, float height, Color color)
+        {
+            var part = CreatePanel(_constructorPreview, name, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
+                new Vector2(x, bottom), new Vector2(width, height), color);
+            part.GetComponent<Image>().raycastTarget = false;
+        }
+
+        private string DescribeBlueprint(RobotBlueprint blueprint)
+        {
+            if (blueprint == null) return "—";
+            var parts = new List<string>();
+            foreach (string moduleId in blueprint.GetAllModuleIds())
+            {
+                if (_moduleCatalog.TryGetValue(moduleId, out ModuleDefinition module)) parts.Add(module.ShortName);
+            }
+            return string.Join(" + ", parts);
+        }
+
+        private static Color GetModuleColor(string moduleId) => moduleId switch
+        {
+            DefaultContentCatalog.Electronics => new Color(0.92f, 0.92f, 0.92f),
+            DefaultContentCatalog.Nuclear => new Color(0.95f, 0.8f, 0.1f),
+            DefaultContentCatalog.WeaponPhasers => new Color(0.3f, 0.95f, 1f),
+            DefaultContentCatalog.WeaponMissiles => new Color(1f, 0.45f, 0.15f),
+            DefaultContentCatalog.WeaponCannon => new Color(0.85f, 0.75f, 0.3f),
+            _ => new Color(0.6f, 0.62f, 0.66f)
+        };
+
+        private static string GetModuleGlyph(ModuleDefinition module) => module.Id switch
+        {
+            DefaultContentCatalog.Electronics => "Э",
+            DefaultContentCatalog.Nuclear => "☢",
+            DefaultContentCatalog.WeaponPhasers => "Ф",
+            DefaultContentCatalog.WeaponMissiles => "Р",
+            DefaultContentCatalog.WeaponCannon => "П",
+            DefaultContentCatalog.ChassisAntiGrav => "А",
+            DefaultContentCatalog.ChassisTracks => "Г",
+            _ => "Н"
+        };
+
+        private static BuildingState FindBase(MatchState state, PlayerId owner)
+        {
+            foreach (BuildingState building in state.Buildings.Values)
+            {
+                if (building.Type == BuildingType.Base && building.Owner == owner) return building;
+            }
+            return null;
+        }
+
+        // ───────────────────────── Миникарта и итог ─────────────────────────
 
         private void CreateMinimap()
         {
-            var panel = CreatePanel(_canvas.transform, "Minimap", new Vector2(1f, 1f), new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-20f, -20f), new Vector2(230f, 170f), new Color(0.03f, 0.07f, 0.12f, 0.92f));
-            CreateLabel(panel.transform, "Title", "МИНИКАРТА", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(8f, -6f), new Vector2(-8f, -27f), 12, FontStyle.Bold, new Color(0.5f, 0.85f, 1f), TextAnchor.MiddleCenter);
-
-            var mapArea = CreatePanel(panel.transform, "Map", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.18f, 0.36f, 0.16f, 1f));
+            var panel = CreatePanel(_canvas.transform, "Minimap", Vector2.zero, Vector2.zero, Vector2.zero,
+                new Vector2(20f, 20f), new Vector2(300f, 200f), PanelColor);
+            CreateLabel(panel.transform, "Title", "РАДАР", new Vector2(0f, 1f), new Vector2(1f, 1f),
+                new Vector2(8f, -6f), new Vector2(-8f, -27f), 13, FontStyle.Bold, NameColor, TextAnchor.MiddleCenter);
+            var mapArea = CreatePanel(panel.transform, "Map", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
+                new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.05f, 0.12f, 0.3f, 1f));
             _minimapContent = mapArea.GetComponent<RectTransform>();
         }
 
@@ -243,328 +621,47 @@ namespace Game.Presentation.Views
                 owner == PlayerId.Player2 ? new Color(1f, 0.25f, 0.25f, alpha) : new Color(0.8f, 0.8f, 0.8f, alpha);
         }
 
-        private void CreateBottomPanel()
+        // ───────────────────────── Построение UGUI ─────────────────────────
+
+        private void EnsureFont()
         {
-            // Нижняя панель производства (Bottom Deck)
-            _bottomPanel = CreatePanel(_canvas.transform, "BottomDeck", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 18f), new Vector2(920f, 215f), new Color(0.06f, 0.10f, 0.18f, 0.95f));
-            _bottomPanel.SetActive(false); // По умолчанию скрыта, пока ничего не выбрано
-
-            // Заголовок базы
-            _panelTitleText = CreateLabel(_bottomPanel.transform, "Title", "★ ГЛАВНАЯ БАЗА ИГРОКА 1 (ПРОИЗВОДСТВО) ★",
-                new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -12f), new Vector2(-20f, -36f), 18, FontStyle.Bold, new Color(0.35f, 0.85f, 1f), TextAnchor.MiddleLeft);
-
-            // Статус очереди
-            _queueStatusText = CreateLabel(_bottomPanel.transform, "QueueStatus", "Очередь: 0/5 | База: +5 М/сек, завод: +10 М/сек",
-                new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -38f), new Vector2(-20f, -62f), 15, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
-
-            // Прогресс-бар сборки (фон)
-            _progressBarObj = CreatePanel(_bottomPanel.transform, "ProgressBarBg", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -70f), new Vector2(-40f, 8f), new Color(0.10f, 0.15f, 0.22f, 1f));
-
-            // Прогресс-бар сборки (заполнение)
-            var fillGo = new GameObject("Fill");
-            fillGo.transform.SetParent(_progressBarObj.transform, false);
-            var fillRt = fillGo.AddComponent<RectTransform>();
-            fillRt.anchorMin = new Vector2(0f, 0f);
-            fillRt.anchorMax = new Vector2(0f, 1f);
-            fillRt.pivot = new Vector2(0f, 0.5f);
-            fillRt.offsetMin = Vector2.zero;
-            fillRt.offsetMax = Vector2.zero;
-            _progressBarFillRect = fillRt;
-            var progressBarFill = fillGo.AddComponent<Image>();
-            progressBarFill.color = new Color(0.15f, 0.80f, 0.95f, 1f);
-            SetProgress(0f);
-
-            // Кнопки сборки роботов
-            _constructorBtn = CreateButton(_bottomPanel.transform, "Btn_Constructor", "КОНСТРУКТОР", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-165f, -75f), new Vector2(280f, 64f), new Color(0.22f, 0.45f, 0.62f), 12);
-            _constructorBtn.onClick.AddListener(ShowConstructor);
-
-            CreateOrderButton(OrderType.Capture, "ЗАХВАТ", -300f);
-            CreateOrderButton(OrderType.Hunt, "ОХОТА", -150f);
-            CreateOrderButton(OrderType.Scout, "РАЗВЕДКА", 0f);
-            CreateOrderButton(OrderType.Defend, "ОБОРОНА", 150f);
-            CreateOrderButton(OrderType.Stop, "СТОП", 300f);
+            if (_uiFont != null) return;
+            _uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+                      ?? Resources.GetBuiltinResource<Font>("Arial.ttf")
+                      ?? Font.CreateDynamicFontFromOSFont("Arial", 16);
         }
 
-        public void UpdateState(PlayerState player, BuildingState activeBuilding, RobotState selectedRobot)
+        private void EnsureEventSystem()
         {
-            _constructorPlayer = player;
-            _constructorBase = activeBuilding != null && activeBuilding.Owner == PlayerId.Player1 && activeBuilding.Type == BuildingType.Base ? activeBuilding : null;
-            if (_constructorOverlay != null && _constructorOverlay.activeSelf)
+            if (EventSystem.current == null)
             {
-                if (_constructorBase == null) _constructorOverlay.SetActive(false);
-                else RefreshConstructorSummary();
-            }
-            if (player != null)
-            {
-                _metalText.text = $"💰 Металл: <color=#FFD700><b>{player.Metal}</b></color> (<color=#00FF88>+{player.MetalIncomePerSecond}/с</color>)";
-                _armyText.text = $"🤖 Армия: <b>{player.TotalArmyCount} / {PlayerState.MaxArmyLimit}</b> (В бою: {player.ActiveRobotsCount})";
-
-                _constructorPlayer = player;
-            }
-
-            if (selectedRobot != null)
-            {
-                if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
-                _panelTitleText.text = $"⚔ <b>РОБОТ #{selectedRobot.Id.Value}: {selectedRobot.Blueprint.Name}</b> ⚔";
-                string controlHint = _isOrderMode
-                    ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп</color>"
-                    : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
-                _queueStatusText.text = $"HP: <color=#00FF88><b>{selectedRobot.CurrentHealth}/{selectedRobot.MaxHealth}</b></color> | Скорость: {selectedRobot.MoveSpeed:F1} м/с | {controlHint}";
-                SetProgress(0f);
-                SetProductionButtonsVisible(false);
-                SetOrderButtonsVisible(true, selectedRobot.CurrentOrder.Type);
-            }
-            else if (activeBuilding != null)
-            {
-                if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
-                SetProductionButtonsVisible(true);
-                SetOrderButtonsVisible(false, OrderType.None);
-
-                if (activeBuilding.Type == BuildingType.Base && activeBuilding.Owner == PlayerId.Player1)
-                {
-                    _panelTitleText.text = "★ <b>ГЛАВНАЯ БАЗА ИГРОКА 1 (СБОРКА РОБОТОВ)</b> ★";
-                    var q = activeBuilding.ProductionQueue;
-
-                    if (q.Count > 0)
-                    {
-                        var first = q[0];
-                        if (first.Status == OrderProductionStatus.ExitBlocked)
-                        {
-                            _queueStatusText.text = "<color=yellow>⚠️ ВЫХОД ЗАБЛОКИРОВАН (уведите робота с точки сбора)!</color>";
-                            SetProgress(1f);
-                        }
-                        else
-                        {
-                            float rem = first.RemainingBuildTimeSeconds;
-                            float total = Mathf.Max(0.01f, first.TotalBuildTimeSeconds);
-                            float progress = Mathf.Clamp01(1f - (rem / total));
-                            _queueStatusText.text = $"Сборка: <b>{first.Blueprint.Name}</b> (осталось {rem:F1}с) | Очередь: {q.Count}/{BuildingState.MaxQueueSize}";
-                            SetProgress(progress);
-                        }
-                    }
-                    else
-                    {
-                        _queueStatusText.text = $"Очередь: <b>0/{BuildingState.MaxQueueSize}</b> | База: <color=#00FF88>+5 М/сек</color>, завод: <color=#00FF88>+10 М/сек</color>.";
-                        SetProgress(0f);
-                    }
-                }
-                else
-                {
-                    _panelTitleText.text = activeBuilding.Type == BuildingType.Base
-                        ? $"★ ВРАЖЕСКАЯ БАЗА #{activeBuilding.Id.Value} ★"
-                        : $"★ НЕЙТРАЛЬНЫЙ ЗАВОД #{activeBuilding.Id.Value} ★";
-                    if (activeBuilding.CaptureProgressSeconds > 0f || activeBuilding.IsContested)
-                    {
-                        float capturePercent = Mathf.Clamp01(activeBuilding.CaptureProgressSeconds / activeBuilding.CaptureTimeTotal) * 100f;
-                        _queueStatusText.text = activeBuilding.IsContested
-                            ? "<color=#FFD700>ЗАХВАТ ОСПАРИВАЕТСЯ</color>"
-                            : $"<color=#66CCFF>Захват: {capturePercent:0}%</color> игроком {activeBuilding.CapturingPlayer}";
-                    }
-                    else
-                    {
-                        _queueStatusText.text = $"Доход объекта: +{activeBuilding.MetalIncomePerSecond} М/сек. Подведите боевых роботов в круг захвата!";
-                    }
-                    SetProgress(0f);
-                    SetProductionButtonsVisible(false);
-                    SetOrderButtonsVisible(false, OrderType.None);
-                }
-            }
-            else
-            {
-                if (_bottomPanel.activeSelf) _bottomPanel.SetActive(false);
+                var esGo = new GameObject("EventSystem");
+                esGo.AddComponent<EventSystem>();
+                esGo.AddComponent<InputSystemUIInputModule>();
             }
         }
 
-        private void SetProductionButtonsVisible(bool visible)
+        private void CreateCanvas()
         {
-            if (_constructorBtn != null) _constructorBtn.gameObject.SetActive(visible);
+            var canvasGo = new GameObject("BattleCanvas", typeof(RectTransform));
+            var canvasRect = (RectTransform)canvasGo.transform;
+            canvasRect.anchorMin = Vector2.zero;
+            canvasRect.anchorMax = Vector2.one;
+            canvasRect.offsetMin = Vector2.zero;
+            canvasRect.offsetMax = Vector2.zero;
+
+            _canvas = canvasGo.AddComponent<Canvas>();
+            _canvas.renderMode = RenderMode.ScreenSpaceOverlay;
+            _canvas.sortingOrder = 100;
+
+            var scaler = canvasGo.AddComponent<CanvasScaler>();
+            scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+            scaler.referenceResolution = new Vector2(1920, 1080);
+            scaler.matchWidthOrHeight = 0.5f;
+
+            canvasGo.AddComponent<GraphicRaycaster>();
         }
 
-        private void CreateOrderButton(OrderType order, string label, float x)
-        {
-            var button = CreateButton(_bottomPanel.transform, "Order_" + order, label, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 65f), new Vector2(135f, 48f), new Color(0.12f, 0.20f, 0.32f), 13);
-            button.onClick.AddListener(() => OnRobotOrderRequested?.Invoke(order));
-            _orderButtons[order] = button;
-            button.gameObject.SetActive(false);
-        }
-
-        private void SetOrderButtonsVisible(bool visible, OrderType activeOrder)
-        {
-            foreach (var pair in _orderButtons)
-            {
-                pair.Value.gameObject.SetActive(visible);
-                var image = pair.Value.GetComponent<Image>();
-                image.color = pair.Key == activeOrder ? new Color(0.15f, 0.65f, 0.95f) : new Color(0.12f, 0.20f, 0.32f);
-            }
-        }
-
-        private void SetProgress(float value)
-        {
-            if (_progressBarFillRect == null) return;
-
-            _progressBarFillRect.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);
-        }
-
-        private void ShowConstructor()
-        {
-            if (_constructorBase == null) return;
-            if (_constructorOverlay == null) CreateConstructorOverlay();
-            _constructorStep = 0;
-            _constructorDraft = new RobotConstructorDraft(_moduleCatalog);
-            Array.Clear(_selectedModules, 0, _selectedModules.Length);
-            _constructorOverlay.SetActive(true);
-            RefreshConstructorStep();
-        }
-
-        private void CreateConstructorOverlay()
-        {
-            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstructor", Vector2.zero, Vector2.one,
-                new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.85f));
-            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(900f, 640f), new Color(0.06f, 0.10f, 0.18f));
-            CreateLabel(card.transform, "Title", "КОНСТРУКТОР РОБОТА", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(24f, -18f), new Vector2(-85f, -55f), 24, FontStyle.Bold, Color.cyan, TextAnchor.MiddleLeft);
-            var close = CreateButton(card.transform, "Close", "×", Vector2.one, Vector2.one,
-                new Vector2(-34f, -34f), new Vector2(44f, 42f), new Color(0.38f, 0.16f, 0.18f), 22);
-            close.onClick.AddListener(() => _constructorOverlay.SetActive(false));
-            _constructorStepTitle = CreateLabel(card.transform, "Step", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
-                new Vector2(24f, -75f), new Vector2(-24f, -110f), 18, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
-            _constructorOptions = CreatePanel(card.transform, "Options", new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(0f, 1f), new Vector2(24f, -125f), new Vector2(410f, 320f), Color.clear).transform;
-            _constructorPreview = CreatePanel(card.transform, "Preview", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(1f, 1f), new Vector2(-24f, -125f), new Vector2(410f, 230f), new Color(0.09f, 0.17f, 0.25f)).transform;
-            _constructorParts = CreateLabel(card.transform, "Parts", "", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-434f, -370f), new Vector2(-24f, -460f), 15, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
-            _constructorSummary = CreateLabel(card.transform, "Summary", "", Vector2.zero, new Vector2(1f, 0f),
-                new Vector2(24f, 160f), new Vector2(-24f, 80f), 16, FontStyle.Normal, Color.white, TextAnchor.MiddleLeft);
-            _constructorBack = CreateButton(card.transform, "Back", "НАЗАД", Vector2.zero, Vector2.zero,
-                new Vector2(100f, 36f), new Vector2(150f, 48f), new Color(0.2f, 0.3f, 0.4f), 16);
-            _constructorBack.onClick.AddListener(() => { _constructorStep--; RefreshConstructorStep(); });
-            _constructorNext = CreateButton(card.transform, "Next", "ДАЛЕЕ", new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-174f, 36f), new Vector2(300f, 48f), new Color(0.1f, 0.45f, 0.65f), 16);
-            _constructorNext.onClick.AddListener(() => { _constructorStep++; RefreshConstructorStep(); });
-            _constructorProduce = CreateButton(card.transform, "Produce", "ПОСТАВИТЬ В ОЧЕРЕДЬ", new Vector2(1f, 0f), new Vector2(1f, 0f),
-                new Vector2(-174f, 36f), new Vector2(300f, 48f), new Color(0.12f, 0.48f, 0.30f), 16);
-            _constructorProduce.onClick.AddListener(() =>
-            {
-                RefreshConstructorSummary();
-                if (!_constructorProduce.interactable) return;
-                OnOrderBlueprintRequested?.Invoke(_constructorDraft.CreateBlueprint($"custom_{Guid.NewGuid():N}", "Пользовательский робот"));
-                _constructorOverlay.SetActive(false);
-            });
-            _constructorOverlay.SetActive(false);
-        }
-
-        private void RefreshConstructorStep()
-        {
-            foreach (Transform child in _constructorOptions) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-            _constructorStepTitle.text = $"ШАГ {_constructorStep + 1} / 4 — {_stepNames[_constructorStep]}";
-            int index = 0;
-            foreach (var module in _constructorDraft.GetModules(_stepSlots[_constructorStep]))
-            {
-                string id = module.Id;
-                bool selected = _selectedModules[_constructorStep] == id;
-                var button = CreateButton(_constructorOptions, id, (selected ? "✓ " : "") + FormatModuleButton(module),
-                    new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(205f, -48f - index * 105f),
-                    new Vector2(410f, 96f), selected ? new Color(0.12f, 0.55f, 0.65f) : new Color(0.18f, 0.29f, 0.4f), 16);
-                button.onClick.AddListener(() =>
-                {
-                    _selectedModules[_constructorStep] = id;
-                    _constructorDraft.Select(_stepSlots[_constructorStep], id);
-                    RefreshConstructorStep();
-                });
-                index++;
-            }
-            _constructorBack.interactable = _constructorStep > 0;
-            _constructorNext.gameObject.SetActive(_constructorStep < 3);
-            _constructorNext.interactable = _selectedModules[_constructorStep] != null;
-            _constructorProduce.gameObject.SetActive(_constructorStep == 3);
-            RefreshConstructorPreview();
-            RefreshConstructorSummary();
-        }
-
-        private void RefreshConstructorPreview()
-        {
-            foreach (Transform child in _constructorPreview) { child.gameObject.SetActive(false); Destroy(child.gameObject); }
-            // Схематический вид сверху: части появляются только после выбора соответствующего модуля.
-            if (_selectedModules[0] != null)
-            {
-                bool tracks = _selectedModules[0] == DefaultContentCatalog.ChassisTracks;
-                PreviewPart("LeftChassis", -72f, -25f, 32f, tracks ? 145f : 90f, Color.gray);
-                PreviewPart("RightChassis", 72f, -25f, 32f, tracks ? 145f : 90f, Color.gray);
-                PreviewPart("Frame", 0f, -25f, 115f, 35f, new Color(0.3f, 0.34f, 0.4f));
-            }
-            if (_selectedModules[1] != null)
-            {
-                bool heavy = _selectedModules[1] == DefaultContentCatalog.BodyHeavy;
-                PreviewPart("Body", 0f, -10f, heavy ? 125f : 90f, heavy ? 110f : 80f, new Color(0.12f, 0.5f, 0.8f));
-            }
-            if (_selectedModules[2] != null)
-            {
-                bool missiles = _selectedModules[2] == DefaultContentCatalog.WeaponMissiles;
-                if (missiles)
-                    for (int i = -1; i <= 1; i++) PreviewPart("Missile" + i, i * 23f, 48f, 16f, 68f, new Color(0.9f, 0.6f, 0.25f));
-                else PreviewPart("Cannon", 0f, 55f, 16f, 85f, new Color(0.65f, 0.75f, 0.85f));
-            }
-            if (_selectedModules[3] != null)
-            {
-                int lights = _selectedModules[3] == DefaultContentCatalog.ControlBasic ? 1 : _selectedModules[3] == DefaultContentCatalog.ControlTactical ? 2 : 3;
-                for (int i = 0; i < lights; i++) PreviewPart("Controller" + i, -18f + i * 18f, -35f, 12f, 12f, Color.cyan);
-            }
-            string parts = "";
-            for (int i = 0; i < 4; i++)
-                parts += $"{_stepNames[i]}: {(_selectedModules[i] == null ? "не выбрано" : _moduleCatalog[_selectedModules[i]].Name)}\n";
-            _constructorParts.text = parts;
-        }
-
-        private void PreviewPart(string name, float x, float y, float width, float height, Color color)
-        {
-            var part = CreatePanel(_constructorPreview, name, new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f),
-                new Vector2(0.5f, 0.5f), new Vector2(x, y), new Vector2(width, height), color);
-            part.GetComponent<Image>().raycastTarget = false;
-        }
-
-        private void RefreshConstructorSummary()
-        {
-            if (_constructorSummary == null) return;
-            bool complete = Array.TrueForAll(_selectedModules, id => id != null);
-            _constructorProduce.interactable = false;
-            if (!complete)
-            {
-                _constructorSummary.text = "Выберите по одному модулю на каждом шаге. Справа — схема сборки (вид сверху).";
-                return;
-            }
-            var validation = _constructorDraft.Validate();
-            if (!validation.IsValid)
-            {
-                _constructorSummary.text = "<color=#FF8888>" + string.Join("\n", validation.Errors) + "</color>";
-                return;
-            }
-            bool available = _constructorPlayer != null && _constructorBase != null &&
-                _constructorPlayer.Metal >= validation.TotalCost && _constructorPlayer.CanBuildMoreRobots &&
-                _constructorBase.ProductionQueue.Count < BuildingState.MaxQueueSize;
-            _constructorProduce.interactable = available;
-            _constructorSummary.text = $"Цена: {validation.TotalCost} М   Масса: {validation.TotalMass}/{validation.MaxLoadCapacity} кг   HP: {validation.TotalHealth}" +
-                (available ? "\nСборка готова к производству." : "\nНедостаточно металла, заполнена очередь или достигнут лимит армии.");
-        }
-
-        private static string FormatModuleButton(ModuleDefinition module)
-        {
-            string common = $"<color=#FFD700>{module.Cost} М</color> • {module.Mass} кг";
-            return module.SlotType switch
-            {
-                ModuleSlotType.Chassis => $"<b>{module.Name}</b>\n{common}\nСкорость {module.Speed:F1}, лимит {module.MaxLoadCapacity}",
-                ModuleSlotType.Body => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}, слотов {module.WeaponSlots}",
-                ModuleSlotType.Weapon => $"<b>{module.Name}</b>\n{common}\nУрон {module.Damage}, дальн. {module.Range:F0}, КД {module.CooldownSeconds:F1}\nРазведчик: {Mathf.CeilToInt(120f / module.Damage)} попад.",
-                ModuleSlotType.Control => $"<b>{module.Name}</b>\n{common}\nУпрежд. {module.LeadPredictionSeconds:F1}с, манёвр {module.CombatManeuverIntervalSeconds:F2}с",
-                _ => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}"
-            };
-        }
-
-        // Вспомогательные методы построения UGUI элементов
         private GameObject CreatePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPos, Vector2 sizeDelta, Color color)
         {
             var go = new GameObject(name);
@@ -582,6 +679,20 @@ namespace Game.Presentation.Views
             return go;
         }
 
+        /// <summary>Текст с фиксированным прямоугольником от левого верхнего угла родителя.</summary>
+        private Text CreateText(Transform parent, string name, string text, Vector2 topLeft, Vector2 size, int fontSize, FontStyle style, Color color, TextAnchor alignment)
+        {
+            var go = new GameObject(name);
+            go.transform.SetParent(parent, false);
+            var rt = go.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 1f);
+            rt.anchorMax = new Vector2(0f, 1f);
+            rt.pivot = new Vector2(0f, 1f);
+            rt.anchoredPosition = topLeft;
+            rt.sizeDelta = size;
+            return ConfigureText(go.AddComponent<Text>(), text, fontSize, style, color, alignment);
+        }
+
         private Text CreateLabel(Transform parent, string name, string text, Vector2 anchorMin, Vector2 anchorMax, Vector2 offsetMin, Vector2 offsetMax, int fontSize, FontStyle style, Color color, TextAnchor alignment)
         {
             var go = new GameObject(name);
@@ -592,8 +703,11 @@ namespace Game.Presentation.Views
             rt.anchorMax = anchorMax;
             rt.offsetMin = new Vector2(offsetMin.x, offsetMax.y);
             rt.offsetMax = new Vector2(offsetMax.x, offsetMin.y);
+            return ConfigureText(go.AddComponent<Text>(), text, fontSize, style, color, alignment);
+        }
 
-            var txt = go.AddComponent<Text>();
+        private Text ConfigureText(Text txt, string text, int fontSize, FontStyle style, Color color, TextAnchor alignment)
+        {
             txt.font = _uiFont;
             txt.text = text;
             txt.fontSize = fontSize;
@@ -601,6 +715,8 @@ namespace Game.Presentation.Views
             txt.color = color;
             txt.alignment = alignment;
             txt.supportRichText = true;
+            txt.horizontalOverflow = HorizontalWrapMode.Wrap;
+            txt.verticalOverflow = VerticalWrapMode.Overflow;
             return txt;
         }
 
@@ -615,18 +731,20 @@ namespace Game.Presentation.Views
             rt.anchoredPosition = anchoredPos;
             rt.sizeDelta = sizeDelta;
 
+            // Цвет задаёт Image, кнопка лишь подсвечивает его: так выделение строк и приказов меняется одной строкой.
             var img = go.AddComponent<Image>();
             img.color = normalColor;
 
             var btn = go.AddComponent<Button>();
             var colors = btn.colors;
-            colors.normalColor = normalColor;
-            colors.highlightedColor = normalColor * 1.25f;
-            colors.pressedColor = normalColor * 0.8f;
-            colors.disabledColor = new Color(0.18f, 0.20f, 0.24f, 0.8f);
+            colors.normalColor = Color.white;
+            colors.highlightedColor = new Color(1.25f, 1.25f, 1.25f, 1f);
+            colors.pressedColor = new Color(0.8f, 0.8f, 0.8f, 1f);
+            colors.selectedColor = Color.white;
+            colors.disabledColor = new Color(0.45f, 0.45f, 0.5f, 0.8f);
+            colors.colorMultiplier = 1.5f;
             btn.colors = colors;
 
-            // Дочерний текст
             var txtGo = new GameObject("Text");
             txtGo.transform.SetParent(go.transform, false);
             var txtRt = txtGo.AddComponent<RectTransform>();
@@ -634,16 +752,8 @@ namespace Game.Presentation.Views
             txtRt.anchorMax = Vector2.one;
             txtRt.offsetMin = Vector2.zero;
             txtRt.offsetMax = Vector2.zero;
-
-            var txt = txtGo.AddComponent<Text>();
-            txt.font = _uiFont;
-            txt.text = labelText;
-            txt.fontSize = fontSize;
-            txt.fontStyle = FontStyle.Bold;
-            txt.color = Color.white;
-            txt.alignment = TextAnchor.MiddleCenter;
-            txt.supportRichText = true;
-
+            var txt = ConfigureText(txtGo.AddComponent<Text>(), labelText, fontSize, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            txt.raycastTarget = false;
             return btn;
         }
     }

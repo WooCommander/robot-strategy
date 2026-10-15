@@ -38,6 +38,7 @@ namespace Game.Simulation.Systems
                 OrderHuntCommand hunt => HandleHunt(hunt, state),
                 OrderScoutCommand scout => HandleScout(scout, state),
                 OrderDriveCommand drive => HandleDrive(drive, state),
+                OrderDetonateCommand detonate => HandleDetonate(detonate, state),
                 _ => CommandResult.Fail($"Неизвестный тип команды: {command.GetType().Name}")
             };
         }
@@ -75,13 +76,13 @@ namespace Game.Simulation.Systems
                 return CommandResult.Fail($"Сборка невалидна: {string.Join("; ", validation.Errors)}");
             }
 
-            if (player.Metal < validation.TotalCost)
+            if (!player.Resources.TryPlanPayment(validation.CostByType, out int[] payment))
             {
-                return CommandResult.Fail($"Недостаточно металла: требуется {validation.TotalCost}, доступно {player.Metal}.");
+                return CommandResult.Fail($"Недостаточно ресурсов: не хватает {payment[(int)ResourceType.General] - player.Resources[ResourceType.General]} общих.");
             }
 
             // Списание ресурсов и постановка в очередь
-            player.Metal -= validation.TotalCost;
+            player.Resources.Spend(payment);
             player.QueuedRobotsCount++;
 
             float buildTime = GetBuildTimeSeconds(cmd.Blueprint, validation.TotalCost);
@@ -89,7 +90,7 @@ namespace Game.Simulation.Systems
             {
                 OrderId = $"order-{state.NextProductionOrderId++}",
                 Blueprint = cmd.Blueprint,
-                Cost = validation.TotalCost,
+                Payment = payment,
                 TotalBuildTimeSeconds = buildTime,
                 RemainingBuildTimeSeconds = buildTime,
                 Status = OrderProductionStatus.InProgress
@@ -103,7 +104,7 @@ namespace Game.Simulation.Systems
         {
             if (RobotPresetCatalog.TryFind(blueprint, out var preset)) return preset.BuildTimeSeconds;
 
-            return Math.Max(5f, totalCost * 0.05f);
+            return Math.Max(5f, totalCost * 0.6f);
         }
 
         private CommandResult HandleCancel(CancelProductionCommand cmd, MatchState state, PlayerState player)
@@ -128,7 +129,7 @@ namespace Game.Simulation.Systems
             building.ProductionQueue.RemoveAt(index);
 
             // Возврат ресурсов и освобождение слота лимита
-            player.Metal += order.Cost;
+            player.Resources.Add(order.Payment);
             player.QueuedRobotsCount = Math.Max(0, player.QueuedRobotsCount - 1);
 
             return CommandResult.Success();
@@ -248,6 +249,19 @@ namespace Game.Simulation.Systems
                 AssignOrder(robot, RobotOrder.Stop());
                 robot.DriveDirection = direction;
             }
+            return CommandResult.Success();
+        }
+
+        private CommandResult HandleDetonate(OrderDetonateCommand cmd, MatchState state)
+        {
+            var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
+            if (error != null) return CommandResult.Fail(error);
+            foreach (var robot in robots)
+            {
+                if (robot.Blueprint == null || !robot.Blueprint.HasNuclear) return CommandResult.Fail($"У робота #{robot.Id.Value} нет ядерного заряда.");
+            }
+            // Сам взрыв выполняет CombatSystem на ближайшем тике.
+            foreach (var robot in robots) AssignOrder(robot, RobotOrder.Detonate());
             return CommandResult.Success();
         }
 

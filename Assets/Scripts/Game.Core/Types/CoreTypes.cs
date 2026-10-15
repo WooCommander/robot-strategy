@@ -30,20 +30,28 @@ namespace Game.Core.Types
         Player2 = 2
     }
 
+    /// <summary>Категории деталей по образцу Nether Earth: шасси, до трёх разных орудий, электроника и ядерный заряд.</summary>
     public enum ModuleSlotType : byte
     {
         Chassis = 0,
-        Body = 1,
-        Weapon = 2,
-        Equipment = 3,
-        Control = 4
+        Weapon = 1,
+        Electronics = 2,
+        Nuclear = 3
     }
 
-    public enum ControlTier : byte
+    /// <summary>
+    /// Ресурсы стороны. General приносят базы и годится для любой детали;
+    /// остальные производят заводы своего типа, и тратятся они только на детали этого типа.
+    /// </summary>
+    public enum ResourceType : byte
     {
-        Basic = 0,
-        Tactical = 1,
-        Guidance = 2
+        General = 0,
+        Electronics = 1,
+        Nuclear = 2,
+        Phasers = 3,
+        Missiles = 4,
+        Cannon = 5,
+        Chassis = 6
     }
 
     public enum OrderType : byte
@@ -55,7 +63,8 @@ namespace Game.Core.Types
         Defend = 4,
         Stop = 5,
         Hunt = 6,
-        Scout = 7
+        Scout = 7,
+        Detonate = 8
     }
 
     public enum BuildingType : byte
@@ -67,7 +76,8 @@ namespace Game.Core.Types
     public enum WeaponType : byte
     {
         DirectCannon = 0,
-        AreaMissile = 1
+        AreaMissile = 1,
+        Phaser = 2
     }
 
     public readonly struct SimVector2 : IEquatable<SimVector2>

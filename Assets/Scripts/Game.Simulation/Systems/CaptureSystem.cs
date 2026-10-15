@@ -79,7 +79,7 @@ namespace Game.Simulation.Systems
             {
                 foreach (var order in building.ProductionQueue)
                 {
-                    previousPlayer.Metal += order.Cost;
+                    previousPlayer.Resources.Add(order.Payment);
                     previousPlayer.QueuedRobotsCount = Math.Max(0, previousPlayer.QueuedRobotsCount - 1);
                 }
             }

@@ -49,7 +49,8 @@ namespace Game.Core.Tests
             var production = restored as EnqueueProductionCommand;
             Assert.NotNull(production);
             Assert.AreEqual(7, production.SequenceNumber);
-            Assert.AreEqual(source.Blueprint.WeaponId, production.Blueprint.WeaponId);
+            CollectionAssert.AreEqual(source.Blueprint.WeaponIds, production.Blueprint.WeaponIds);
+            Assert.AreEqual(source.Blueprint.ChassisId, production.Blueprint.ChassisId);
         }
 
         private static MatchState CreateMatch()
@@ -63,7 +64,7 @@ namespace Game.Core.Tests
         private static RobotState CreateRobot(int id, PlayerId owner, float x) => new RobotState
         {
             Id = new EntityId(id), Owner = owner, Position = new SimVector2(x, 0f), CurrentHealth = 100, MaxHealth = 100,
-            Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBiped, DefaultContentCatalog.BodyLight, DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.ControlBasic),
+            Blueprint = new RobotBlueprint("bp_" + id, "Test", DefaultContentCatalog.ChassisBipod, new[] { DefaultContentCatalog.WeaponCannon }),
             CurrentOrder = new RobotOrder()
         };
     }

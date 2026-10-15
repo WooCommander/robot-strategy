@@ -17,6 +17,7 @@ namespace Game.Core.Models
         public static RobotOrder Defend(SimVector2 pos) => new RobotOrder { Type = OrderType.Defend, TargetPosition = pos };
         public static RobotOrder Hunt() => new RobotOrder { Type = OrderType.Hunt };
         public static RobotOrder Scout(SimVector2 position) => new RobotOrder { Type = OrderType.Scout, TargetPosition = position };
+        public static RobotOrder Detonate() => new RobotOrder { Type = OrderType.Detonate };
     }
 
     [Serializable]
@@ -34,10 +35,10 @@ namespace Game.Core.Models
         public int CurrentHealth { get; set; }
 
         public float MoveSpeed { get; set; }
-        public int Mass { get; set; }
         public int TotalCost { get; set; }
 
-        public float WeaponCooldownRemaining { get; set; }
+        /// <summary>Перезарядка каждого орудия; индекс совпадает с <see cref="RobotBlueprint.WeaponIds"/>.</summary>
+        public System.Collections.Generic.List<float> WeaponCooldowns { get; set; } = new System.Collections.Generic.List<float>();
         public int ScoutPatrolStep { get; set; }
         public RobotOrder CurrentOrder { get; set; } = new RobotOrder();
 
@@ -89,7 +90,8 @@ namespace Game.Core.Models
     {
         public string OrderId { get; set; }
         public RobotBlueprint Blueprint { get; set; }
-        public int Cost { get; set; }
+        /// <summary>Сколько ресурсов каждого типа списано; при отмене возвращается ровно это.</summary>
+        public int[] Payment { get; set; } = new int[ResourceStock.TypeCount];
         public float TotalBuildTimeSeconds { get; set; }
         public float RemainingBuildTimeSeconds { get; set; }
         public OrderProductionStatus Status { get; set; } = OrderProductionStatus.InProgress;
@@ -107,8 +109,8 @@ namespace Game.Core.Models
         public SimVector2 SpawnPoint { get; set; }
         public float CaptureRadius { get; set; } = 3.0f;
 
-        // Экономика
-        public int MetalIncomePerSecond => Type == BuildingType.Base ? 5 : 10;
+        // Экономика: база даёт General, завод — ресурс своего типа
+        public ResourceType ProducedResource { get; set; } = ResourceType.General;
 
         // Захват
         public float CaptureTimeTotal => Type == BuildingType.Base ? 45.0f : 15.0f;
@@ -126,9 +128,7 @@ namespace Game.Core.Models
     public class PlayerState
     {
         public PlayerId Id { get; set; }
-        public int Metal { get; set; } = 600;
-        public float MetalFraction { get; set; }
-        public int MetalIncomePerSecond { get; set; }
+        public ResourceStock Resources { get; set; } = new ResourceStock();
         public const int MaxArmyLimit = 40;
 
         public int ActiveRobotsCount { get; set; }
@@ -154,6 +154,8 @@ namespace Game.Core.Models
         public bool IsPaused { get; set; } = false;
         public int NextRobotId { get; set; } = 1000;
         public int NextProductionOrderId { get; set; } = 1;
+        /// <summary>Сколько игровых часов дохода уже начислено.</summary>
+        public int IncomeHoursPaid { get; set; }
 
         public PlayerState Player1 { get; set; } = new PlayerState { Id = PlayerId.Player1 };
         public PlayerState Player2 { get; set; } = new PlayerState { Id = PlayerId.Player2 };

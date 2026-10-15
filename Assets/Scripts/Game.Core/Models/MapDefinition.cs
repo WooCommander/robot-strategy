@@ -49,6 +49,8 @@ namespace Game.Core.Models
         public SimVector2 Position { get; set; }
         public SimVector2 SpawnPoint { get; set; }
         public float CaptureRadius { get; set; } = 3.0f;
+        /// <summary>Что производит завод; для базы всегда General.</summary>
+        public ResourceType ProducedResource { get; set; } = ResourceType.General;
     }
 
     [Serializable]

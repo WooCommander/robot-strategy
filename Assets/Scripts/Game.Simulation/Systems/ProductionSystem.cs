@@ -24,42 +24,37 @@ namespace Game.Simulation.Systems
             if (state == null || state.IsPaused || state.Result != MatchResult.InProgress)
                 return;
 
-            // 1. Начисление дохода от металла (раздел 6: база 5/с, завод 10/с)
+            // 1. Почасовой доход: база даёт General, каждый захваченный завод — ресурс своего типа
             UpdateEconomy(state, deltaSeconds);
 
             // 2. Обновление очередей производства на базах
             UpdateProductionQueues(state, deltaSeconds);
         }
 
-        private void UpdateEconomy(MatchState state, float deltaSeconds)
+        /// <summary>Начисляет доход за каждый игровой час, начавшийся к концу этого тика.</summary>
+        public static void UpdateEconomy(MatchState state, float deltaSeconds)
         {
-            // Начисление происходит пропорционально прошедшему времени
-            float metalToAddP1 = 0f;
-            float metalToAddP2 = 0f;
-
-            foreach (var b in state.Buildings.Values)
+            int elapsedHours = GameClock.GetElapsedHours(state.MatchTimeSeconds + deltaSeconds);
+            while (state.IncomeHoursPaid < elapsedHours)
             {
-                if (b.Owner == PlayerId.Player1)
-                    metalToAddP1 += b.MetalIncomePerSecond * deltaSeconds;
-                else if (b.Owner == PlayerId.Player2)
-                    metalToAddP2 += b.MetalIncomePerSecond * deltaSeconds;
+                state.IncomeHoursPaid++;
+                foreach (var building in state.Buildings.Values)
+                {
+                    PlayerState owner = state.GetPlayer(building.Owner);
+                    owner?.Resources.Add(EconomyRules.GetProducedResource(building), EconomyRules.GetHourlyIncome(building));
+                }
             }
-
-            state.Player1.MetalIncomePerSecond = (int)Math.Round(metalToAddP1 / Math.Max(deltaSeconds, 0.0001f));
-            state.Player2.MetalIncomePerSecond = (int)Math.Round(metalToAddP2 / Math.Max(deltaSeconds, 0.0001f));
-
-            AddMetal(state.Player1, metalToAddP1);
-            AddMetal(state.Player2, metalToAddP2);
         }
 
-        private static void AddMetal(PlayerState player, float amount)
+        /// <summary>Доход стороны за игровой час по типам ресурсов — для интерфейса и ИИ.</summary>
+        public static int[] GetHourlyIncome(MatchState state, PlayerId owner)
         {
-            player.MetalFraction += amount;
-            int wholeMetal = (int)Math.Floor(player.MetalFraction);
-            if (wholeMetal <= 0) return;
-
-            player.Metal += wholeMetal;
-            player.MetalFraction -= wholeMetal;
+            var income = new int[ResourceStock.TypeCount];
+            foreach (var building in state.Buildings.Values)
+            {
+                if (building.Owner == owner) income[(int)EconomyRules.GetProducedResource(building)] += EconomyRules.GetHourlyIncome(building);
+            }
+            return income;
         }
 
         private void UpdateProductionQueues(MatchState state, float deltaSeconds)
@@ -136,10 +131,10 @@ namespace Game.Simulation.Systems
                 MaxHealth = val.TotalHealth,
                 CurrentHealth = val.TotalHealth,
                 MoveSpeed = val.Speed,
-                Mass = val.TotalMass,
                 TotalCost = val.TotalCost
             };
             newRobot.CurrentOrder = RobotOrder.Defend(building.Position);
+            foreach (string ignored in order.Blueprint.WeaponIds) newRobot.WeaponCooldowns.Add(0f);
 
             state.Robots[newRobot.Id.Value] = newRobot;
             OnRobotSpawned?.Invoke(newRobot);

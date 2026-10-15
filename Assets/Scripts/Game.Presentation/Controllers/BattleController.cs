@@ -61,6 +61,7 @@ namespace Game.Presentation.Controllers
             _simulation.Combat.OnWeaponFired += HandleWeaponFired;
             _simulation.Combat.OnProjectileImpact += HandleProjectileImpact;
             _simulation.Combat.OnDamageDealt += HandleDamageDealt;
+            _simulation.Combat.OnNuclearDetonated += (carrier, center, radius) => _weaponEffects.PlayNuclearBlast(center, radius);
             _simulation.Capture.OnBuildingCaptured += HandleBuildingCaptured;
             _simulation.StepCompleted += HandleSimulationStep;
             _persistence = new MatchPersistenceService();
@@ -153,7 +154,7 @@ namespace Game.Presentation.Controllers
                 }
 
                 RobotState activeRobotState = _currentlySelectedRobot != null ? _currentlySelectedRobot.State : null;
-                _hudView.UpdateState(MatchState.Player1, activeBuildingState, activeRobotState);
+                _hudView.UpdateState(MatchState, activeBuildingState, activeRobotState);
                 _hudView.UpdateMinimap(MatchState);
             }
         }
@@ -200,6 +201,7 @@ namespace Game.Presentation.Controllers
                 OrderType.Hunt => new OrderHuntCommand { PlayerId = PlayerId.Player1, RobotIds = ids },
                 OrderType.Scout => new OrderScoutCommand { PlayerId = PlayerId.Player1, RobotIds = ids, TargetPosition = OrderPlanner.GetScoutDestination(robot, _mapDefinition) },
                 OrderType.Defend => new OrderDefendCommand { PlayerId = PlayerId.Player1, RobotIds = ids, TargetPosition = robot.Position },
+                OrderType.Detonate => new OrderDetonateCommand { PlayerId = PlayerId.Player1, RobotIds = ids },
                 _ => new OrderStopCommand { PlayerId = PlayerId.Player1, RobotIds = ids }
             };
         }
@@ -446,6 +448,7 @@ namespace Game.Presentation.Controllers
                     Keyboard.current.hKey.wasPressedThisFrame ? OrderType.Hunt :
                     Keyboard.current.rKey.wasPressedThisFrame ? OrderType.Scout :
                     Keyboard.current.fKey.wasPressedThisFrame ? OrderType.Defend :
+                    Keyboard.current.nKey.wasPressedThisFrame && _currentlySelectedRobot.State.Blueprint.HasNuclear ? OrderType.Detonate :
                     _isOrderMode && Keyboard.current.sKey.wasPressedThisFrame ? OrderType.Stop :
                     (OrderType?)null;
 

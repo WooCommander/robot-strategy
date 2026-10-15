@@ -9,162 +9,126 @@ namespace Game.Content.Definitions
     {
         public string Id { get; set; }
         public string Name { get; set; }
+        public string ShortName { get; set; }
         public ModuleSlotType SlotType { get; set; }
 
+        /// <summary>Цена в единицах ресурса <see cref="Resource"/>; недостачу покрывает General.</summary>
+        public ResourceType Resource { get; set; }
         public int Cost { get; set; }
-        public int Mass { get; set; }
         public int HealthBonus { get; set; }
-        public float Speed { get; set; }
-        public int MaxLoadCapacity { get; set; } // Только для Chassis
-        public int WeaponSlots { get; set; } = 1; // Только для корпуса
 
-        // Для корпуса, оружия и управляющего модуля
-        public ControlTier MaxSupportedControlTier { get; set; }
-        public ControlTier MinimumControlTier { get; set; }
-        public ControlTier ControlTier { get; set; }
-        public float LeadPredictionSeconds { get; set; }
+        // Шасси
+        public float Speed { get; set; }
+
+        // Электроника: качество решений между приказами
         public float CombatManeuverIntervalSeconds { get; set; } = 0.5f;
         public bool CanGuideMissiles { get; set; }
 
-        // Для оружия
+        // Оружие
         public WeaponType WeaponType { get; set; }
         public int Damage { get; set; }
         public float Range { get; set; }
         public float CooldownSeconds { get; set; }
         public float SplashRadius { get; set; }
+        /// <summary>Скорость снаряда; 0 — мгновенный луч (фазер).</summary>
         public float ProjectileSpeed { get; set; }
+
+        // Ядерный заряд
+        public float BlastRadius { get; set; }
+        public int BlastDamage { get; set; }
     }
 
+    /// <summary>Набор деталей по мотивам Nether Earth. Числа — исходные значения прототипа для плейтеста.</summary>
     public static class DefaultContentCatalog
     {
+        public const string ChassisBipod = "chassis_bipod";
         public const string ChassisTracks = "chassis_tracks";
-        public const string ChassisBiped = "chassis_biped";
-
-        public const string BodyLight = "body_light";
-        public const string BodyHeavy = "body_heavy";
+        public const string ChassisAntiGrav = "chassis_antigrav";
 
         public const string WeaponCannon = "weapon_cannon";
         public const string WeaponMissiles = "weapon_missiles";
+        public const string WeaponPhasers = "weapon_phasers";
 
-        public const string ControlBasic = "control_basic";
-        public const string ControlTactical = "control_tactical";
-        public const string ControlGuidance = "control_guidance";
+        public const string Electronics = "electronics";
+        public const string Nuclear = "nuclear";
 
-        public const string EquipArmor = "equip_armor";
+        /// <summary>Интервал боевого манёвра робота без электроники.</summary>
+        public const float BaseManeuverIntervalSeconds = 0.55f;
+
+        /// <summary>Порядок деталей в конструкторе — как в оригинальном экране сборки.</summary>
+        public static readonly string[] ConstructorOrder =
+        {
+            Electronics, Nuclear, WeaponPhasers, WeaponMissiles, WeaponCannon, ChassisAntiGrav, ChassisTracks, ChassisBipod
+        };
 
         public static Dictionary<string, ModuleDefinition> CreateDefaultModules()
         {
             return new Dictionary<string, ModuleDefinition>
             {
-                // Шасси
+                // Шасси: тратят ресурс «Шасси»
+                [ChassisBipod] = new ModuleDefinition
+                {
+                    Id = ChassisBipod, Name = "Двуногое шасси", ShortName = "ДВУНОГОЕ", SlotType = ModuleSlotType.Chassis,
+                    Resource = ResourceType.Chassis, Cost = 3, HealthBonus = 80, Speed = 3.0f
+                },
                 [ChassisTracks] = new ModuleDefinition
                 {
-                    Id = ChassisTracks,
-                    Name = "Гусеничное шасси",
-                    SlotType = ModuleSlotType.Chassis,
-                    Cost = 120,
-                    Mass = 60,
-                    Speed = 3.0f,
-                    MaxLoadCapacity = 260
+                    Id = ChassisTracks, Name = "Гусеничное шасси", ShortName = "ГУСЕНИЦЫ", SlotType = ModuleSlotType.Chassis,
+                    Resource = ResourceType.Chassis, Cost = 5, HealthBonus = 140, Speed = 3.6f
                 },
-                [ChassisBiped] = new ModuleDefinition
+                [ChassisAntiGrav] = new ModuleDefinition
                 {
-                    Id = ChassisBiped,
-                    Name = "Двуногое шасси",
-                    SlotType = ModuleSlotType.Chassis,
-                    Cost = 100,
-                    Mass = 40,
-                    Speed = 4.5f,
-                    MaxLoadCapacity = 160
+                    Id = ChassisAntiGrav, Name = "Антигравитационное шасси", ShortName = "АНТИГРАВ", SlotType = ModuleSlotType.Chassis,
+                    Resource = ResourceType.Chassis, Cost = 10, HealthBonus = 100, Speed = 5.0f
                 },
 
-                // Корпуса
-                [BodyLight] = new ModuleDefinition
-                {
-                    Id = BodyLight,
-                    Name = "Лёгкий корпус",
-                    SlotType = ModuleSlotType.Body,
-                    Cost = 100,
-                    Mass = 30,
-                    HealthBonus = 120,
-                    MaxSupportedControlTier = ControlTier.Tactical,
-                    WeaponSlots = 1
-                },
-                [BodyHeavy] = new ModuleDefinition
-                {
-                    Id = BodyHeavy,
-                    Name = "Тяжёлый корпус",
-                    SlotType = ModuleSlotType.Body,
-                    Cost = 220,
-                    Mass = 80,
-                    HealthBonus = 260,
-                    MaxSupportedControlTier = ControlTier.Guidance,
-                    WeaponSlots = 2
-                },
-
-                // Оружие
+                // Оружие: каждое не больше одного на робота
                 [WeaponCannon] = new ModuleDefinition
                 {
-                    Id = WeaponCannon,
-                    Name = "Пушка",
-                    SlotType = ModuleSlotType.Weapon,
-                    WeaponType = WeaponType.DirectCannon,
-                    Cost = 150,
-                    Mass = 40,
-                    Damage = 35,
-                    Range = 6.0f,
-                    CooldownSeconds = 1.5f,
-                    SplashRadius = 0f,
-                    ProjectileSpeed = 18f,
-                    MinimumControlTier = ControlTier.Basic
+                    Id = WeaponCannon, Name = "Пушка", ShortName = "ПУШКА", SlotType = ModuleSlotType.Weapon,
+                    Resource = ResourceType.Cannon, Cost = 2, HealthBonus = 10,
+                    WeaponType = WeaponType.DirectCannon, Damage = 35, Range = 6.0f, CooldownSeconds = 1.5f, ProjectileSpeed = 18f
                 },
                 [WeaponMissiles] = new ModuleDefinition
                 {
-                    Id = WeaponMissiles,
-                    Name = "Ракетная установка",
-                    SlotType = ModuleSlotType.Weapon,
-                    WeaponType = WeaponType.AreaMissile,
-                    Cost = 220,
-                    Mass = 55,
-                    Damage = 50,
-                    Range = 9.0f,
-                    CooldownSeconds = 3.5f,
-                    SplashRadius = 2.0f,
-                    ProjectileSpeed = 10f,
-                    MinimumControlTier = ControlTier.Basic
+                    Id = WeaponMissiles, Name = "Ракеты", ShortName = "РАКЕТЫ", SlotType = ModuleSlotType.Weapon,
+                    Resource = ResourceType.Missiles, Cost = 4, HealthBonus = 10,
+                    WeaponType = WeaponType.AreaMissile, Damage = 50, Range = 9.0f, CooldownSeconds = 3.5f, SplashRadius = 2.0f, ProjectileSpeed = 10f
+                },
+                [WeaponPhasers] = new ModuleDefinition
+                {
+                    Id = WeaponPhasers, Name = "Фазер", ShortName = "ФАЗЕР", SlotType = ModuleSlotType.Weapon,
+                    Resource = ResourceType.Phasers, Cost = 4, HealthBonus = 10,
+                    WeaponType = WeaponType.Phaser, Damage = 30, Range = 7.0f, CooldownSeconds = 2.0f, ProjectileSpeed = 0f
                 },
 
-                // Управляющие модули
-                [ControlBasic] = new ModuleDefinition
+                // Электроника: частый пересчёт манёвра и наведение ракет в полёте
+                [Electronics] = new ModuleDefinition
                 {
-                    Id = ControlBasic, Name = "Базовый контроллер", SlotType = ModuleSlotType.Control,
-                    Cost = 40, Mass = 8, ControlTier = ControlTier.Basic,
-                    LeadPredictionSeconds = 0f, CombatManeuverIntervalSeconds = 0.55f
-                },
-                [ControlTactical] = new ModuleDefinition
-                {
-                    Id = ControlTactical, Name = "Тактический контроллер", SlotType = ModuleSlotType.Control,
-                    Cost = 80, Mass = 12, ControlTier = ControlTier.Tactical,
-                    LeadPredictionSeconds = 0.3f, CombatManeuverIntervalSeconds = 0.25f
-                },
-                [ControlGuidance] = new ModuleDefinition
-                {
-                    Id = ControlGuidance, Name = "Контроллер наведения", SlotType = ModuleSlotType.Control,
-                    Cost = 140, Mass = 18, ControlTier = ControlTier.Guidance,
-                    LeadPredictionSeconds = 0.5f, CombatManeuverIntervalSeconds = 0.12f, CanGuideMissiles = true
+                    Id = Electronics, Name = "Электроника", ShortName = "ЭЛЕКТРОНИКА", SlotType = ModuleSlotType.Electronics,
+                    Resource = ResourceType.Electronics, Cost = 3,
+                    CombatManeuverIntervalSeconds = 0.15f, CanGuideMissiles = true
                 },
 
-                // Оборудование
-                [EquipArmor] = new ModuleDefinition
+                // Ядерный заряд: подрыв по приказу уничтожает всё вокруг, включая носителя
+                [Nuclear] = new ModuleDefinition
                 {
-                    Id = EquipArmor,
-                    Name = "Усиленная броня",
-                    SlotType = ModuleSlotType.Equipment,
-                    Cost = 80,
-                    Mass = 35,
-                    HealthBonus = 80
+                    Id = Nuclear, Name = "Ядерный заряд", ShortName = "ЯДЕРНЫЙ", SlotType = ModuleSlotType.Nuclear,
+                    Resource = ResourceType.Nuclear, Cost = 20, BlastRadius = 4.5f, BlastDamage = 1000
                 }
             };
         }
+
+        public static string GetResourceName(ResourceType type) => type switch
+        {
+            ResourceType.General => "Общие",
+            ResourceType.Electronics => "Электроника",
+            ResourceType.Nuclear => "Ядерные",
+            ResourceType.Phasers => "Фазеры",
+            ResourceType.Missiles => "Ракеты",
+            ResourceType.Cannon => "Пушки",
+            ResourceType.Chassis => "Шасси",
+            _ => type.ToString()
+        };
     }
 }

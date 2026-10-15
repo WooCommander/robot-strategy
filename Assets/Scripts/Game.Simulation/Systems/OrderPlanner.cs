@@ -15,7 +15,7 @@ namespace Game.Simulation.Systems
     {
         /// <summary>Стратегические приказы пересчитываются раз в 0,4 с при 20 тиках в секунду.</summary>
         public const int PlanningIntervalTicks = 8;
-        private const float DefaultManeuverIntervalSeconds = 0.5f;
+        private const float DefaultManeuverIntervalSeconds = DefaultContentCatalog.BaseManeuverIntervalSeconds;
         private const float MinManeuverIntervalSeconds = 0.05f;
         private const float DefendEngageRadius = 8f;
         private const float MoveArrivalDistance = 0.5f;
@@ -161,9 +161,9 @@ namespace Game.Simulation.Systems
             if (!CombatRangePlanner.TryGetManeuverDestination(robot, target, _catalog, out SimVector2 destination)) return;
 
             float interval = DefaultManeuverIntervalSeconds;
-            if (robot.Blueprint?.ControlModuleId != null && _catalog.TryGetValue(robot.Blueprint.ControlModuleId, out ModuleDefinition controller))
+            if (robot.Blueprint != null && robot.Blueprint.HasElectronics && _catalog.TryGetValue(robot.Blueprint.ElectronicsId, out ModuleDefinition electronics))
             {
-                interval = Math.Max(MinManeuverIntervalSeconds, controller.CombatManeuverIntervalSeconds);
+                interval = Math.Max(MinManeuverIntervalSeconds, electronics.CombatManeuverIntervalSeconds);
             }
             robot.NextManeuverSeconds = state.MatchTimeSeconds + interval;
 

@@ -5,6 +5,8 @@
         "Game.Core",
         "Game.Simulation",
         "Game.Content",
+        "Game.AI",
+        "Game.Persistence",
         "Unity.InputSystem",
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.UGUI"

@@ -38,6 +38,7 @@ namespace Game.Presentation.Views
         // Делегат заказа робота
         public event Action<RobotPresetDefinition> OnOrderPresetRequested;
         public event Action<OrderType> OnRobotOrderRequested;
+        public event Action OnRestartRequested;
         private readonly Dictionary<OrderType, Button> _orderButtons = new Dictionary<OrderType, Button>();
         public event Action OnSelectPlayerBaseRequested;
 
@@ -48,6 +49,8 @@ namespace Game.Presentation.Views
         private RectTransform _minimapContent;
         private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
         private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
+        private GameObject _resultOverlay;
+        private Text _resultTitle;
 
         public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
         {
@@ -88,6 +91,14 @@ namespace Game.Presentation.Views
             }
 
             RemoveMissingRobotMarkers(activeRobotIds);
+        }
+
+        public void ShowMatchResult(MatchResult result)
+        {
+            EnsureResultOverlay();
+            _resultTitle.text = result == MatchResult.Player1Won ? "ПОБЕДА" : "ПОРАЖЕНИЕ";
+            _resultTitle.color = result == MatchResult.Player1Won ? new Color(0.25f, 0.9f, 0.45f) : new Color(1f, 0.3f, 0.3f);
+            _resultOverlay.SetActive(true);
         }
 
         private void EnsureFont()
@@ -164,6 +175,17 @@ namespace Game.Presentation.Views
             var mapArea = CreatePanel(panel.transform, "Map", new Vector2(0f, 0f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
                 new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.18f, 0.36f, 0.16f, 1f));
             _minimapContent = mapArea.GetComponent<RectTransform>();
+        }
+
+        private void EnsureResultOverlay()
+        {
+            if (_resultOverlay != null) return;
+            _resultOverlay = CreatePanel(_canvas.transform, "MatchResult", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.72f));
+            var card = CreatePanel(_resultOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 220f), new Color(0.05f, 0.1f, 0.18f, 1f));
+            _resultTitle = CreateLabel(card.transform, "Title", "ПОБЕДА", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -35f), new Vector2(-20f, -95f), 38, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+            var restart = CreateButton(card.transform, "Restart", "НОВЫЙ МАТЧ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 42f), new Vector2(220f, 58f), new Color(0.12f, 0.42f, 0.7f), 18);
+            restart.onClick.AddListener(() => OnRestartRequested?.Invoke());
+            _resultOverlay.SetActive(false);
         }
 
         private Image GetOrCreateMarker(Dictionary<int, Image> markers, int id, string type, float size)

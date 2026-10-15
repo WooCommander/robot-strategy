@@ -4,7 +4,9 @@
     "references": [
         "Game.Core",
         "Game.Simulation",
-        "Game.Content"
+        "Game.Content",
+        "Game.AI",
+        "Game.Persistence"
     ],
     "includePlatforms": [
         "Editor"

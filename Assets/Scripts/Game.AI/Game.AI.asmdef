@@ -3,7 +3,8 @@
     "rootNamespace": "Game.AI",
     "references": [
         "Game.Core",
-        "Game.Simulation"
+        "Game.Simulation",
+        "Game.Content"
     ],
     "includePlatforms": [],
     "excludePlatforms": [],

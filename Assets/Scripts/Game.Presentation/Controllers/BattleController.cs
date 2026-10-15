@@ -2,13 +2,16 @@ using System;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using UnityEngine.SceneManagement;
 using Game.Content.Definitions;
+using Game.AI;
 using Game.Core.Commands;
 using Game.Core.Models;
 using Game.Core.Types;
 using EntityId = Game.Core.Types.EntityId;
 using Game.Presentation.Camera;
 using Game.Presentation.Views;
+using Game.Persistence;
 using Game.Simulation.Navigation;
 using Game.Simulation.Systems;
 
@@ -29,6 +32,8 @@ namespace Game.Presentation.Controllers
         private ProductionSystem _productionSystem;
         private CombatSystem _combatSystem;
         private CaptureSystem _captureSystem;
+        private AiCommander _aiCommander;
+        private MatchPersistenceService _persistence;
         private Dictionary<string, ModuleDefinition> _moduleCatalog;
 
         private readonly Dictionary<int, RobotView> _spawnedRobots = new Dictionary<int, RobotView>();
@@ -37,7 +42,6 @@ namespace Game.Presentation.Controllers
         private BattleHudView _hudView;
         private bool _isOrderMode;
         private float _nextAutonomousOrderUpdate;
-        private bool _enemyReplacementPending;
         private bool _matchResultReported;
 
         private void Start()
@@ -80,7 +84,8 @@ namespace Game.Presentation.Controllers
             _combatSystem.OnWeaponFired += HandleWeaponFired;
             _captureSystem = new CaptureSystem();
             _captureSystem.OnBuildingCaptured += HandleBuildingCaptured;
-            QueueTestEnemyScout();
+            _aiCommander = new AiCommander(_commandDispatcher, _moduleCatalog);
+            _persistence = new MatchPersistenceService();
 
             // 3. Построение визуала карты
             if (_mapRenderer == null)
@@ -123,6 +128,7 @@ namespace Game.Presentation.Controllers
             _hudView.SetOrderMode(false);
             _hudView.OnOrderPresetRequested += HandleOrderPresetFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
+            _hudView.OnRestartRequested += RestartMatch;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
 
             // Прямая подписка на клики коллайдеров
@@ -138,13 +144,14 @@ namespace Game.Presentation.Controllers
         {
             if (_matchState == null) return;
 
+            if (!_matchState.IsPaused)
+            {
+                _matchState.Tick++;
+                _matchState.MatchTimeSeconds += Time.deltaTime;
+            }
             // Тиковый расчет симуляции производства и экономики
             _productionSystem.Update(_matchState, Time.deltaTime);
-            if (_enemyReplacementPending && _matchState.Player2.Metal >= RobotPresetCatalog.Scout.GetCost(_moduleCatalog))
-            {
-                QueueTestEnemyScout();
-                _enemyReplacementPending = false;
-            }
+            _aiCommander.Think(_matchState);
             UpdateAutonomousOrders();
             _combatSystem.Update(_matchState, Time.deltaTime);
             _captureSystem.Update(_matchState, Time.deltaTime);
@@ -152,6 +159,7 @@ namespace Game.Presentation.Controllers
             {
                 _matchResultReported = true;
                 Debug.Log(_matchState.Result == MatchResult.Player1Won ? "[Battle] Победа: вражеская база захвачена." : "[Battle] Поражение: ваша база захвачена.");
+                _hudView.ShowMatchResult(_matchState.Result);
             }
             UpdateControlMode();
             UpdateDirectControl();
@@ -189,6 +197,22 @@ namespace Game.Presentation.Controllers
                 order == OrderType.Defend ? RobotOrder.Defend(robot.Position) : RobotOrder.Stop();
         }
 
+        private void RestartMatch()
+        {
+            SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        private void OnApplicationPause(bool pauseStatus)
+        {
+            if (_matchState == null) return;
+            _matchState.IsPaused = pauseStatus;
+            if (pauseStatus)
+            {
+                _persistence.SaveAuto(_matchState);
+                Debug.Log("[Battle] Матч поставлен на паузу и сохранён в автослот.");
+            }
+        }
+
         private void HandleSelectPlayerBaseFromHud()
         {
             BuildingView p1Base = GetPlayer1BaseView();
@@ -209,12 +233,24 @@ namespace Game.Presentation.Controllers
             _spawnedRobots[robotState.Id.Value] = view;
             if (robotState.Owner == PlayerId.Player2)
             {
-                _commandDispatcher.Dispatch(new OrderCaptureCommand
+                if (_matchState.Player2.ActiveRobotsCount > 1)
                 {
-                    PlayerId = PlayerId.Player2,
-                    RobotIds = new List<EntityId> { robotState.Id },
-                    TargetBuildingId = EntityId.None
-                }, _matchState);
+                    _commandDispatcher.Dispatch(new OrderDefendCommand
+                    {
+                        PlayerId = PlayerId.Player2,
+                        RobotIds = new List<EntityId> { robotState.Id },
+                        TargetPosition = robotState.Position
+                    }, _matchState);
+                }
+                else
+                {
+                    _commandDispatcher.Dispatch(new OrderCaptureCommand
+                    {
+                        PlayerId = PlayerId.Player2,
+                        RobotIds = new List<EntityId> { robotState.Id },
+                        TargetBuildingId = EntityId.None
+                    }, _matchState);
+                }
             }
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
         }
@@ -233,7 +269,6 @@ namespace Game.Presentation.Controllers
 
             if (target.Owner == PlayerId.Player2)
             {
-                _enemyReplacementPending = true;
             }
         }
 
@@ -416,7 +451,17 @@ namespace Game.Presentation.Controllers
 
                 if (robot.CurrentOrder.Type == OrderType.Capture)
                 {
-                    var target = FindNearestBuilding(robot, building => building.Owner != robot.Owner);
+                    BuildingState target = null;
+                    if (robot.CurrentOrder.TargetEntityId.IsValid &&
+                        _matchState.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out var commandedTarget) &&
+                        commandedTarget.Owner != robot.Owner)
+                    {
+                        target = commandedTarget;
+                    }
+                    else
+                    {
+                        target = FindNearestBuilding(robot, building => building.Owner != robot.Owner);
+                    }
                     if (target == null) continue;
                     bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
                     robot.CurrentOrder.TargetEntityId = target.Id;
@@ -460,16 +505,6 @@ namespace Game.Presentation.Controllers
             {
                 view.SetMovementPath(waypoints);
             }
-        }
-
-        private void QueueTestEnemyScout()
-        {
-            _commandDispatcher.Dispatch(new EnqueueProductionCommand
-            {
-                PlayerId = PlayerId.Player2,
-                BaseBuildingId = new EntityId(2),
-                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint()
-            }, _matchState);
         }
 
         private float GetTerrainSpeedMultiplier(SimVector2 position)

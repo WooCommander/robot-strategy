@@ -131,6 +131,7 @@ namespace Game.Presentation.Views
             label.transform.SetParent(hbObj.transform, false);
             label.transform.localPosition = new Vector3(0f, 0.16f, 0f);
             _healthLabel = label.AddComponent<TextMesh>();
+            _healthLabel.font = GetWorldFont();
             _healthLabel.fontSize = 24;
             _healthLabel.characterSize = 0.07f;
             _healthLabel.anchor = TextAnchor.MiddleCenter;
@@ -249,5 +250,8 @@ namespace Game.Presentation.Views
         {
             return Mathf.Max(0.1f, _terrainSpeedProvider?.Invoke(position) ?? 1f);
         }
+
+        private static Font GetWorldFont() =>
+            Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
     }
 }

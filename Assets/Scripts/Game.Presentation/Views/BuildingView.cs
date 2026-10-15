@@ -120,6 +120,7 @@ namespace Game.Presentation.Views
                 labelObj.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
 
                 _nameLabel = labelObj.AddComponent<TextMesh>();
+                _nameLabel.font = GetWorldFont();
                 _nameLabel.fontSize = 24;
                 _nameLabel.characterSize = 0.1f;
                 _nameLabel.alignment = TextAlignment.Center;
@@ -131,6 +132,7 @@ namespace Game.Presentation.Views
             captureLabelObj.transform.SetParent(transform, false);
             captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.75f : 2.7f, 0f);
             _captureLabel = captureLabelObj.AddComponent<TextMesh>();
+            _captureLabel.font = GetWorldFont();
             _captureLabel.fontSize = 28;
             _captureLabel.characterSize = 0.11f;
             _captureLabel.alignment = TextAlignment.Center;
@@ -259,5 +261,8 @@ namespace Game.Presentation.Views
             PlayerId.Player2 => new Color(1.0f, 0.25f, 0.25f),  // Неоновый красный
             _ => new Color(0.65f, 0.65f, 0.65f)                  // Нейтральный серый
         };
+
+        private static Font GetWorldFont() =>
+            Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf") ?? Resources.GetBuiltinResource<Font>("Arial.ttf");
     }
 }

@@ -133,28 +133,32 @@ namespace Game.Presentation.Controllers
                 if (hits.Length > 0)
                 {
                     System.Array.Sort(hits, (left, right) => left.distance.CompareTo(right.distance));
-                    RaycastHit hit = hits[0];
-                    Debug.Log($"[Selection] Hit object: {hit.collider.gameObject.name}");
-
+                    RobotView hitRobot = null;
                     foreach (RaycastHit candidate in hits)
                     {
                         var candidateRobot = candidate.collider.GetComponentInParent<RobotView>();
                         if (candidateRobot != null)
                         {
-                            if (_isOrderMode && _selectedRobot != null &&
-                                _selectedRobot.Owner == PlayerId.Player1 &&
-                                candidateRobot.Owner != _selectedRobot.Owner)
-                            {
-                                SelectBuilding(null);
-                                SelectRobot(candidateRobot);
-                                return;
-                            }
+                            hitRobot = candidateRobot;
+                            break;
+                        }
+                    }
 
-                            SelectBuilding(null);
-                            SelectRobot(candidateRobot);
+                    // Робот имеет приоритет над зданием: его коллайдер может пересекаться с зоной захвата.
+                    if (hitRobot != null)
+                    {
+                        if (hitRobot == _selectedRobot && !_isOrderMode && !_isCaptureTargeting)
+                        {
+                            SelectRobot(null);
                             return;
                         }
+                        SelectBuilding(null);
+                        SelectRobot(hitRobot);
+                        return;
+                    }
 
+                    foreach (RaycastHit candidate in hits)
+                    {
                         var candidateBuilding = candidate.collider.GetComponentInParent<BuildingView>();
                         if (candidateBuilding != null)
                         {
@@ -171,42 +175,8 @@ namespace Game.Presentation.Controllers
                         }
                     }
 
-                    // 1. Проверяем клик по роботу
-                    var robot = hit.collider.GetComponentInParent<RobotView>();
-                    if (robot != null)
-                    {
-                        if (_isOrderMode && _selectedRobot != null &&
-                            _selectedRobot.Owner == PlayerId.Player1 &&
-                            robot.Owner != _selectedRobot.Owner)
-                        {
-                            SelectBuilding(null);
-                            SelectRobot(robot);
-                            return;
-                        }
-
-                        SelectBuilding(null);
-                        SelectRobot(robot);
-                        return;
-                    }
-
-                    // 2. Проверяем клик по зданию
-                    var building = hit.collider.GetComponentInParent<BuildingView>();
-                    if (building != null)
-                    {
-                        if (_isCaptureTargeting && _selectedRobot != null && _selectedRobot.Owner == PlayerId.Player1)
-                        {
-                            _isCaptureTargeting = false;
-                            OnCaptureOrderRequested?.Invoke(_selectedRobot, building);
-                            return;
-                        }
-
-                        SelectRobot(null);
-                        SelectBuilding(building);
-                        return;
-                    }
-
-                    // 3. Клик по земле
-                    var worldPos = new SimVector2(hit.point.x, hit.point.z);
+                    // Клик по земле
+                    var worldPos = new SimVector2(hits[0].point.x, hits[0].point.z);
 
                     // Если был выбран свой робот — отдаем приказ на движение
                     if (_selectedRobot == null || _selectedRobot.Owner != PlayerId.Player1)

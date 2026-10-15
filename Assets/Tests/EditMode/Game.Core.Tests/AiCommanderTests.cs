@@ -48,6 +48,22 @@ namespace Game.Core.Tests
             Assert.AreEqual(state.Buildings[2].Position, state.Robots[20].CurrentOrder.TargetPosition);
         }
 
+        [Test]
+        public void Think_ChoosesAnotherFactory_WhenNearestIsAlreadyCapturedByEnemy()
+        {
+            MatchState state = CreateMatch();
+            state.Buildings[101].CapturingPlayer = PlayerId.Player1;
+            state.Buildings[101].CaptureProgressSeconds = 6f;
+            state.Buildings[102] = new BuildingState { Id = new EntityId(102), Type = BuildingType.Factory, Owner = PlayerId.Neutral, Position = new SimVector2(24f, 15f) };
+            state.Robots[20] = CreateRobot(20, PlayerId.Player2, new SimVector2(40f, 15f));
+            var ai = new AiCommander(new CommandDispatcher(_catalog), _catalog);
+
+            ai.Think(state);
+
+            Assert.AreEqual(OrderType.Capture, state.Robots[20].CurrentOrder.Type);
+            Assert.AreEqual(new EntityId(102), state.Robots[20].CurrentOrder.TargetEntityId);
+        }
+
         private static MatchState CreateMatch()
         {
             var state = new MatchState();

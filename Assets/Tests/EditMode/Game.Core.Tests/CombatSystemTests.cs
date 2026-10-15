@@ -70,6 +70,21 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void CannonProjectile_HitsTargetThatMovedInsideItsHull()
+        {
+            var state = CreateState(CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponCannon),
+                CreateRobot(2, PlayerId.Player2, 5f, DefaultContentCatalog.WeaponCannon));
+            state.Robots[1].CurrentOrder = RobotOrder.Attack(new EntityId(2));
+            var combat = new CombatSystem(_catalog);
+
+            combat.Update(state, 0.1f);
+            state.Robots[2].Position = new SimVector2(5f, 1.1f);
+            combat.Update(state, 0.2f);
+
+            Assert.AreEqual(65, state.Robots[2].CurrentHealth);
+        }
+
+        [Test]
         public void UnguidedMissile_ExplodesAtOriginalAimPoint_WhenTargetMovesAway()
         {
             var state = CreateState(CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponMissiles),

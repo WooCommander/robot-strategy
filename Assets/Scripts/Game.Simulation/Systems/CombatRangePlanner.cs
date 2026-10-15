@@ -37,10 +37,11 @@ namespace Game.Simulation.Systems
                 return true;
             }
 
-            // В рабочей зоне робот идёт по дуге, сохраняя дальность и возможность вести огонь.
+            // В рабочей зоне робот идёт по небольшой дуге, сохраняя дальность и возможность вести огонь.
+            // Большой шаг по окружности менял точку прицеливания быстрее, чем летели снаряды.
             float direction = attacker.Id.Value % 2 == 0 ? 1f : -1f;
             var tangent = new SimVector2(-radial.Y * direction, radial.X * direction);
-            SimVector2 maneuverDirection = (radial * 0.85f + tangent * 0.53f);
+            SimVector2 maneuverDirection = (radial * 0.98f + tangent * 0.2f);
             destination = target.Position + maneuverDirection * effectiveRange;
             return true;
         }

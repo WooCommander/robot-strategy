@@ -116,7 +116,9 @@ namespace Game.Simulation.Systems
 
         private void ApplyDirectHit(RobotState attacker, ProjectileState projectile, MatchState state)
         {
-            const float hitRadius = 0.9f;
+            // Попадание проверяется по габариту корпуса, а не по математической точке в центре.
+            // Манёвр всё ещё позволяет уйти от снаряда.
+            const float hitRadius = 1.25f;
             if (state.Robots.TryGetValue(projectile.TargetRobotId.Value, out RobotState target) && target.IsAlive &&
                 target.Owner != projectile.Owner && SimVector2.SqrDistance(target.Position, projectile.ImpactPosition) <= hitRadius * hitRadius)
             {

@@ -35,7 +35,7 @@ namespace Game.AI
                 return;
             }
 
-            BuildingState objective = ChooseObjective(state, baseBuilding.Position, robots.Count);
+            BuildingState objective = ChooseObjective(state, baseBuilding.Position, robots.Count, PlayerId.Player2);
             if (objective == null) return;
             int defenders = robots.Count >= 4 ? 1 : 0;
             int attackersCount = robots.Count - defenders;
@@ -60,13 +60,15 @@ namespace Game.AI
             return RobotPresetCatalog.Scout;
         }
 
-        private static BuildingState ChooseObjective(MatchState state, SimVector2 from, int armySize)
+        private static BuildingState ChooseObjective(MatchState state, SimVector2 from, int armySize, PlayerId owner)
         {
             BuildingState best = null;
             float bestScore = float.MaxValue;
             foreach (BuildingState building in state.Buildings.Values)
             {
-                if (building.Owner == PlayerId.Player2 || (building.Type == BuildingType.Base && armySize < 3)) continue;
+                if (building.Owner == owner || (building.Type == BuildingType.Base && armySize < 3)) continue;
+                // Объект уже оспаривается противником: ищем свободную цель, а не кружим у зоны.
+                if (building.CapturingPlayer != PlayerId.Neutral && building.CapturingPlayer != owner && building.CaptureProgressSeconds > 0f) continue;
                 float score = SimVector2.SqrDistance(from, building.Position);
                 if (building.Type == BuildingType.Base) score += 100f;
                 if (building.Owner == PlayerId.Player1) score -= 25f;

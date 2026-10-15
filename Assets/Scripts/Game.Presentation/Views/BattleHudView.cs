@@ -524,7 +524,7 @@ namespace Game.Presentation.Views
             {
                 ModuleSlotType.Chassis => $"<b>{module.Name}</b>\n{common}\nСкорость {module.Speed:F1}, лимит {module.MaxLoadCapacity}",
                 ModuleSlotType.Body => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}, слотов {module.WeaponSlots}",
-                ModuleSlotType.Weapon => $"<b>{module.Name}</b>\n{common}\nУрон {module.Damage}, дальн. {module.Range:F0}, КД {module.CooldownSeconds:F1}",
+                ModuleSlotType.Weapon => $"<b>{module.Name}</b>\n{common}\nУрон {module.Damage}, дальн. {module.Range:F0}, КД {module.CooldownSeconds:F1}\nРазведчик: {Mathf.CeilToInt(120f / module.Damage)} попад.",
                 ModuleSlotType.Control => $"<b>{module.Name}</b>\n{common}\nУпрежд. {module.LeadPredictionSeconds:F1}с, манёвр {module.CombatManeuverIntervalSeconds:F2}с",
                 _ => $"<b>{module.Name}</b>\n{common}\nHP +{module.HealthBonus}"
             };

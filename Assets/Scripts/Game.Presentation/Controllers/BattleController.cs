@@ -342,7 +342,26 @@ namespace Game.Presentation.Controllers
                 if (Vector3.Distance(detour, other.transform.position) >= collisionRadius) return detour;
                 return movingRobot.transform.position;
             }
+
+            foreach (var building in _matchState.Buildings.Values)
+            {
+                float clearance = building.Type == BuildingType.Base ? 2.35f : 1.65f;
+                Vector3 center = new Vector3(building.Position.X, desiredPosition.y, building.Position.Y);
+                Vector3 separation = desiredPosition - center;
+                separation.y = 0f;
+                if (separation.sqrMagnitude >= clearance * clearance) continue;
+                if (separation.sqrMagnitude < 0.001f) separation = Vector3.right;
+                return center + separation.normalized * clearance;
+            }
             return desiredPosition;
+        }
+
+        private static SimVector2 GetBuildingApproachPoint(SimVector2 robotPosition, BuildingState building)
+        {
+            SimVector2 direction = robotPosition - building.Position;
+            if (direction.SqrMagnitude < 0.001f) direction = new SimVector2(1f, 0f);
+            float approachDistance = building.Type == BuildingType.Base ? 2.55f : 1.85f;
+            return building.Position + direction / direction.Magnitude * approachDistance;
         }
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
@@ -473,7 +492,7 @@ namespace Game.Presentation.Controllers
                 TargetBuildingId = new EntityId(target.EntityId)
             };
             var result = _commandDispatcher.Dispatch(command, _matchState);
-            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, _matchState.Buildings[target.EntityId].Position, out var waypoints))
+            if (result.IsSuccess && _pathfinder.TryFindPath(robot.State.Position, GetBuildingApproachPoint(robot.State.Position, _matchState.Buildings[target.EntityId]), out var waypoints))
             {
                 robot.SetMovementPath(waypoints);
                 Debug.Log($"[Battle] Робот #{robot.EntityId} получил приказ захватить здание #{target.EntityId}.");
@@ -511,7 +530,7 @@ namespace Game.Presentation.Controllers
                     if (target == null) continue;
                     bool targetChanged = robot.CurrentOrder.TargetEntityId != target.Id;
                     robot.CurrentOrder.TargetEntityId = target.Id;
-                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, target.Position);
+                    if (targetChanged || !view.IsMovingAlongPath) RouteRobotTo(view, GetBuildingApproachPoint(robot.Position, target));
                 }
                 else if (robot.CurrentOrder.Type == OrderType.Attack)
                 {

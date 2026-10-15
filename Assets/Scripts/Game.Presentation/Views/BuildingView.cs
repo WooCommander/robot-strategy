@@ -16,6 +16,7 @@ namespace Game.Presentation.Views
         [SerializeField] private MeshRenderer _buildingRenderer;
         [SerializeField] private LineRenderer _captureZoneCircle;
         [SerializeField] private TextMesh _nameLabel;
+        [SerializeField] private TextMesh _captureLabel;
 
         private MaterialPropertyBlock _propBlock;
 
@@ -126,6 +127,17 @@ namespace Game.Presentation.Views
                 _nameLabel.text = _type == BuildingType.Base ? $"БАЗА #{_entityId}" : $"ЗАВОД #{_entityId}";
             }
 
+            var captureLabelObj = new GameObject("CaptureProgress");
+            captureLabelObj.transform.SetParent(transform, false);
+            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 2.65f : 1.9f, 0f);
+            captureLabelObj.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
+            _captureLabel = captureLabelObj.AddComponent<TextMesh>();
+            _captureLabel.fontSize = 20;
+            _captureLabel.characterSize = 0.08f;
+            _captureLabel.alignment = TextAlignment.Center;
+            _captureLabel.anchor = TextAnchor.MiddleCenter;
+            _captureLabel.gameObject.SetActive(false);
+
             // Золотой 3D-маркер выбора над зданием
             if (_selectionMarker == null)
             {
@@ -169,6 +181,26 @@ namespace Game.Presentation.Views
                 {
                     _captureZoneCircle.material.color = teamColor;
                 }
+            }
+        }
+
+        public void UpdateCaptureVisual(BuildingState state)
+        {
+            if (_captureLabel == null || state == null) return;
+            bool isCapturing = state.CaptureProgressSeconds > 0f || state.IsContested;
+            _captureLabel.gameObject.SetActive(isCapturing);
+            if (!isCapturing) return;
+
+            float percent = Mathf.Clamp01(state.CaptureProgressSeconds / state.CaptureTimeTotal) * 100f;
+            if (state.IsContested)
+            {
+                _captureLabel.text = "ЗАХВАТ ОСПАРИВАЕТСЯ";
+                _captureLabel.color = Color.yellow;
+            }
+            else
+            {
+                _captureLabel.text = $"ЗАХВАТ {percent:0}%";
+                _captureLabel.color = GetPlayerColor(state.CapturingPlayer);
             }
         }
 

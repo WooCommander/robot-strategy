@@ -160,6 +160,7 @@ namespace Game.Presentation.Controllers
             UpdateAutonomousOrders();
             _combatSystem.Update(_matchState, Time.deltaTime);
             _captureSystem.Update(_matchState, Time.deltaTime);
+            UpdateCombatAndCaptureVisuals();
             if (!_matchResultReported && _matchState.Result != MatchResult.InProgress)
             {
                 _matchResultReported = true;
@@ -298,6 +299,21 @@ namespace Game.Presentation.Controllers
                 {
                     view.UpdateOwnerVisuals(building.Owner);
                     break;
+                }
+            }
+        }
+
+        private void UpdateCombatAndCaptureVisuals()
+        {
+            foreach (var view in _spawnedRobots.Values)
+            {
+                view?.UpdateHealthVisual();
+            }
+            foreach (var view in _mapRenderer.SpawnedBuildings)
+            {
+                if (_matchState.Buildings.TryGetValue(view.EntityId, out var building))
+                {
+                    view.UpdateCaptureVisual(building);
                 }
             }
         }

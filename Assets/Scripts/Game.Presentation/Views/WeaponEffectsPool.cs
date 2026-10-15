@@ -46,12 +46,19 @@ namespace Game.Presentation.Views
         {
             Initialize();
             Color color = weaponType == WeaponType.AreaMissile ? new Color(1f, 0.3f, 0.1f) : new Color(1f, 0.85f, 0.2f);
-            Transform impact = _freeImpacts.Count > 0 ? _freeImpacts.Dequeue() : CreateImpact();
+            Transform impact = _freeImpacts.Count > 0 ? _freeImpacts.Dequeue() : null;
+            if (impact == null) impact = CreateImpact();
             impact.position = new Vector3(impactPosition.X, 1.1f, impactPosition.Y);
             impact.localScale = Vector3.one * (weaponType == WeaponType.AreaMissile ? 0.8f : 0.35f);
             _impactProperties.SetColor("_Color", color);
             _impactProperties.SetColor("_BaseColor", color);
-            impact.GetComponent<Renderer>().SetPropertyBlock(_impactProperties);
+            var impactRenderer = impact.GetComponent<Renderer>();
+            if (impactRenderer == null)
+            {
+                impact = CreateImpact();
+                impactRenderer = impact.GetComponent<Renderer>();
+            }
+            impactRenderer.SetPropertyBlock(_impactProperties);
             impact.gameObject.SetActive(true);
             _active.Add(new ActiveEffect { Impact = impact, ReleaseAt = Time.time + EffectDuration });
         }

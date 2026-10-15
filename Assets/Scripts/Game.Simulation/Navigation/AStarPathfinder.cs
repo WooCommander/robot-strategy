@@ -5,61 +5,59 @@ using Game.Core.Types;
 
 namespace Game.Simulation.Navigation
 {
+    /// <summary>Сетка проходимости карты для одного класса шасси.</summary>
     public class NavigationGrid
     {
         private readonly int _width;
         private readonly int _height;
         private readonly float _tileSize;
-        private readonly byte[] _walkability; // 0 - непроходимо, 1 - обычная почва, 2 - дорога, 3 - мост
-        private readonly float[] _speedMultipliers;
+        private readonly float[] _speedMultipliers; // 0 — непроходимо
 
         public int Width => _width;
         public int Height => _height;
         public float TileSize => _tileSize;
+        public MobilityClass Mobility { get; }
 
-        public NavigationGrid(MapDefinition map)
+        public NavigationGrid(MapDefinition map, MobilityClass mobility = MobilityClass.Tracked)
         {
             _width = map.Width;
             _height = map.Height;
             _tileSize = map.TileSize;
-            _walkability = new byte[_width * _height];
+            Mobility = mobility;
             _speedMultipliers = new float[_width * _height];
 
             for (int y = 0; y < _height; y++)
             {
                 for (int x = 0; x < _width; x++)
                 {
-                    var tile = map.GetTile(x, y);
-                    int idx = y * _width + x;
-                    switch (tile)
-                    {
-                        case TileType.Road:
-                            _walkability[idx] = 1;
-                            _speedMultipliers[idx] = 1.3f;
-                            break;
-                        case TileType.Bridge:
-                            _walkability[idx] = 1;
-                            _speedMultipliers[idx] = 1.1f;
-                            break;
-                        case TileType.Ground:
-                            _walkability[idx] = 1;
-                            _speedMultipliers[idx] = 1.0f;
-                            break;
-                        case TileType.Water:
-                        case TileType.Mountain:
-                        default:
-                            _walkability[idx] = 0;
-                            _speedMultipliers[idx] = 0f;
-                            break;
-                    }
+                    bool mapEdge = x == 0 || y == 0 || x == _width - 1 || y == _height - 1;
+                    _speedMultipliers[y * _width + x] = mapEdge ? 0f : GetTerrainSpeed(map.GetTile(x, y), mobility);
                 }
+            }
+        }
+
+        /// <summary>
+        /// Множитель скорости на поверхности; 0 — шасси здесь не пройдёт.
+        /// Антиграв летит над любой поверхностью с одной скоростью, гусеницы преодолевают неровности медленнее,
+        /// шагающим нужна ровная земля.
+        /// </summary>
+        public static float GetTerrainSpeed(TileType tile, MobilityClass mobility)
+        {
+            if (mobility == MobilityClass.Hover) return 1f;
+            switch (tile)
+            {
+                case TileType.Road: return 1.3f;
+                case TileType.Bridge: return 1.1f;
+                case TileType.Ground: return 1.0f;
+                case TileType.Rough: return mobility == MobilityClass.Tracked ? 0.7f : 0f;
+                default: return 0f; // скалы, вода, трещины
             }
         }
 
         public bool IsWalkable(int x, int y)
         {
             if (x < 0 || x >= _width || y < 0 || y >= _height) return false;
-            return _walkability[y * _width + x] > 0;
+            return _speedMultipliers[y * _width + x] > 0f;
         }
 
         public float GetSpeedMultiplier(int x, int y)
@@ -71,15 +69,14 @@ namespace Game.Simulation.Navigation
         public void BlockCircle(SimVector2 center, float radius)
         {
             float radiusSq = radius * radius;
-            for (int y = 0; y < _height; y++)
+            GridCoord min = WorldToGrid(new SimVector2(center.X - radius, center.Y - radius));
+            GridCoord max = WorldToGrid(new SimVector2(center.X + radius, center.Y + radius));
+            for (int y = Math.Max(0, min.Y); y <= Math.Min(_height - 1, max.Y); y++)
             {
-                for (int x = 0; x < _width; x++)
+                for (int x = Math.Max(0, min.X); x <= Math.Min(_width - 1, max.X); x++)
                 {
-                    SimVector2 cellCenter = GridToWorld(new GridCoord(x, y));
-                    if (SimVector2.SqrDistance(cellCenter, center) > radiusSq) continue;
-                    int index = y * _width + x;
-                    _walkability[index] = 0;
-                    _speedMultipliers[index] = 0f;
+                    if (SimVector2.SqrDistance(GridToWorld(new GridCoord(x, y)), center) > radiusSq) continue;
+                    _speedMultipliers[y * _width + x] = 0f;
                 }
             }
         }
@@ -90,7 +87,20 @@ namespace Game.Simulation.Navigation
 
     public class AStarPathfinder
     {
+        private static readonly int[] Dx = { 1, -1, 0, 0, 1, 1, -1, -1 };
+        private static readonly int[] Dy = { 0, 0, 1, -1, 1, -1, 1, -1 };
+        private static readonly float[] StepCost = { 1f, 1f, 1f, 1f, 1.4142f, 1.4142f, 1.4142f, 1.4142f };
+
         private readonly NavigationGrid _grid;
+
+        // Буферы переиспользуются между поисками: актуальность ячейки отмечает номер поиска.
+        private readonly float[] _gScore;
+        private readonly int[] _parent;
+        private readonly int[] _openedStamp;
+        private readonly int[] _closedStamp;
+        private readonly PriorityQueueSimple<Node> _openSet = new PriorityQueueSimple<Node>();
+        private readonly List<int> _pathIndices = new List<int>();
+        private int _searchStamp;
 
         private struct Node : IComparable<Node>
         {
@@ -103,7 +113,14 @@ namespace Game.Simulation.Navigation
         public AStarPathfinder(NavigationGrid grid)
         {
             _grid = grid;
+            int total = grid.Width * grid.Height;
+            _gScore = new float[total];
+            _parent = new int[total];
+            _openedStamp = new int[total];
+            _closedStamp = new int[total];
         }
+
+        public NavigationGrid Grid => _grid;
 
         public bool TryFindPath(SimVector2 startWorld, SimVector2 endWorld, out List<SimVector2> waypoints)
         {
@@ -113,20 +130,8 @@ namespace Game.Simulation.Navigation
             var endGrid = _grid.WorldToGrid(endWorld);
             bool requestedEndIsWalkable = _grid.IsWalkable(endGrid.X, endGrid.Y);
 
-            // Если старт или финиш за пределами сетки или непроходимы
-            if (!_grid.IsWalkable(startGrid.X, startGrid.Y))
-            {
-                return false;
-            }
-
-            if (!requestedEndIsWalkable)
-            {
-                // Поиск ближайшей проходимой соседней клетки
-                if (!TryFindNearestWalkable(endGrid, out endGrid))
-                {
-                    return false;
-                }
-            }
+            if (!_grid.IsWalkable(startGrid.X, startGrid.Y)) return false;
+            if (!requestedEndIsWalkable && !TryFindNearestWalkable(endGrid, out endGrid)) return false;
 
             if (startGrid == endGrid)
             {
@@ -135,103 +140,62 @@ namespace Game.Simulation.Navigation
             }
 
             int w = _grid.Width;
-            int total = w * _grid.Height;
-
             int startIndex = startGrid.Y * w + startGrid.X;
             int endIndex = endGrid.Y * w + endGrid.X;
 
-            var gScore = new float[total];
-            var fScore = new float[total];
-            var parent = new int[total];
-            var closed = new bool[total];
-
-            for (int i = 0; i < total; i++)
+            if (++_searchStamp == int.MaxValue)
             {
-                gScore[i] = float.MaxValue;
-                fScore[i] = float.MaxValue;
-                parent[i] = -1;
+                Array.Clear(_openedStamp, 0, _openedStamp.Length);
+                Array.Clear(_closedStamp, 0, _closedStamp.Length);
+                _searchStamp = 1;
             }
-
-            gScore[startIndex] = 0f;
-            fScore[startIndex] = Heuristic(startGrid.X, startGrid.Y, endGrid.X, endGrid.Y);
-
-            var openSet = new PriorityQueueSimple<Node>();
-            openSet.Enqueue(new Node { Index = startIndex, FScore = fScore[startIndex] });
-
-            // 4 основных направления + 4 диагональных
-            int[] dx = { 1, -1, 0, 0, 1, 1, -1, -1 };
-            int[] dy = { 0, 0, 1, -1, 1, -1, 1, -1 };
-            float[] cost = { 1f, 1f, 1f, 1f, 1.4142f, 1.4142f, 1.4142f, 1.4142f };
+            int stamp = _searchStamp;
+            _openSet.Clear();
+            Open(startIndex, -1, 0f, stamp);
+            _openSet.Enqueue(new Node { Index = startIndex, FScore = Heuristic(startGrid.X, startGrid.Y, endGrid.X, endGrid.Y) });
 
             bool found = false;
-
-            while (openSet.Count > 0)
+            while (_openSet.Count > 0)
             {
-                var current = openSet.Dequeue();
-                int currIdx = current.Index;
-
+                int currIdx = _openSet.Dequeue().Index;
                 if (currIdx == endIndex)
                 {
                     found = true;
                     break;
                 }
-
-                if (closed[currIdx]) continue;
-                closed[currIdx] = true;
+                if (_closedStamp[currIdx] == stamp) continue;
+                _closedStamp[currIdx] = stamp;
 
                 int cx = currIdx % w;
                 int cy = currIdx / w;
-
                 for (int i = 0; i < 8; i++)
                 {
-                    int nx = cx + dx[i];
-                    int ny = cy + dy[i];
-
+                    int nx = cx + Dx[i];
+                    int ny = cy + Dy[i];
                     if (!_grid.IsWalkable(nx, ny)) continue;
 
-                    // Защита от срезания угла через диагональ у непроходимой стены
-                    if (i >= 4)
-                    {
-                        if (!_grid.IsWalkable(cx + dx[i], cy) || !_grid.IsWalkable(cx, cy + dy[i]))
-                            continue;
-                    }
+                    // Защита от срезания угла через диагональ у непроходимой клетки
+                    if (i >= 4 && (!_grid.IsWalkable(cx + Dx[i], cy) || !_grid.IsWalkable(cx, cy + Dy[i]))) continue;
 
                     int nIdx = ny * w + nx;
-                    if (closed[nIdx]) continue;
+                    if (_closedStamp[nIdx] == stamp) continue;
 
-                    float speedMultiplier = _grid.GetSpeedMultiplier(nx, ny);
-                    float moveCost = (cost[i] / Math.Max(0.1f, speedMultiplier));
-                    float tentativeG = gScore[currIdx] + moveCost;
+                    float tentativeG = _gScore[currIdx] + StepCost[i] / Math.Max(0.1f, _grid.GetSpeedMultiplier(nx, ny));
+                    if (_openedStamp[nIdx] == stamp && tentativeG >= _gScore[nIdx]) continue;
 
-                    if (tentativeG < gScore[nIdx])
-                    {
-                        parent[nIdx] = currIdx;
-                        gScore[nIdx] = tentativeG;
-                        float h = Heuristic(nx, ny, endGrid.X, endGrid.Y);
-                        fScore[nIdx] = tentativeG + h;
-                        openSet.Enqueue(new Node { Index = nIdx, FScore = fScore[nIdx] });
-                    }
+                    Open(nIdx, currIdx, tentativeG, stamp);
+                    _openSet.Enqueue(new Node { Index = nIdx, FScore = tentativeG + Heuristic(nx, ny, endGrid.X, endGrid.Y) });
                 }
             }
 
             if (!found) return false;
 
-            // Восстановление пути
-            var pathIndices = new List<int>();
-            int trace = endIndex;
-            while (trace != -1)
+            _pathIndices.Clear();
+            for (int trace = endIndex; trace != -1; trace = _parent[trace]) _pathIndices.Add(trace);
+            for (int i = _pathIndices.Count - 1; i >= 0; i--)
             {
-                pathIndices.Add(trace);
-                trace = parent[trace];
-            }
-            pathIndices.Reverse();
-
-            // Преобразование в мировые координаты
-            for (int i = 0; i < pathIndices.Count; i++)
-            {
-                int idx = pathIndices[i];
-                var coord = new GridCoord(idx % w, idx / w);
-                waypoints.Add(_grid.GridToWorld(coord));
+                int idx = _pathIndices[i];
+                waypoints.Add(_grid.GridToWorld(new GridCoord(idx % w, idx / w)));
             }
 
             // Точную точку оставляем только для исходно проходимой клетки.
@@ -242,6 +206,13 @@ namespace Game.Simulation.Navigation
             }
 
             return true;
+        }
+
+        private void Open(int index, int parent, float gScore, int stamp)
+        {
+            _openedStamp[index] = stamp;
+            _parent[index] = parent;
+            _gScore[index] = gScore;
         }
 
         private bool TryFindNearestWalkable(GridCoord target, out GridCoord result)
@@ -270,8 +241,8 @@ namespace Game.Simulation.Navigation
         {
             int dx = Math.Abs(x1 - x2);
             int dy = Math.Abs(y1 - y2);
-            // Octile distance
-            return Math.Max(dx, dy) + 0.4142f * Math.Min(dx, dy);
+            // Octile distance; делим на максимальный множитель дороги, чтобы эвристика не переоценивала путь.
+            return (Math.Max(dx, dy) + 0.4142f * Math.Min(dx, dy)) / 1.3f;
         }
     }
 
@@ -279,6 +250,8 @@ namespace Game.Simulation.Navigation
     {
         private readonly List<T> _data = new List<T>();
         public int Count => _data.Count;
+
+        public void Clear() => _data.Clear();
 
         public void Enqueue(T item)
         {

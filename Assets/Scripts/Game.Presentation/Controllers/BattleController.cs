@@ -89,6 +89,10 @@ namespace Game.Presentation.Controllers
             if (_cameraController != null)
             {
                 _cameraController.SetBounds(_mapDefinition.Width, _mapDefinition.Height);
+                foreach (BuildingSpawnDefinition building in _mapDefinition.Buildings)
+                {
+                    if (building.Type == BuildingType.Base && building.InitialOwner == PlayerId.Player1) _cameraController.FocusOn(building.Position.X + 8f, building.Position.Y);
+                }
             }
 
             // 4. Настройка контроллера ввода
@@ -111,6 +115,7 @@ namespace Game.Presentation.Controllers
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
             _hudView.OnRestartRequested += RestartMatch;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
+            _hudView.OnMinimapPointRequested += point => _cameraController?.FocusOn(point.X, point.Y, instant: false);
             _combatFeedback = new GameObject("CombatFeedback").AddComponent<CombatFeedbackView>();
 
             // На старте ничего не выбрано — экран чистый
@@ -237,8 +242,15 @@ namespace Game.Presentation.Controllers
             var go = new GameObject($"Robot_Unit_{robotState.Id.Value}");
             var view = go.AddComponent<RobotView>();
             view.Initialize(robotState);
+            view.SetSurfaceHeightProvider(GetSurfaceHeight);
             _spawnedRobots[robotState.Id.Value] = view;
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
+        }
+
+        private float GetSurfaceHeight(SimVector2 position)
+        {
+            GridCoord cell = GridCoord.FromSimVector2(position, _mapDefinition.TileSize);
+            return MapRenderer.GetTileHeight(_mapDefinition.GetTile(cell.X, cell.Y));
         }
 
         private void HandleRobotDestroyed(RobotState attacker, RobotState target)

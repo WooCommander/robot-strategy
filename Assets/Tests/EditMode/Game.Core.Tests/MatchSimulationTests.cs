@@ -52,7 +52,7 @@ namespace Game.Core.Tests
             var ids = new List<EntityId> { robot.Id };
 
             simulation.Issue(new OrderDriveCommand { PlayerId = PlayerId.Player1, RobotIds = ids, Direction = new SimVector2(0f, 1f) });
-            for (int tick = 0; tick < 10; tick++) simulation.Step(MatchSimulation.FixedDeltaSeconds);
+            for (int tick = 0; tick < 20; tick++) simulation.Step(MatchSimulation.FixedDeltaSeconds);
             simulation.Issue(new OrderDriveCommand { PlayerId = PlayerId.Player1, RobotIds = ids, Direction = SimVector2.Zero });
             SimVector2 afterDrive = robot.Position;
             for (int tick = 0; tick < 10; tick++) simulation.Step(MatchSimulation.FixedDeltaSeconds);

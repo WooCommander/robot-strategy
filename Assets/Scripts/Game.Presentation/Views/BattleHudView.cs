@@ -85,6 +85,7 @@ namespace Game.Presentation.Views
         public event Action<OrderType> OnRobotOrderRequested;
         public event Action OnRestartRequested;
         public event Action OnSelectPlayerBaseRequested;
+        public event Action<SimVector2> OnMinimapPointRequested;
 
         public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
         {
@@ -451,7 +452,7 @@ namespace Game.Presentation.Views
             else if (!affordable) _constructorSummary.text = $"<color=#FF8888>Не хватает {payment[(int)ResourceType.General] - _player.Resources[ResourceType.General]} общих ресурсов.</color>";
             else if (!_player.CanBuildMoreRobots) _constructorSummary.text = "<color=#FF8888>Достигнут лимит армии.</color>";
             else if (!queueOpen) _constructorSummary.text = "<color=#FF8888>Очередь базы заполнена.</color>";
-            else _constructorSummary.text = $"Цена {validation.TotalCost} • HP {validation.TotalHealth} • скорость {validation.Speed:F1}";
+            else _constructorSummary.text = $"Цена {validation.TotalCost} • HP {validation.TotalHealth} • скорость {validation.Speed:F1}\n{DescribeMobility(validation.Mobility)}";
         }
 
         private void ProduceFromConstructor()
@@ -524,6 +525,13 @@ namespace Game.Presentation.Views
             return string.Join(" + ", parts);
         }
 
+        private static string DescribeMobility(MobilityClass mobility) => mobility switch
+        {
+            MobilityClass.Hover => "Летит над водой, скалами и трещинами",
+            MobilityClass.Tracked => "Проходит неровности, обходит трещины и воду",
+            _ => "Только ровная земля: обходит неровности, трещины и воду"
+        };
+
         private static Color GetModuleColor(string moduleId) => moduleId switch
         {
             DefaultContentCatalog.Electronics => new Color(0.92f, 0.92f, 0.92f),
@@ -566,6 +574,9 @@ namespace Game.Presentation.Views
             var mapArea = CreatePanel(panel.transform, "Map", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.05f, 0.12f, 0.3f, 1f));
             _minimapContent = mapArea.GetComponent<RectTransform>();
+            // Нажатие по радару переносит камеру в эту точку карты; перетаскивание ведёт её следом.
+            mapArea.AddComponent<MinimapInput>().OnPointRequested += normalized =>
+                OnMinimapPointRequested?.Invoke(new SimVector2(normalized.x * _mapDefinition.Width, normalized.y * _mapDefinition.Height));
         }
 
         private void EnsureResultOverlay()
@@ -590,6 +601,7 @@ namespace Game.Presentation.Views
             rt.anchorMax = new Vector2(0.5f, 0.5f);
             rt.sizeDelta = Vector2.one * size;
             var image = markerGo.AddComponent<Image>();
+            image.raycastTarget = false;
             markers[id] = image;
             return image;
         }

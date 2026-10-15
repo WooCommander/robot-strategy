@@ -54,6 +54,14 @@ namespace Game.Core.Types
         Chassis = 6
     }
 
+    /// <summary>Как шасси проходит местность: шагающие — только ровная земля, гусеницы — и неровности, антиграв — над всем, кроме зданий.</summary>
+    public enum MobilityClass : byte
+    {
+        Walker = 0,
+        Tracked = 1,
+        Hover = 2
+    }
+
     public enum OrderType : byte
     {
         None = 0,

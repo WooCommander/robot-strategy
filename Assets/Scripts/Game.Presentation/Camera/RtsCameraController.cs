@@ -50,6 +50,16 @@ namespace Game.Presentation.Camera
             transform.rotation = Quaternion.Euler(55f, 0f, 0f);
         }
 
+        /// <summary>Навести камеру на точку карты: на старте мгновенно, по клику на радаре — плавным перелётом.</summary>
+        public void FocusOn(float x, float z, bool instant = true)
+        {
+            _targetPosition = new Vector3(x, transform.position.y, z - 8f);
+            _targetPosition.x = Mathf.Clamp(_targetPosition.x, _panLimitMin.x, _panLimitMax.x);
+            _targetPosition.z = Mathf.Clamp(_targetPosition.z, _panLimitMin.y, _panLimitMax.y);
+            if (!instant) return;
+            transform.position = _targetPosition;
+        }
+
         public void SetBounds(float width, float height)
         {
             _panLimitMin = new Vector2(0f, 0f);
@@ -129,7 +139,11 @@ namespace Game.Presentation.Camera
                     var touch = touches[0];
                     Vector2 touchPos = touch.position.ReadValue();
 
-                    if (touch.press.wasPressedThisFrame)
+                    if (touch.press.wasPressedThisFrame && IsPointerOverUi())
+                    {
+                        _isDragging = false;
+                    }
+                    else if (touch.press.wasPressedThisFrame)
                     {
                         _isDragging = true;
                         _lastPointerPos = touchPos;
@@ -180,6 +194,9 @@ namespace Game.Presentation.Camera
             _targetPosition.x = Mathf.Clamp(_targetPosition.x, _panLimitMin.x, _panLimitMax.x);
             _targetPosition.z = Mathf.Clamp(_targetPosition.z, _panLimitMin.y, _panLimitMax.y);
         }
+
+        private static bool IsPointerOverUi() =>
+            UnityEngine.EventSystems.EventSystem.current != null && UnityEngine.EventSystems.EventSystem.current.IsPointerOverGameObject();
 
         private void SmoothUpdate()
         {

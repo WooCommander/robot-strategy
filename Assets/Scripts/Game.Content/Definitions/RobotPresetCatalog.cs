@@ -64,7 +64,15 @@ namespace Game.Content.Definitions
             ElectronicsId = DefaultContentCatalog.Electronics
         };
 
-        public static readonly RobotPresetDefinition[] All = { Scout, Tank, Missile, Heavy };
+        public static readonly RobotPresetDefinition Raider = new RobotPresetDefinition
+        {
+            Id = "raider", Name = "Налётчик", BuildTimeSeconds = 10f,
+            ChassisId = DefaultContentCatalog.ChassisAntiGrav,
+            WeaponIds = new[] { DefaultContentCatalog.WeaponPhasers },
+            ElectronicsId = DefaultContentCatalog.Electronics
+        };
+
+        public static readonly RobotPresetDefinition[] All = { Scout, Tank, Missile, Heavy, Raider };
 
         public static bool TryFind(RobotBlueprint blueprint, out RobotPresetDefinition preset)
         {

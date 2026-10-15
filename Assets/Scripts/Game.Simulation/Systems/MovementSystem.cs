@@ -12,11 +12,11 @@ namespace Game.Simulation.Systems
         private const float WaypointReachedDistance = 0.1f;
         private const float MinSpeedMultiplier = 0.1f;
 
-        private readonly NavigationGrid _grid;
+        private readonly MatchNavigation _navigation;
 
-        public MovementSystem(NavigationGrid grid)
+        public MovementSystem(MatchNavigation navigation)
         {
-            _grid = grid ?? throw new ArgumentNullException(nameof(grid));
+            _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
         }
 
         public void Update(MatchState state, float deltaSeconds)
@@ -40,8 +40,9 @@ namespace Game.Simulation.Systems
 
         public bool IsPositionFree(RobotState movingRobot, SimVector2 position, MatchState state)
         {
-            GridCoord cell = _grid.WorldToGrid(position);
-            if (!_grid.IsWalkable(cell.X, cell.Y)) return false;
+            NavigationGrid grid = _navigation.GetGrid(movingRobot.Mobility);
+            GridCoord cell = grid.WorldToGrid(position);
+            if (!grid.IsWalkable(cell.X, cell.Y)) return false;
             foreach (RobotState other in state.Robots.Values)
             {
                 if (other == movingRobot || !other.IsAlive) continue;
@@ -55,16 +56,17 @@ namespace Game.Simulation.Systems
             return true;
         }
 
-        public float GetTerrainSpeedMultiplier(SimVector2 position)
+        public float GetTerrainSpeedMultiplier(RobotState robot, SimVector2 position)
         {
-            GridCoord cell = _grid.WorldToGrid(position);
-            float multiplier = _grid.GetSpeedMultiplier(cell.X, cell.Y);
+            NavigationGrid grid = _navigation.GetGrid(robot.Mobility);
+            GridCoord cell = grid.WorldToGrid(position);
+            float multiplier = grid.GetSpeedMultiplier(cell.X, cell.Y);
             return Math.Max(MinSpeedMultiplier, multiplier > 0f ? multiplier : 1f);
         }
 
         private void Drive(RobotState robot, MatchState state, float deltaSeconds)
         {
-            SimVector2 step = robot.DriveDirection * (robot.MoveSpeed * GetTerrainSpeedMultiplier(robot.Position) * deltaSeconds);
+            SimVector2 step = robot.DriveDirection * (robot.MoveSpeed * GetTerrainSpeedMultiplier(robot, robot.Position) * deltaSeconds);
             robot.Position = ResolveStep(robot, robot.Position + step, state);
             robot.RotationDegrees = HeadingDegrees(robot.DriveDirection);
         }
@@ -74,7 +76,7 @@ namespace Game.Simulation.Systems
             SimVector2 waypoint = robot.Path[robot.PathIndex];
             SimVector2 toWaypoint = waypoint - robot.Position;
             float distance = toWaypoint.Magnitude;
-            float maxStep = robot.MoveSpeed * GetTerrainSpeedMultiplier(robot.Position) * deltaSeconds;
+            float maxStep = robot.MoveSpeed * GetTerrainSpeedMultiplier(robot, robot.Position) * deltaSeconds;
             SimVector2 desired = distance <= maxStep ? waypoint : robot.Position + toWaypoint / distance * maxStep;
             robot.Position = ResolveStep(robot, desired, state);
 

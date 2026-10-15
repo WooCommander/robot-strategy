@@ -17,8 +17,9 @@ namespace Game.Content.Definitions
         public int Cost { get; set; }
         public int HealthBonus { get; set; }
 
-        // Шасси
+        // Шасси: скорость и класс проходимости
         public float Speed { get; set; }
+        public MobilityClass Mobility { get; set; }
 
         // Электроника: качество решений между приказами
         public float CombatManeuverIntervalSeconds { get; set; } = 0.5f;
@@ -69,17 +70,17 @@ namespace Game.Content.Definitions
                 [ChassisBipod] = new ModuleDefinition
                 {
                     Id = ChassisBipod, Name = "Двуногое шасси", ShortName = "ДВУНОГОЕ", SlotType = ModuleSlotType.Chassis,
-                    Resource = ResourceType.Chassis, Cost = 3, HealthBonus = 80, Speed = 3.0f
+                    Resource = ResourceType.Chassis, Cost = 3, HealthBonus = 80, Speed = 2.0f, Mobility = MobilityClass.Walker
                 },
                 [ChassisTracks] = new ModuleDefinition
                 {
                     Id = ChassisTracks, Name = "Гусеничное шасси", ShortName = "ГУСЕНИЦЫ", SlotType = ModuleSlotType.Chassis,
-                    Resource = ResourceType.Chassis, Cost = 5, HealthBonus = 140, Speed = 3.6f
+                    Resource = ResourceType.Chassis, Cost = 5, HealthBonus = 140, Speed = 3.6f, Mobility = MobilityClass.Tracked
                 },
                 [ChassisAntiGrav] = new ModuleDefinition
                 {
                     Id = ChassisAntiGrav, Name = "Антигравитационное шасси", ShortName = "АНТИГРАВ", SlotType = ModuleSlotType.Chassis,
-                    Resource = ResourceType.Chassis, Cost = 10, HealthBonus = 100, Speed = 5.0f
+                    Resource = ResourceType.Chassis, Cost = 10, HealthBonus = 100, Speed = 5.0f, Mobility = MobilityClass.Hover
                 },
 
                 // Оружие: каждое не больше одного на робота

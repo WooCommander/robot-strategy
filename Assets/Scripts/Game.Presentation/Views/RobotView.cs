@@ -22,6 +22,8 @@ namespace Game.Presentation.Views
         private bool _isSelected;
         private Vector3 _previousSimPosition;
         private Vector3 _currentSimPosition;
+        private System.Func<SimVector2, float> _surfaceHeight;
+        private float _visualHeight;
 
         public int EntityId => _entityId;
         public PlayerId Owner => _owner;
@@ -152,10 +154,20 @@ namespace Game.Presentation.Views
             _currentSimPosition = ToWorld(_state.Position);
         }
 
+        /// <summary>Высота поверхности под роботом: антиграв поднимается над скалами, остальные идут по земле.</summary>
+        public void SetSurfaceHeightProvider(System.Func<SimVector2, float> surfaceHeight)
+        {
+            _surfaceHeight = surfaceHeight;
+        }
+
         public void ApplyInterpolation(float alpha)
         {
             if (_state == null) return;
-            transform.position = Vector3.Lerp(_previousSimPosition, _currentSimPosition, Mathf.Clamp01(alpha));
+            Vector3 position = Vector3.Lerp(_previousSimPosition, _currentSimPosition, Mathf.Clamp01(alpha));
+            float targetHeight = _surfaceHeight != null ? Mathf.Max(0f, _surfaceHeight(new SimVector2(position.x, position.z))) : 0f;
+            _visualHeight = Mathf.MoveTowards(_visualHeight, targetHeight, 4f * Time.deltaTime);
+            position.y = _visualHeight;
+            transform.position = position;
             Quaternion targetRotation = Quaternion.Euler(0f, _state.RotationDegrees, 0f);
             transform.rotation = Quaternion.RotateTowards(transform.rotation, targetRotation, 360f * Time.deltaTime);
         }

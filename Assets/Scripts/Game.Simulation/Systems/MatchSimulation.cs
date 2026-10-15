@@ -29,8 +29,7 @@ namespace Game.Simulation.Systems
 
         public MatchState State { get; }
         public MapDefinition Map { get; }
-        public NavigationGrid NavigationGrid { get; }
-        public AStarPathfinder Pathfinder { get; }
+        public MatchNavigation Navigation { get; }
         public CommandDispatcher Dispatcher { get; }
         public ProductionSystem Production { get; }
         public OrderPlanner Planner { get; }
@@ -57,10 +56,9 @@ namespace Game.Simulation.Systems
             Capture = new CaptureSystem();
             if (map != null)
             {
-                NavigationGrid = BuildingFootprint.CreateMatchGrid(map);
-                Pathfinder = new AStarPathfinder(NavigationGrid);
-                Movement = new MovementSystem(NavigationGrid);
-                Planner = new OrderPlanner(catalog, map, NavigationGrid, Pathfinder, Movement);
+                Navigation = new MatchNavigation(map);
+                Movement = new MovementSystem(Navigation);
+                Planner = new OrderPlanner(catalog, map, Navigation, Movement);
             }
         }
 

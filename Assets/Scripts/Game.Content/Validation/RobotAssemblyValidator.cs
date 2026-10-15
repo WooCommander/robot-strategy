@@ -15,6 +15,7 @@ namespace Game.Content.Validation
         public int TotalCost { get; set; }
         public int TotalHealth { get; set; }
         public float Speed { get; set; }
+        public MobilityClass Mobility { get; set; }
 
         public static AssemblyValidationResult Fail(string error)
         {
@@ -63,6 +64,7 @@ namespace Game.Content.Validation
             AddModule(electronics, result);
             AddModule(nuclear, result);
             result.Speed = chassis?.Speed ?? 0f;
+            result.Mobility = chassis?.Mobility ?? MobilityClass.Walker;
             return result;
         }
 

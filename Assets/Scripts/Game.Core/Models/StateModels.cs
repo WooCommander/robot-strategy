@@ -35,6 +35,7 @@ namespace Game.Core.Models
         public int CurrentHealth { get; set; }
 
         public float MoveSpeed { get; set; }
+        public MobilityClass Mobility { get; set; }
         public int TotalCost { get; set; }
 
         /// <summary>Перезарядка каждого орудия; индекс совпадает с <see cref="RobotBlueprint.WeaponIds"/>.</summary>

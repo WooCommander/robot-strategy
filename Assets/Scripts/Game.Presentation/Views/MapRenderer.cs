@@ -14,6 +14,8 @@ namespace Game.Presentation.Views
         [SerializeField] private Material _mountainMaterial;
         [SerializeField] private Material _waterMaterial;
         [SerializeField] private Material _bridgeMaterial;
+        [SerializeField] private Material _crackMaterial;
+        [SerializeField] private Material _roughMaterial;
 
         [Header("Prefabs / Templates")]
         [SerializeField] private BuildingView _buildingPrefab;
@@ -43,6 +45,10 @@ namespace Game.Presentation.Views
                 _waterMaterial = CreateMaterial("Mat_Water", new Color(0.18f, 0.45f, 0.85f));   // Вода
             if (_bridgeMaterial == null)
                 _bridgeMaterial = CreateMaterial("Mat_Bridge", new Color(0.65f, 0.55f, 0.42f)); // Мост
+            if (_crackMaterial == null)
+                _crackMaterial = CreateMaterial("Mat_Crack", new Color(0.12f, 0.09f, 0.07f));  // Тёмный разлом
+            if (_roughMaterial == null)
+                _roughMaterial = CreateMaterial("Mat_Rough", new Color(0.55f, 0.47f, 0.3f));   // Каменистые неровности
         }
 
         private Material CreateMaterial(string name, Color color)
@@ -98,7 +104,7 @@ namespace Game.Presentation.Views
                     var type = map.GetTile(x, y);
                     var (verts, tris, norms) = tileMeshes[type];
 
-                    float heightOffset = type == TileType.Mountain ? 1.5f : (type == TileType.Water ? -0.2f : 0f);
+                    float heightOffset = GetTileHeight(type);
                     AddTileQuad(verts, tris, norms, x * sz, y * sz, sz, heightOffset, type == TileType.Mountain);
                 }
             }
@@ -109,7 +115,19 @@ namespace Game.Presentation.Views
             CreateSubMeshObject("Terrain_Mountains", tileMeshes[TileType.Mountain], _mountainMaterial);
             CreateSubMeshObject("Terrain_Water", tileMeshes[TileType.Water], _waterMaterial);
             CreateSubMeshObject("Terrain_Bridge", tileMeshes[TileType.Bridge], _bridgeMaterial);
+            CreateSubMeshObject("Terrain_Crack", tileMeshes[TileType.Crack], _crackMaterial);
+            CreateSubMeshObject("Terrain_Rough", tileMeshes[TileType.Rough], _roughMaterial);
         }
+
+        /// <summary>Высота поверхности клетки в мире; по ней визуал поднимает роботов над рельефом.</summary>
+        public static float GetTileHeight(TileType type) => type switch
+        {
+            TileType.Mountain => 1.5f,
+            TileType.Water => -0.2f,
+            TileType.Crack => -0.35f,
+            TileType.Rough => 0.12f,
+            _ => 0f
+        };
 
         private void AddTileQuad(List<Vector3> verts, List<int> tris, List<Vector3> norms, float x, float z, float sz, float h, bool isCube)
         {
@@ -163,7 +181,8 @@ namespace Game.Presentation.Views
             var go = new GameObject(name);
             go.transform.SetParent(transform, false);
 
-            var mesh = new Mesh { name = $"{name}_Mesh" };
+            // Крупная карта может превысить 65535 вершин в одном меше.
+            var mesh = new Mesh { name = $"{name}_Mesh", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
             mesh.SetVertices(meshData.verts);
             mesh.SetTriangles(meshData.tris, 0);
             mesh.SetNormals(meshData.norms);

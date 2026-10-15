@@ -11,7 +11,9 @@ namespace Game.Core.Types
         Road = 1,      // Дорога (скорость 1.3x)
         Mountain = 2,  // Скала (непроходимо)
         Water = 3,     // Вода (непроходимо)
-        Bridge = 4     // Мост (скорость 1.1x)
+        Bridge = 4,    // Мост (скорость 1.1x)
+        Crack = 5,     // Трещина: держит шагающих и гусеницы, антиграв пролетает
+        Rough = 6      // Неровности: держат шагающих, гусеницы проходят медленнее
     }
 
     public readonly struct GridCoord : IEquatable<GridCoord>

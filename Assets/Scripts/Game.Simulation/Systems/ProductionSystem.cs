@@ -131,6 +131,7 @@ namespace Game.Simulation.Systems
                 MaxHealth = val.TotalHealth,
                 CurrentHealth = val.TotalHealth,
                 MoveSpeed = val.Speed,
+                Mobility = val.Mobility,
                 TotalCost = val.TotalCost
             };
             newRobot.CurrentOrder = RobotOrder.Defend(building.Position);

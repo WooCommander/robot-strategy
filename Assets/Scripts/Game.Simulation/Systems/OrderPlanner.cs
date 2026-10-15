@@ -22,17 +22,15 @@ namespace Game.Simulation.Systems
 
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
         private readonly MapDefinition _map;
-        private readonly NavigationGrid _grid;
-        private readonly AStarPathfinder _pathfinder;
+        private readonly MatchNavigation _navigation;
         private readonly MovementSystem _movement;
         private readonly List<GridCoord> _captureCandidates = new List<GridCoord>();
 
-        public OrderPlanner(IReadOnlyDictionary<string, ModuleDefinition> catalog, MapDefinition map, NavigationGrid grid, AStarPathfinder pathfinder, MovementSystem movement)
+        public OrderPlanner(IReadOnlyDictionary<string, ModuleDefinition> catalog, MapDefinition map, MatchNavigation navigation, MovementSystem movement)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _map = map ?? throw new ArgumentNullException(nameof(map));
-            _grid = grid ?? throw new ArgumentNullException(nameof(grid));
-            _pathfinder = pathfinder ?? throw new ArgumentNullException(nameof(pathfinder));
+            _navigation = navigation ?? throw new ArgumentNullException(nameof(navigation));
             _movement = movement ?? throw new ArgumentNullException(nameof(movement));
         }
 
@@ -73,9 +71,10 @@ namespace Game.Simulation.Systems
 
         public static SimVector2 GetScoutDestination(RobotState robot, MapDefinition map, int patrolStep = 0)
         {
-            // Разведка ведёт в сектора у противника, но не к скалам карты и не под базу.
-            float x = robot.Owner == PlayerId.Player1 ? map.Width - 9f : 8f;
-            float y = 6f + ((robot.Id.Value + patrolStep) % 3) * 9f;
+            // Разведка идёт по трём магистралям у противника (северной, центральной, южной), не под саму базу.
+            float x = robot.Owner == PlayerId.Player1 ? map.Width - 13.5f : 13.5f;
+            int lane = (robot.Id.Value + patrolStep) % 3;
+            float y = (float)Math.Floor(map.Height * (0.275f + 0.225f * lane)) + 0.5f;
             return new SimVector2(x, y);
         }
 
@@ -138,7 +137,7 @@ namespace Game.Simulation.Systems
             // Пустой путь означает новый приказ; исчерпанный путь — робот уже дошёл.
             if (robot.HasPath || robot.Path.Count > 0) return;
             if (SimVector2.SqrDistance(robot.Position, robot.CurrentOrder.TargetPosition) <= MoveArrivalDistance * MoveArrivalDistance) return;
-            if (!_pathfinder.TryFindPath(robot.Position, robot.CurrentOrder.TargetPosition, out List<SimVector2> path))
+            if (!Pathfinder(robot).TryFindPath(robot.Position, robot.CurrentOrder.TargetPosition, out List<SimVector2> path))
             {
                 robot.CurrentOrder = RobotOrder.Stop();
                 return;
@@ -172,28 +171,31 @@ namespace Game.Simulation.Systems
             if (destinationChanged || !robot.HasPath) RouteTo(robot, destination);
         }
 
+        private AStarPathfinder Pathfinder(RobotState robot) => _navigation.GetPathfinder(robot.Mobility);
+
         private void RouteTo(RobotState robot, SimVector2 target)
         {
-            if (_pathfinder.TryFindPath(robot.Position, target, out List<SimVector2> path)) robot.SetPath(path);
+            if (Pathfinder(robot).TryFindPath(robot.Position, target, out List<SimVector2> path)) robot.SetPath(path);
         }
 
         private void RouteToCapture(RobotState robot, BuildingState building, MatchState state)
         {
             // Выбираем реальную проходимую клетку внутри зоны, а не точку на дуге от текущей позиции.
             // Кандидаты упорядочены по расстоянию, поэтому A* запускается только до первого успеха.
+            NavigationGrid grid = _navigation.GetGrid(robot.Mobility);
             float clearance = BuildingFootprint.GetClearance(building.Type);
             float minSq = clearance * clearance;
             float maxSq = building.CaptureRadius * building.CaptureRadius;
-            GridCoord min = _grid.WorldToGrid(new SimVector2(building.Position.X - building.CaptureRadius, building.Position.Y - building.CaptureRadius));
-            GridCoord max = _grid.WorldToGrid(new SimVector2(building.Position.X + building.CaptureRadius, building.Position.Y + building.CaptureRadius));
+            GridCoord min = grid.WorldToGrid(new SimVector2(building.Position.X - building.CaptureRadius, building.Position.Y - building.CaptureRadius));
+            GridCoord max = grid.WorldToGrid(new SimVector2(building.Position.X + building.CaptureRadius, building.Position.Y + building.CaptureRadius));
 
             _captureCandidates.Clear();
-            for (int y = Math.Max(0, min.Y); y <= Math.Min(_grid.Height - 1, max.Y); y++)
+            for (int y = Math.Max(0, min.Y); y <= Math.Min(grid.Height - 1, max.Y); y++)
             {
-                for (int x = Math.Max(0, min.X); x <= Math.Min(_grid.Width - 1, max.X); x++)
+                for (int x = Math.Max(0, min.X); x <= Math.Min(grid.Width - 1, max.X); x++)
                 {
-                    if (!_grid.IsWalkable(x, y)) continue;
-                    float radiusSq = SimVector2.SqrDistance(_grid.GridToWorld(new GridCoord(x, y)), building.Position);
+                    if (!grid.IsWalkable(x, y)) continue;
+                    float radiusSq = SimVector2.SqrDistance(grid.GridToWorld(new GridCoord(x, y)), building.Position);
                     if (radiusSq < minSq || radiusSq > maxSq) continue;
                     _captureCandidates.Add(new GridCoord(x, y));
                 }
@@ -202,16 +204,16 @@ namespace Game.Simulation.Systems
             SimVector2 from = robot.Position;
             _captureCandidates.Sort((left, right) =>
             {
-                int byDistance = SimVector2.SqrDistance(_grid.GridToWorld(left), from).CompareTo(SimVector2.SqrDistance(_grid.GridToWorld(right), from));
+                int byDistance = SimVector2.SqrDistance(grid.GridToWorld(left), from).CompareTo(SimVector2.SqrDistance(grid.GridToWorld(right), from));
                 if (byDistance != 0) return byDistance;
                 return left.Y != right.Y ? left.Y.CompareTo(right.Y) : left.X.CompareTo(right.X);
             });
 
             foreach (GridCoord cell in _captureCandidates)
             {
-                SimVector2 point = _grid.GridToWorld(cell);
+                SimVector2 point = grid.GridToWorld(cell);
                 if (!_movement.IsPositionFree(robot, point, state)) continue;
-                if (!_pathfinder.TryFindPath(robot.Position, point, out List<SimVector2> path)) continue;
+                if (!Pathfinder(robot).TryFindPath(robot.Position, point, out List<SimVector2> path)) continue;
                 robot.SetPath(path);
                 return;
             }

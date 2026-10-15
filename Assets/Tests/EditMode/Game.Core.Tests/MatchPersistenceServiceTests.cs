@@ -27,6 +27,7 @@ namespace Game.Core.Tests
             Assert.AreEqual(2, restored.Buildings[1].ProductionQueue[0].Payment[(int)ResourceType.Chassis]);
             CollectionAssert.AreEqual(new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponPhasers }, restored.Robots[10].Blueprint.WeaponIds);
             Assert.AreEqual(DefaultContentCatalog.Nuclear, restored.Robots[10].Blueprint.NuclearId);
+            Assert.AreEqual(MobilityClass.Tracked, restored.Robots[10].Mobility);
             CollectionAssert.AreEqual(new[] { 0.5f, 1.25f }, restored.Robots[10].WeaponCooldowns);
             Assert.AreEqual(2, restored.Robots.Count);
             Assert.AreEqual(new EntityId(101), restored.Robots[10].CurrentOrder.TargetEntityId);
@@ -96,7 +97,8 @@ namespace Game.Core.Tests
             {
                 Id = new EntityId(10), Owner = PlayerId.Player1, CurrentHealth = 90, MaxHealth = 120, Position = new SimVector2(4.5f, 9.5f), CurrentOrder = RobotOrder.Capture(new EntityId(101)),
                 Blueprint = new RobotBlueprint("bp", "Тест", DefaultContentCatalog.ChassisTracks, new[] { DefaultContentCatalog.WeaponCannon, DefaultContentCatalog.WeaponPhasers }, nuclearId: DefaultContentCatalog.Nuclear),
-                WeaponCooldowns = new System.Collections.Generic.List<float> { 0.5f, 1.25f }
+                WeaponCooldowns = new System.Collections.Generic.List<float> { 0.5f, 1.25f },
+                Mobility = MobilityClass.Tracked
             };
             state.Robots[20] = new RobotState { Id = new EntityId(20), Owner = PlayerId.Player2, CurrentHealth = 120, MaxHealth = 120, Position = new SimVector2(30f, 9.5f), CurrentOrder = RobotOrder.Defend(new SimVector2(31f, 10f)) };
             state.Projectiles.Add(new ProjectileState { SourceRobotId = new EntityId(10), TargetRobotId = new EntityId(20), Owner = PlayerId.Player1, WeaponType = WeaponType.DirectCannon, Damage = 35, ImpactPosition = new SimVector2(30f, 9.5f), RemainingTravelSeconds = 0.2f });

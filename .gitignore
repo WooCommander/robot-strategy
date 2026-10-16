@@ -19,6 +19,9 @@
 ExportedObj/
 .consulo/
 *.csproj
+!/Tools/FogBenchmark/FogBenchmark.csproj
+/Tools/**/bin/
+/Tools/**/obj/
 *.unityproj
 *.sln
 *.suo

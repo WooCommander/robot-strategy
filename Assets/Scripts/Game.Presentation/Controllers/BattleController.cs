@@ -198,17 +198,24 @@ namespace Game.Presentation.Controllers
             IssueForRobot(CreateRobotOrderCommand(order, _currentlySelectedRobot.State), "Приказ отклонён");
         }
 
-        private void HandleRobotProgramFromHud(int defend, int attack, int capture)
+        private string HandleRobotProgramFromHud(ProgramEditorValues values)
         {
-            if (_currentlySelectedRobot?.State == null || _currentlySelectedRobot.Owner != PlayerId.Player1) return;
-            IssueForRobot(new ConfigureProgramCommand
+            if (values == null) return "Программа не задана.";
+            CommandResult result = IssueForRobot(new ConfigureProgramCommand
             {
                 PlayerId = PlayerId.Player1,
-                RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
-                DefendPriority = defend,
-                AttackPriority = attack,
-                CapturePriority = capture
+                RobotIds = new List<EntityId> { values.RobotId },
+                DefendPriority = values.DefendPriority,
+                AttackPriority = values.AttackPriority,
+                CapturePriority = values.CapturePriority,
+                DefendRadius = values.DefendRadius,
+                AttackRadius = values.AttackRadius,
+                CaptureRadius = values.CaptureRadius,
+                DefendTargetId = values.DefendTargetId,
+                AttackTargetId = values.AttackTargetId,
+                CaptureTargetId = values.CaptureTargetId
             }, "Программа робота отклонена");
+            return result.IsSuccess ? "" : result.ErrorReason;
         }
 
         private ICommand CreateRobotOrderCommand(OrderType order, RobotState robot)

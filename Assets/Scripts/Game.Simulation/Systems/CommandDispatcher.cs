@@ -275,17 +275,36 @@ namespace Game.Simulation.Systems
                 cmd.CapturePriority < 1 || cmd.CapturePriority > 3 ||
                 cmd.DefendPriority == cmd.AttackPriority || cmd.DefendPriority == cmd.CapturePriority || cmd.AttackPriority == cmd.CapturePriority)
                 return CommandResult.Fail("Приоритеты программы должны быть разными числами от 1 до 3.");
+            if (!IsValidProgramRadius(cmd.DefendRadius) || !IsValidProgramRadius(cmd.AttackRadius) || !IsValidProgramRadius(cmd.CaptureRadius))
+                return CommandResult.Fail("Радиус условия должен быть в пределах 1–256 м.");
+            if (cmd.DefendTargetId.IsValid &&
+                (!state.Buildings.TryGetValue(cmd.DefendTargetId.Value, out BuildingState defendBuilding) || defendBuilding.Owner != cmd.PlayerId))
+                return CommandResult.Fail("Цель защиты должна быть собственным зданием.");
+            if (cmd.AttackTargetId.IsValid &&
+                (!state.Robots.TryGetValue(cmd.AttackTargetId.Value, out RobotState attackRobot) || !attackRobot.IsAlive || attackRobot.Owner == cmd.PlayerId))
+                return CommandResult.Fail("Цель атаки должна быть живым вражеским роботом.");
+            if (cmd.CaptureTargetId.IsValid &&
+                (!state.Buildings.TryGetValue(cmd.CaptureTargetId.Value, out BuildingState captureBuilding) || captureBuilding.Owner == cmd.PlayerId))
+                return CommandResult.Fail("Цель захвата должна быть чужим или нейтральным зданием.");
 
             foreach (var robot in robots)
             {
                 robot.DefendPriority = cmd.DefendPriority;
                 robot.AttackPriority = cmd.AttackPriority;
                 robot.CapturePriority = cmd.CapturePriority;
+                robot.DefendRadius = cmd.DefendRadius;
+                robot.AttackRadius = cmd.AttackRadius;
+                robot.CaptureRadius = cmd.CaptureRadius;
+                robot.DefendTargetId = cmd.DefendTargetId;
+                robot.AttackTargetId = cmd.AttackTargetId;
+                robot.CaptureTargetId = cmd.CaptureTargetId;
                 robot.ActiveProgramAction = ProgramAction.None;
                 AssignOrder(robot, RobotOrder.Program());
             }
             return CommandResult.Success();
         }
+
+        private static bool IsValidProgramRadius(float radius) => radius >= 1f && radius <= 256f && !float.IsNaN(radius);
 
         /// <summary>Новый приказ отменяет старый маршрут и ручной привод; путь строит планировщик симуляции.</summary>
         private static void AssignOrder(RobotState robot, RobotOrder order)

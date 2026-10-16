@@ -110,6 +110,66 @@ namespace Game.Core.Tests
 
             Assert.IsFalse(result.IsSuccess);
             Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
+            Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackRadius = 0f }, state).IsSuccess);
+            Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackTargetId = robot.Id }, state).IsSuccess);
+            Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
+        }
+
+        [Test]
+        public void Program_UsesConfiguredRadiusAndSpecificTargets()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState factory = state.Buildings[CentralFactoryId];
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, Position = new SimVector2(factory.Position.X + 2f, factory.Position.Y), MoveSpeed = 2f };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, CurrentHealth = 100, Position = new SimVector2(robot.Position.X + 4f, robot.Position.Y) };
+            state.Robots[900] = robot;
+            state.Robots[901] = enemy;
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map, state);
+            var ids = new List<EntityId> { robot.Id };
+            BuildingState otherFactory = null;
+            foreach (BuildingState building in state.Buildings.Values)
+                if (building.Id != factory.Id && building.Owner != PlayerId.Player1 && SimVector2.Distance(robot.Position, building.Position) > 3f) { otherFactory = building; break; }
+            Assert.NotNull(otherFactory);
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3, CaptureRadius = 1f, AttackRadius = 1f, DefendRadius = 1f, CaptureTargetId = factory.Id }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.None, robot.ActiveProgramAction);
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3, CaptureRadius = 3f, AttackRadius = 1f, DefendRadius = 1f, CaptureTargetId = factory.Id }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Capture, robot.ActiveProgramAction);
+            Assert.AreEqual(factory.Id, robot.CurrentOrder.TargetEntityId);
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3, CaptureRadius = 3f, AttackRadius = 5f, DefendRadius = 1f, CaptureTargetId = otherFactory.Id, AttackTargetId = enemy.Id }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Attack, robot.ActiveProgramAction);
+            Assert.AreEqual(enemy.Id, robot.CurrentOrder.TargetEntityId);
+        }
+
+        [Test]
+        public void Program_DefendOnlySpecifiedOwnedBuilding()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState baseBuilding = state.Buildings[Player1BaseId];
+            BuildingState anotherOwned = state.Buildings[CentralFactoryId];
+            anotherOwned.Owner = PlayerId.Player1;
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, Position = baseBuilding.Position, MoveSpeed = 2f };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, CurrentHealth = 100, Position = new SimVector2(baseBuilding.Position.X + 3f, baseBuilding.Position.Y) };
+            state.Robots[900] = robot;
+            state.Robots[901] = enemy;
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map, state);
+            var ids = new List<EntityId> { robot.Id };
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, DefendRadius = 5f, AttackRadius = 1f, CaptureRadius = 1f, DefendTargetId = anotherOwned.Id }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.None, robot.ActiveProgramAction);
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, DefendRadius = 5f, AttackRadius = 1f, CaptureRadius = 1f, DefendTargetId = baseBuilding.Id }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Defend, robot.ActiveProgramAction);
+            Assert.AreEqual(enemy.Id, robot.CurrentOrder.TargetEntityId);
         }
 
         [Test]

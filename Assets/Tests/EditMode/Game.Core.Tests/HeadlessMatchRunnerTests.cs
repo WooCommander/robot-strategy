@@ -56,7 +56,8 @@ namespace Game.Core.Tests
         [Test]
         public void ReplayRecord_RoundTripsRobotProgramPriorities()
         {
-            var source = new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(7) }, DefendPriority = 3, AttackPriority = 1, CapturePriority = 2 };
+            var source = new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(7) }, DefendPriority = 3, AttackPriority = 1, CapturePriority = 2,
+                DefendRadius = 6f, AttackRadius = 18f, CaptureRadius = 80f, DefendTargetId = new EntityId(101), AttackTargetId = new EntityId(21), CaptureTargetId = new EntityId(102) };
 
             var restored = ReplayCommandRecord.FromCommand(5, source).ToCommand() as ConfigureProgramCommand;
 
@@ -65,6 +66,12 @@ namespace Game.Core.Tests
             Assert.AreEqual(3, restored.DefendPriority);
             Assert.AreEqual(1, restored.AttackPriority);
             Assert.AreEqual(2, restored.CapturePriority);
+            Assert.AreEqual(6f, restored.DefendRadius);
+            Assert.AreEqual(18f, restored.AttackRadius);
+            Assert.AreEqual(80f, restored.CaptureRadius);
+            Assert.AreEqual(source.DefendTargetId, restored.DefendTargetId);
+            Assert.AreEqual(source.AttackTargetId, restored.AttackTargetId);
+            Assert.AreEqual(source.CaptureTargetId, restored.CaptureTargetId);
         }
 
         private static MatchState CreateMatch()

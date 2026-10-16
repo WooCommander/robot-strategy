@@ -61,18 +61,21 @@ namespace Game.Simulation.Systems
         {
             OrderType order = attacker.CurrentOrder?.Type ?? OrderType.None;
             if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture && order != OrderType.Program) ||
+                (order == OrderType.Program && attacker.ActiveProgramAction == ProgramAction.None) ||
                 attacker.WeaponCooldowns[weaponIndex] > 0f)
             {
                 return;
             }
 
             RobotState target = null;
-            if (order == OrderType.Attack)
+            bool programmedTarget = order == OrderType.Program &&
+                (attacker.ActiveProgramAction == ProgramAction.Attack || attacker.ActiveProgramAction == ProgramAction.Defend);
+            if (order == OrderType.Attack || programmedTarget)
             {
                 if (!state.Robots.TryGetValue(attacker.CurrentOrder.TargetEntityId.Value, out target) ||
                     !target.IsAlive || target.Owner == attacker.Owner)
                 {
-                    attacker.CurrentOrder = RobotOrder.Stop();
+                    if (order == OrderType.Attack) attacker.CurrentOrder = RobotOrder.Stop();
                     return;
                 }
             }

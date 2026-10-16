@@ -74,6 +74,12 @@ namespace Game.Core.Tests
             robot.AttackPriority = 2;
             robot.CapturePriority = 1;
             robot.ActiveProgramAction = ProgramAction.Capture;
+            robot.DefendRadius = 6f;
+            robot.AttackRadius = 18f;
+            robot.CaptureRadius = 80f;
+            robot.DefendTargetId = new EntityId(1);
+            robot.AttackTargetId = new EntityId(11);
+            robot.CaptureTargetId = new EntityId(101);
             var service = new MatchPersistenceService();
 
             RobotState restored = service.Deserialize(service.Serialize(source)).Robots[10];
@@ -84,6 +90,12 @@ namespace Game.Core.Tests
             Assert.AreEqual(2, restored.AttackPriority);
             Assert.AreEqual(1, restored.CapturePriority);
             Assert.AreEqual(ProgramAction.Capture, restored.ActiveProgramAction);
+            Assert.AreEqual(6f, restored.DefendRadius);
+            Assert.AreEqual(18f, restored.AttackRadius);
+            Assert.AreEqual(80f, restored.CaptureRadius);
+            Assert.AreEqual(new EntityId(1), restored.DefendTargetId);
+            Assert.AreEqual(new EntityId(11), restored.AttackTargetId);
+            Assert.AreEqual(new EntityId(101), restored.CaptureTargetId);
         }
 
         [Test]

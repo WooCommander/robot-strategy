@@ -272,6 +272,37 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void ProgrammedAttack_FiresAtSpecifiedRobotNotNearestEnemy()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponPhasers);
+            var closer = CreateRobot(2, PlayerId.Player2, 3f, DefaultContentCatalog.WeaponCannon);
+            var selected = CreateRobot(3, PlayerId.Player2, 6f, DefaultContentCatalog.WeaponCannon);
+            var state = CreateState(attacker, closer, selected);
+            attacker.CurrentOrder = RobotOrder.Program();
+            attacker.ActiveProgramAction = ProgramAction.Attack;
+            attacker.CurrentOrder.TargetEntityId = selected.Id;
+
+            new CombatSystem(_catalog).Update(state, 0.05f);
+
+            Assert.AreEqual(100, closer.CurrentHealth);
+            Assert.AreEqual(100 - PhaserDef.Damage, selected.CurrentHealth);
+        }
+
+        [Test]
+        public void ProgramWithNoAvailableAction_DoesNotFire()
+        {
+            var attacker = CreateRobot(1, PlayerId.Player1, 0f, DefaultContentCatalog.WeaponPhasers);
+            var target = CreateRobot(2, PlayerId.Player2, 3f, DefaultContentCatalog.WeaponCannon);
+            var state = CreateState(attacker, target);
+            attacker.CurrentOrder = RobotOrder.Program();
+            attacker.ActiveProgramAction = ProgramAction.None;
+
+            new CombatSystem(_catalog).Update(state, 0.05f);
+
+            Assert.AreEqual(100, target.CurrentHealth);
+        }
+
+        [Test]
         public void SeveralWeapons_FireIndependentlyWithOwnCooldowns()
         {
             var attacker = CreateRobot(1, PlayerId.Player1, 0f, new[] { DefaultContentCatalog.WeaponPhasers, DefaultContentCatalog.WeaponCannon });

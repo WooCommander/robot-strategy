@@ -9,9 +9,26 @@ using Game.Content.Validation;
 using Game.Core.Models;
 using Game.Core.Types;
 using Game.Simulation.Systems;
+using EntityId = Game.Core.Types.EntityId;
 
 namespace Game.Presentation.Views
 {
+    public sealed class ProgramEditorValues
+    {
+        public EntityId RobotId;
+        public int DefendPriority, AttackPriority, CapturePriority;
+        public float DefendRadius, AttackRadius, CaptureRadius;
+        public EntityId DefendTargetId, AttackTargetId, CaptureTargetId;
+
+        public static ProgramEditorValues FromRobot(RobotState robot) => new ProgramEditorValues
+        {
+            RobotId = robot.Id,
+            DefendPriority = robot.DefendPriority, AttackPriority = robot.AttackPriority, CapturePriority = robot.CapturePriority,
+            DefendRadius = robot.DefendRadius, AttackRadius = robot.AttackRadius, CaptureRadius = robot.CaptureRadius,
+            DefendTargetId = robot.DefendTargetId, AttackTargetId = robot.AttackTargetId, CaptureTargetId = robot.CaptureTargetId
+        };
+    }
+
     /// <summary>
     /// Боевой интерфейс по образцу Nether Earth: часы, статус сторон (базы, заводы по типам, роботы),
     /// ресурсы игрока по типам и экран сборки робота из деталей.
@@ -60,7 +77,15 @@ namespace Game.Presentation.Views
         private RectTransform _progressBarFillRect;
         private Button _constructorBtn;
         private readonly Dictionary<OrderType, Button> _orderButtons = new Dictionary<OrderType, Button>();
-        private readonly Dictionary<ProgramAction, Button> _priorityButtons = new Dictionary<ProgramAction, Button>();
+        private Button _programButton;
+        private RobotState _shownRobot;
+        private GameObject _programOverlay;
+        private ProgramEditorValues _programDraft;
+        private MatchState _programState;
+        private readonly Text[] _programRuleLabels = new Text[3];
+        private readonly Text[] _programRadiusLabels = new Text[3];
+        private readonly Button[] _programTargetButtons = new Button[3];
+        private Text _programError;
 
         // Экран сборки
         private GameObject _constructorOverlay;
@@ -84,7 +109,7 @@ namespace Game.Presentation.Views
 
         public event Action<RobotBlueprint> OnOrderBlueprintRequested;
         public event Action<OrderType> OnRobotOrderRequested;
-        public event Action<int, int, int> OnRobotProgramRequested;
+        public event Func<ProgramEditorValues, string> OnRobotProgramRequested;
         public event Action OnRestartRequested;
         public event Action OnSelectPlayerBaseRequested;
         public event Action<SimVector2> OnMinimapPointRequested;
@@ -121,12 +146,14 @@ namespace Game.Presentation.Views
             if (state == null) return;
             _player = state.Player1;
             _playerBase = FindBase(state, PlayerId.Player1);
+            _programState = state;
 
             if (Time.unscaledTime >= _nextStatusRefresh)
             {
                 _nextStatusRefresh = Time.unscaledTime + StatusRefreshSeconds;
                 RefreshClockAndStatus(state);
                 if (_constructorOverlay != null && _constructorOverlay.activeSelf) RefreshConstructor();
+                if (_programOverlay != null && _programOverlay.activeSelf) RefreshProgramEditor();
             }
             if (_constructorOverlay != null && _constructorOverlay.activeSelf && _playerBase == null) _constructorOverlay.SetActive(false);
 
@@ -270,39 +297,9 @@ namespace Game.Presentation.Views
             CreateOrderButton(OrderType.Defend, "ОБОРОНА", 75f);
             CreateOrderButton(OrderType.Stop, "СТОП", 225f);
             CreateOrderButton(OrderType.Detonate, "ПОДРЫВ", 375f).GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.05f);
-            CreatePriorityButton(ProgramAction.Defend, -300f);
-            CreatePriorityButton(ProgramAction.Attack, -100f);
-            CreatePriorityButton(ProgramAction.Capture, 100f);
-            var activate = CreateButton(_bottomPanel.transform, "ActivateProgram", "ВКЛ. ПРОГРАММУ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(300f, 145f), new Vector2(180f, 48f), new Color(0.12f, 0.32f, 0.28f), 13);
-            activate.onClick.AddListener(() => OnRobotProgramRequested?.Invoke(_shownRobot.DefendPriority, _shownRobot.AttackPriority, _shownRobot.CapturePriority));
-            _programButton = activate;
-            activate.gameObject.SetActive(false);
-        }
-
-        private RobotState _shownRobot;
-        private Button _programButton;
-
-        private void CreatePriorityButton(ProgramAction action, float x)
-        {
-            var button = CreateButton(_bottomPanel.transform, "Priority_" + action, "", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 145f), new Vector2(180f, 48f), new Color(0.15f, 0.24f, 0.34f), 13);
-            button.onClick.AddListener(() => PromotePriority(action));
-            _priorityButtons[action] = button;
-            button.gameObject.SetActive(false);
-        }
-
-        private void PromotePriority(ProgramAction action)
-        {
-            if (_shownRobot == null || _shownRobot.Owner != PlayerId.Player1) return;
-            int defend = _shownRobot.DefendPriority, attack = _shownRobot.AttackPriority, capture = _shownRobot.CapturePriority;
-            int selected = action == ProgramAction.Defend ? defend : action == ProgramAction.Attack ? attack : capture;
-            int previous = selected == 1 ? 3 : selected - 1;
-            if (defend == previous) defend = selected;
-            else if (attack == previous) attack = selected;
-            else capture = selected;
-            if (action == ProgramAction.Defend) defend = previous;
-            else if (action == ProgramAction.Attack) attack = previous;
-            else capture = previous;
-            OnRobotProgramRequested?.Invoke(defend, attack, capture);
+            _programButton = CreateButton(_bottomPanel.transform, "EditProgram", "ПРОГРАММА РОБОТА", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 145f), new Vector2(320f, 50f), new Color(0.12f, 0.32f, 0.28f), 16);
+            _programButton.onClick.AddListener(ShowProgramEditor);
+            _programButton.gameObject.SetActive(false);
         }
 
         private void ShowRobotPanel(RobotState robot)
@@ -322,12 +319,6 @@ namespace Game.Presentation.Views
             bool own = robot.Owner == PlayerId.Player1;
             _programButton.gameObject.SetActive(own);
             _programButton.GetComponent<Image>().color = robot.CurrentOrder.Type == OrderType.Program ? new Color(0.15f, 0.65f, 0.45f) : new Color(0.12f, 0.32f, 0.28f);
-            foreach (var pair in _priorityButtons)
-            {
-                pair.Value.gameObject.SetActive(own);
-                int rank = pair.Key == ProgramAction.Defend ? robot.DefendPriority : pair.Key == ProgramAction.Attack ? robot.AttackPriority : robot.CapturePriority;
-                pair.Value.GetComponentInChildren<Text>().text = $"{rank}. {(pair.Key == ProgramAction.Defend ? "ЗАЩИТА" : pair.Key == ProgramAction.Attack ? "АТАКА" : "ЗАХВАТ")} ↑";
-            }
             foreach (var pair in _orderButtons)
             {
                 bool visible = own && (pair.Key != OrderType.Detonate || robot.Blueprint.HasNuclear);
@@ -344,7 +335,6 @@ namespace Game.Presentation.Views
             _shownRobot = null;
             if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
             foreach (var button in _orderButtons.Values) button.gameObject.SetActive(false);
-            foreach (var button in _priorityButtons.Values) button.gameObject.SetActive(false);
             _programButton.gameObject.SetActive(false);
             bool ownBase = building.Type == BuildingType.Base && building.Owner == PlayerId.Player1;
             _constructorBtn.gameObject.SetActive(ownBase);
@@ -406,6 +396,144 @@ namespace Game.Presentation.Views
             return button;
         }
 
+        private void ShowProgramEditor()
+        {
+            if (_shownRobot == null || _shownRobot.Owner != PlayerId.Player1) return;
+            if (_programOverlay == null) CreateProgramEditor();
+            if (_constructorOverlay != null) _constructorOverlay.SetActive(false);
+            _programDraft = ProgramEditorValues.FromRobot(_shownRobot);
+            _programError.text = "";
+            _programOverlay.SetActive(true);
+            RefreshProgramEditor();
+        }
+
+        private void CreateProgramEditor()
+        {
+            _programOverlay = CreatePanel(_canvas.transform, "RobotProgramEditor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.93f));
+            var card = CreatePanel(_programOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1040f, 730f), new Color(0.04f, 0.08f, 0.15f));
+            Transform root = card.transform;
+            CreateText(root, "Title", "ПРОГРАММА РОБОТА", new Vector2(35f, -25f), new Vector2(750f, 55f), 32, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
+            CreateText(root, "Help", "Первая доступная операция выполняется. Цель «любая» выбирается автоматически. Радиус задаёт условие срабатывания, а не дальность оружия.", new Vector2(35f, -85f), new Vector2(970f, 65f), 18, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+
+            for (int index = 0; index < 3; index++)
+            {
+                int slot = index;
+                var row = CreatePanel(root, "Rule_" + (index + 1), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(35f, -160f - index * 145f), new Vector2(970f, 130f), new Color(0.09f, 0.15f, 0.25f, 0.98f));
+                _programRuleLabels[index] = CreateText(row.transform, "Name", "", new Vector2(15f, -12f), new Vector2(280f, 105f), 19, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
+                _programRuleLabels[index].raycastTarget = false;
+                var up = CreateButton(row.transform, "MoveUp", "↑", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(340f, -62f), new Vector2(54f, 60f), new Color(0.16f, 0.38f, 0.5f), 24);
+                up.onClick.AddListener(() => MoveProgramRule(slot, -1));
+                var down = CreateButton(row.transform, "MoveDown", "↓", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(404f, -62f), new Vector2(54f, 60f), new Color(0.16f, 0.38f, 0.5f), 24);
+                down.onClick.AddListener(() => MoveProgramRule(slot, 1));
+                CreateText(row.transform, "RadiusTitle", "РАДИУС", new Vector2(465f, -12f), new Vector2(165f, 26f), 15, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
+                var minus = CreateButton(row.transform, "RadiusMinus", "−", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(485f, -79f), new Vector2(42f, 48f), new Color(0.23f, 0.28f, 0.34f), 22);
+                minus.onClick.AddListener(() => ChangeProgramRadius(slot, -1));
+                _programRadiusLabels[index] = CreateText(row.transform, "RadiusValue", "", new Vector2(513f, -54f), new Vector2(88f, 44f), 18, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
+                _programRadiusLabels[index].raycastTarget = false;
+                var plus = CreateButton(row.transform, "RadiusPlus", "+", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(615f, -79f), new Vector2(42f, 48f), new Color(0.23f, 0.28f, 0.34f), 22);
+                plus.onClick.AddListener(() => ChangeProgramRadius(slot, 1));
+                _programTargetButtons[index] = CreateButton(row.transform, "Target", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(790f, -66f), new Vector2(300f, 92f), new Color(0.2f, 0.3f, 0.4f), 16);
+                _programTargetButtons[index].onClick.AddListener(() => CycleProgramTarget(slot));
+            }
+
+            _programError = CreateText(root, "Error", "", new Vector2(35f, -590f), new Vector2(970f, 40f), 17, FontStyle.Bold, new Color(1f, 0.45f, 0.35f), TextAnchor.MiddleCenter);
+            var apply = CreateButton(root, "Apply", "СОХРАНИТЬ И ЗАПУСТИТЬ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(-160f, 45f), new Vector2(350f, 64f), new Color(0.08f, 0.42f, 0.23f), 19);
+            apply.onClick.AddListener(() =>
+            {
+                string error = OnRobotProgramRequested?.Invoke(_programDraft) ?? "Не удалось передать программу роботу.";
+                if (string.IsNullOrEmpty(error)) _programOverlay.SetActive(false);
+                else _programError.text = error;
+            });
+            var cancel = CreateButton(root, "Cancel", "ОТМЕНА", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(215f, 45f), new Vector2(170f, 64f), new Color(0.35f, 0.14f, 0.17f), 18);
+            cancel.onClick.AddListener(() => _programOverlay.SetActive(false));
+            _programOverlay.SetActive(false);
+        }
+
+        private void RefreshProgramEditor()
+        {
+            if (_programDraft == null || _programState == null) return;
+            for (int slot = 0; slot < 3; slot++)
+            {
+                ProgramAction action = ProgramActionAt(slot);
+                string name = action == ProgramAction.Defend ? "ЗАЩИТА" : action == ProgramAction.Attack ? "АТАКА" : "ЗАХВАТ";
+                string condition = action == ProgramAction.Defend ? "Враг возле своего здания" : action == ProgramAction.Attack ? "Враг рядом с роботом" : "Чужое здание рядом";
+                _programRuleLabels[slot].text = $"{slot + 1}. {name}\n<size=15>{condition}</size>";
+                _programRadiusLabels[slot].text = $"{GetProgramRadius(action):0} м";
+                _programTargetButtons[slot].GetComponentInChildren<Text>().text = "ЦЕЛЬ\n" + DescribeProgramTarget(action, GetProgramTarget(action));
+            }
+        }
+
+        private ProgramAction ProgramActionAt(int slot)
+        {
+            int priority = slot + 1;
+            if (_programDraft.DefendPriority == priority) return ProgramAction.Defend;
+            return _programDraft.AttackPriority == priority ? ProgramAction.Attack : ProgramAction.Capture;
+        }
+
+        private void MoveProgramRule(int slot, int direction)
+        {
+            int other = slot + direction;
+            if (other < 0 || other > 2) return;
+            ProgramAction first = ProgramActionAt(slot), second = ProgramActionAt(other);
+            SetProgramPriority(first, other + 1);
+            SetProgramPriority(second, slot + 1);
+            RefreshProgramEditor();
+        }
+
+        private void SetProgramPriority(ProgramAction action, int value)
+        {
+            if (action == ProgramAction.Defend) _programDraft.DefendPriority = value;
+            else if (action == ProgramAction.Attack) _programDraft.AttackPriority = value;
+            else _programDraft.CapturePriority = value;
+        }
+
+        private float GetProgramRadius(ProgramAction action) => action == ProgramAction.Defend ? _programDraft.DefendRadius : action == ProgramAction.Attack ? _programDraft.AttackRadius : _programDraft.CaptureRadius;
+
+        private void ChangeProgramRadius(int slot, int direction)
+        {
+            ProgramAction action = ProgramActionAt(slot);
+            float step = action == ProgramAction.Capture ? 10f : 1f;
+            float value = Mathf.Clamp(GetProgramRadius(action) + direction * step, 1f, 256f);
+            if (action == ProgramAction.Defend) _programDraft.DefendRadius = value;
+            else if (action == ProgramAction.Attack) _programDraft.AttackRadius = value;
+            else _programDraft.CaptureRadius = value;
+            RefreshProgramEditor();
+        }
+
+        private EntityId GetProgramTarget(ProgramAction action) => action == ProgramAction.Defend ? _programDraft.DefendTargetId : action == ProgramAction.Attack ? _programDraft.AttackTargetId : _programDraft.CaptureTargetId;
+
+        private void CycleProgramTarget(int slot)
+        {
+            ProgramAction action = ProgramActionAt(slot);
+            var options = new List<int> { 0 };
+            if (action == ProgramAction.Attack)
+            {
+                foreach (RobotState robot in _programState.Robots.Values)
+                    if (robot.IsAlive && robot.Owner != PlayerId.Player1) options.Add(robot.Id.Value);
+            }
+            else
+            {
+                foreach (BuildingState building in _programState.Buildings.Values)
+                    if (action == ProgramAction.Defend ? building.Owner == PlayerId.Player1 : building.Owner != PlayerId.Player1) options.Add(building.Id.Value);
+            }
+            options.Sort();
+            int currentIndex = options.IndexOf(GetProgramTarget(action).Value);
+            EntityId next = new EntityId(options[(currentIndex + 1) % options.Count]);
+            if (action == ProgramAction.Defend) _programDraft.DefendTargetId = next;
+            else if (action == ProgramAction.Attack) _programDraft.AttackTargetId = next;
+            else _programDraft.CaptureTargetId = next;
+            RefreshProgramEditor();
+        }
+
+        private string DescribeProgramTarget(ProgramAction action, EntityId id)
+        {
+            if (!id.IsValid) return action == ProgramAction.Capture ? "ближайшее здание ›" : "любая ›";
+            if (action == ProgramAction.Attack) return _programState.Robots.ContainsKey(id.Value) ? $"робот #{id.Value} ›" : $"нет робота #{id.Value} ›";
+            return _programState.Buildings.TryGetValue(id.Value, out BuildingState building)
+                ? $"{(building.Type == BuildingType.Base ? "база" : "завод")} #{id.Value} ›"
+                : $"нет здания #{id.Value} ›";
+        }
+
         private void SetProgress(float value)
         {
             if (_progressBarFillRect != null) _progressBarFillRect.anchorMax = new Vector2(Mathf.Clamp01(value), 1f);
@@ -416,6 +544,7 @@ namespace Game.Presentation.Views
         private void ShowConstructor()
         {
             if (_playerBase == null) return;
+            if (_programOverlay != null) _programOverlay.SetActive(false);
             if (_constructorOverlay == null) CreateConstructorOverlay();
             _constructorDraft.Clear();
             _constructorOverlay.SetActive(true);

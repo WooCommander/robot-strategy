@@ -152,6 +152,12 @@ namespace Game.Core.Commands
         public int DefendPriority { get; set; } = 1;
         public int AttackPriority { get; set; } = 2;
         public int CapturePriority { get; set; } = 3;
+        public float DefendRadius { get; set; } = 8f;
+        public float AttackRadius { get; set; } = 12f;
+        public float CaptureRadius { get; set; } = 200f;
+        public EntityId DefendTargetId { get; set; } = EntityId.None;
+        public EntityId AttackTargetId { get; set; } = EntityId.None;
+        public EntityId CaptureTargetId { get; set; } = EntityId.None;
     }
 
     [Serializable]

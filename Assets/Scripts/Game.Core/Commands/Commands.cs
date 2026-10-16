@@ -158,6 +158,7 @@ namespace Game.Core.Commands
         public int DefendMinHealthPercent { get; set; }
         public int AttackMinHealthPercent { get; set; }
         public int CaptureMinHealthPercent { get; set; }
+        public int RetreatHealthPercent { get; set; }
         public EntityId DefendTargetId { get; set; } = EntityId.None;
         public EntityId AttackTargetId { get; set; } = EntityId.None;
         public EntityId CaptureTargetId { get; set; } = EntityId.None;

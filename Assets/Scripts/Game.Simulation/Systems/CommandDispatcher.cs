@@ -282,7 +282,8 @@ namespace Game.Simulation.Systems
                 return CommandResult.Fail("Приоритеты программы должны быть разными числами от 1 до 3.");
             if (!IsValidProgramRadius(cmd.DefendRadius) || !IsValidProgramRadius(cmd.AttackRadius) || !IsValidProgramRadius(cmd.CaptureRadius))
                 return CommandResult.Fail("Радиус условия должен быть в пределах 1–256 м.");
-            if (!IsValidHealthThreshold(cmd.DefendMinHealthPercent) || !IsValidHealthThreshold(cmd.AttackMinHealthPercent) || !IsValidHealthThreshold(cmd.CaptureMinHealthPercent))
+            if (!IsValidHealthThreshold(cmd.DefendMinHealthPercent) || !IsValidHealthThreshold(cmd.AttackMinHealthPercent) ||
+                !IsValidHealthThreshold(cmd.CaptureMinHealthPercent) || !IsValidHealthThreshold(cmd.RetreatHealthPercent))
                 return CommandResult.Fail("Минимальное здоровье должно быть в пределах 0–100%." );
             if (cmd.DefendTargetId.IsValid &&
                 (!state.Buildings.TryGetValue(cmd.DefendTargetId.Value, out BuildingState defendBuilding) || defendBuilding.Owner != cmd.PlayerId))
@@ -311,6 +312,7 @@ namespace Game.Simulation.Systems
                 robot.DefendMinHealthPercent = cmd.DefendMinHealthPercent;
                 robot.AttackMinHealthPercent = cmd.AttackMinHealthPercent;
                 robot.CaptureMinHealthPercent = cmd.CaptureMinHealthPercent;
+                robot.RetreatHealthPercent = cmd.RetreatHealthPercent;
                 robot.DefendTargetId = cmd.DefendTargetId;
                 robot.AttackTargetId = cmd.AttackTargetId;
                 robot.CaptureTargetId = cmd.CaptureTargetId;

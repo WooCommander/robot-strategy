@@ -19,6 +19,7 @@ namespace Game.Presentation.Views
         public int DefendPriority, AttackPriority, CapturePriority;
         public float DefendRadius, AttackRadius, CaptureRadius;
         public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
+        public int RetreatHealthPercent;
         public EntityId DefendTargetId, AttackTargetId, CaptureTargetId;
 
         public static ProgramEditorValues FromRobot(RobotState robot) => new ProgramEditorValues
@@ -27,6 +28,7 @@ namespace Game.Presentation.Views
             DefendPriority = robot.DefendPriority, AttackPriority = robot.AttackPriority, CapturePriority = robot.CapturePriority,
             DefendRadius = robot.DefendRadius, AttackRadius = robot.AttackRadius, CaptureRadius = robot.CaptureRadius,
             DefendMinHealthPercent = robot.DefendMinHealthPercent, AttackMinHealthPercent = robot.AttackMinHealthPercent, CaptureMinHealthPercent = robot.CaptureMinHealthPercent,
+            RetreatHealthPercent = robot.RetreatHealthPercent,
             DefendTargetId = robot.DefendTargetId, AttackTargetId = robot.AttackTargetId, CaptureTargetId = robot.CaptureTargetId
         };
     }
@@ -46,12 +48,14 @@ namespace Game.Presentation.Views
             public int DefendPriority, AttackPriority, CapturePriority;
             public float DefendRadius, AttackRadius, CaptureRadius;
             public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
+            public int RetreatHealthPercent;
 
             public static ProgramPreset From(ProgramEditorValues values) => new ProgramPreset
             {
                 DefendPriority = values.DefendPriority, AttackPriority = values.AttackPriority, CapturePriority = values.CapturePriority,
                 DefendRadius = values.DefendRadius, AttackRadius = values.AttackRadius, CaptureRadius = values.CaptureRadius,
-                DefendMinHealthPercent = values.DefendMinHealthPercent, AttackMinHealthPercent = values.AttackMinHealthPercent, CaptureMinHealthPercent = values.CaptureMinHealthPercent
+                DefendMinHealthPercent = values.DefendMinHealthPercent, AttackMinHealthPercent = values.AttackMinHealthPercent, CaptureMinHealthPercent = values.CaptureMinHealthPercent,
+                RetreatHealthPercent = values.RetreatHealthPercent
             };
 
             public void ApplyTo(ProgramEditorValues values)
@@ -59,6 +63,7 @@ namespace Game.Presentation.Views
                 values.DefendPriority = DefendPriority; values.AttackPriority = AttackPriority; values.CapturePriority = CapturePriority;
                 values.DefendRadius = DefendRadius; values.AttackRadius = AttackRadius; values.CaptureRadius = CaptureRadius;
                 values.DefendMinHealthPercent = DefendMinHealthPercent; values.AttackMinHealthPercent = AttackMinHealthPercent; values.CaptureMinHealthPercent = CaptureMinHealthPercent;
+                values.RetreatHealthPercent = RetreatHealthPercent;
                 // ID принадлежат конкретному матчу, поэтому в шаблон не входят.
                 values.DefendTargetId = EntityId.None; values.AttackTargetId = EntityId.None; values.CaptureTargetId = EntityId.None;
             }
@@ -114,6 +119,7 @@ namespace Game.Presentation.Views
         private readonly Button[] _programTargetButtons = new Button[3];
         private readonly Button[] _programHealthButtons = new Button[3];
         private Button _programPresetSlotButton;
+        private Button _programRetreatButton;
         private int _programPresetSlot;
         private Text _programError;
 
@@ -366,7 +372,7 @@ namespace Game.Presentation.Views
                 ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп" + (robot.Blueprint.HasNuclear ? " | N — подрыв" : "") + "</color>"
                 : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
             string programStatus = robot.CurrentOrder.Type == OrderType.Program
-                ? $" | Программа: {(robot.ActiveProgramAction == ProgramAction.Defend ? "защита" : robot.ActiveProgramAction == ProgramAction.Attack ? "атака" : robot.ActiveProgramAction == ProgramAction.Capture ? "захват" : robot.ActiveProgramAction == ProgramAction.Explore ? "разведка" : "ожидание")}"
+                ? $" | Программа: {(robot.ActiveProgramAction == ProgramAction.Defend ? "защита" : robot.ActiveProgramAction == ProgramAction.Attack ? "атака" : robot.ActiveProgramAction == ProgramAction.Capture ? "захват" : robot.ActiveProgramAction == ProgramAction.Explore ? "разведка" : robot.ActiveProgramAction == ProgramAction.Retreat ? "отступление" : "ожидание")}"
                 : "";
             _queueStatusText.text = $"HP: <color=#00FF88><b>{robot.CurrentHealth}/{robot.MaxHealth}</b></color> | Скорость: {robot.MoveSpeed:F1} м/с{programStatus}\n{controlHint}";
             SetProgress(0f);
@@ -467,8 +473,10 @@ namespace Game.Presentation.Views
             _programOverlay = CreatePanel(_canvas.transform, "RobotProgramEditor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.93f));
             var card = CreatePanel(_programOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1040f, 730f), new Color(0.04f, 0.08f, 0.15f));
             Transform root = card.transform;
-            CreateText(root, "Title", "ПРОГРАММА РОБОТА", new Vector2(35f, -25f), new Vector2(750f, 55f), 32, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
-            CreateText(root, "Help", "Первая доступная операция выполняется. Радиус и минимум HP задают условия; цель «любая» выбирается автоматически.", new Vector2(35f, -85f), new Vector2(620f, 65f), 17, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            CreateText(root, "Title", "ПРОГРАММА РОБОТА", new Vector2(35f, -25f), new Vector2(570f, 55f), 32, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
+            _programRetreatButton = CreateButton(root, "RetreatThreshold", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(790f, -50f), new Vector2(320f, 48f), new Color(0.42f, 0.23f, 0.12f), 15);
+            _programRetreatButton.onClick.AddListener(() => { _programDraft.RetreatHealthPercent = (_programDraft.RetreatHealthPercent + 20) % 100; RefreshProgramEditor(); });
+            CreateText(root, "Help", "Первая доступная операция выполняется. При низком HP отступление выше приоритетов. Радиус и минимум HP задают условия.", new Vector2(35f, -85f), new Vector2(620f, 65f), 17, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
             _programPresetSlotButton = CreateButton(root, "PresetSlot", "ШАБЛОН 1", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(710f, -110f), new Vector2(110f, 48f), new Color(0.16f, 0.30f, 0.4f), 14);
             _programPresetSlotButton.onClick.AddListener(() => { _programPresetSlot = (_programPresetSlot + 1) % 3; RefreshProgramEditor(); });
             var savePreset = CreateButton(root, "SavePreset", "СОХР.", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(830f, -110f), new Vector2(90f, 48f), new Color(0.08f, 0.42f, 0.23f), 14);
@@ -516,6 +524,8 @@ namespace Game.Presentation.Views
         {
             if (_programDraft == null || _programState == null) return;
             _programPresetSlotButton.GetComponentInChildren<Text>().text = $"ШАБЛОН {_programPresetSlot + 1}";
+            _programRetreatButton.GetComponentInChildren<Text>().text = _programDraft.RetreatHealthPercent == 0
+                ? "ОТСТУПЛЕНИЕ: ВЫКЛ. ›" : $"ОТСТУПЛЕНИЕ: HP ≤ {_programDraft.RetreatHealthPercent}% ›";
             for (int slot = 0; slot < 3; slot++)
             {
                 ProgramAction action = ProgramActionAt(slot);
@@ -545,7 +555,8 @@ namespace Game.Presentation.Views
                 ProgramPreset preset = JsonUtility.FromJson<ProgramPreset>(PlayerPrefs.GetString(key));
                 if (preset == null || preset.DefendPriority < 1 || preset.AttackPriority < 1 || preset.CapturePriority < 1 ||
                     preset.DefendPriority == preset.AttackPriority || preset.DefendPriority == preset.CapturePriority || preset.AttackPriority == preset.CapturePriority ||
-                    preset.DefendRadius < 1f || preset.AttackRadius < 1f || preset.CaptureRadius < 1f)
+                    preset.DefendRadius < 1f || preset.AttackRadius < 1f || preset.CaptureRadius < 1f ||
+                    preset.RetreatHealthPercent < 0 || preset.RetreatHealthPercent > 100)
                 { _programError.text = "Шаблон повреждён или устарел."; return; }
                 preset.ApplyTo(_programDraft);
                 _programError.text = $"Шаблон {_programPresetSlot + 1} загружен; примените его к роботу.";

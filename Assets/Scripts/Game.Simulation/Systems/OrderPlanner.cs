@@ -171,27 +171,35 @@ namespace Game.Simulation.Systems
 
         private void UpdateProgram(RobotState robot, MatchState state, bool strategicTick)
         {
-            if (strategicTick || robot.ActiveProgramAction == ProgramAction.None)
+            bool emergencyRetreat = robot.RetreatHealthPercent > 0 && robot.MaxHealth > 0 &&
+                robot.CurrentHealth * 100L <= (long)robot.RetreatHealthPercent * robot.MaxHealth;
+            if (strategicTick || robot.ActiveProgramAction == ProgramAction.None ||
+                (emergencyRetreat && robot.ActiveProgramAction != ProgramAction.Retreat))
             {
-                RobotState defenseTarget = FindThreatToOwnedBuilding(robot, state);
-                RobotState attackTarget = FindProgramAttackTarget(robot, state);
-                BuildingState captureTarget = null;
-                if (robot.ActiveProgramAction == ProgramAction.Capture &&
-                    state.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out BuildingState currentBuilding) &&
-                    IsProgramCaptureCandidate(robot, currentBuilding, state))
-                    captureTarget = currentBuilding;
-                else captureTarget = FindProgramCaptureTarget(robot, state);
-
                 ProgramAction choice = ProgramAction.None;
                 EntityId targetId = EntityId.None;
-                for (int rank = 1; rank <= 3; rank++)
+                BuildingState refuge = emergencyRetreat ? FindRetreatBuilding(robot, state) : null;
+                if (refuge != null) { choice = ProgramAction.Retreat; targetId = refuge.Id; }
+                else
                 {
-                    if (robot.DefendPriority == rank && defenseTarget != null && MeetsHealthCondition(robot, robot.DefendMinHealthPercent)) { choice = ProgramAction.Defend; targetId = defenseTarget.Id; break; }
-                    if (robot.AttackPriority == rank && attackTarget != null && MeetsHealthCondition(robot, robot.AttackMinHealthPercent)) { choice = ProgramAction.Attack; targetId = attackTarget.Id; break; }
-                    if (robot.CapturePriority == rank && captureTarget != null && MeetsHealthCondition(robot, robot.CaptureMinHealthPercent)) { choice = ProgramAction.Capture; targetId = captureTarget.Id; break; }
+                    RobotState defenseTarget = FindThreatToOwnedBuilding(robot, state);
+                    RobotState attackTarget = FindProgramAttackTarget(robot, state);
+                    BuildingState captureTarget = null;
+                    if (robot.ActiveProgramAction == ProgramAction.Capture &&
+                        state.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out BuildingState currentBuilding) &&
+                        IsProgramCaptureCandidate(robot, currentBuilding, state))
+                        captureTarget = currentBuilding;
+                    else captureTarget = FindProgramCaptureTarget(robot, state);
+
+                    for (int rank = 1; rank <= 3; rank++)
+                    {
+                        if (robot.DefendPriority == rank && defenseTarget != null && MeetsHealthCondition(robot, robot.DefendMinHealthPercent)) { choice = ProgramAction.Defend; targetId = defenseTarget.Id; break; }
+                        if (robot.AttackPriority == rank && attackTarget != null && MeetsHealthCondition(robot, robot.AttackMinHealthPercent)) { choice = ProgramAction.Attack; targetId = attackTarget.Id; break; }
+                        if (robot.CapturePriority == rank && captureTarget != null && MeetsHealthCondition(robot, robot.CaptureMinHealthPercent)) { choice = ProgramAction.Capture; targetId = captureTarget.Id; break; }
+                    }
+                    if (choice == ProgramAction.None && state.FogOfWar != null && MeetsHealthCondition(robot, robot.CaptureMinHealthPercent))
+                        choice = ProgramAction.Explore;
                 }
-                if (choice == ProgramAction.None && state.FogOfWar != null && MeetsHealthCondition(robot, robot.CaptureMinHealthPercent))
-                    choice = ProgramAction.Explore;
 
                 if (choice != robot.ActiveProgramAction || targetId != robot.CurrentOrder.TargetEntityId)
                 {
@@ -215,7 +223,42 @@ namespace Game.Simulation.Systems
             {
                 if (strategicTick) RouteToExplore(robot, state);
             }
+            else if (robot.ActiveProgramAction == ProgramAction.Retreat)
+            {
+                if (strategicTick || !robot.HasPath) UpdateRetreat(robot, state);
+            }
             else robot.ClearPath();
+        }
+
+        private static BuildingState FindRetreatBuilding(RobotState robot, MatchState state)
+        {
+            BuildingState nearestBase = null, nearestOther = null;
+            float baseDistance = float.MaxValue, otherDistance = float.MaxValue;
+            foreach (BuildingState building in state.Buildings.Values)
+            {
+                if (building.Owner != robot.Owner) continue;
+                float distance = SimVector2.SqrDistance(robot.Position, building.SpawnPoint);
+                if (building.Type == BuildingType.Base && distance < baseDistance) { nearestBase = building; baseDistance = distance; }
+                else if (building.Type != BuildingType.Base && distance < otherDistance) { nearestOther = building; otherDistance = distance; }
+            }
+            return nearestBase ?? nearestOther;
+        }
+
+        private void UpdateRetreat(RobotState robot, MatchState state)
+        {
+            if (!state.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out BuildingState refuge) || refuge.Owner != robot.Owner)
+            {
+                robot.ClearPath();
+                return;
+            }
+            SimVector2 destination = refuge.SpawnPoint;
+            robot.CurrentOrder.TargetPosition = destination;
+            if (SimVector2.SqrDistance(robot.Position, destination) <= MoveArrivalDistance * MoveArrivalDistance)
+            {
+                robot.ClearPath();
+                return;
+            }
+            if (!robot.HasPath) RouteTo(robot, destination);
         }
 
         private static bool MeetsHealthCondition(RobotState robot, int minimumPercent) =>

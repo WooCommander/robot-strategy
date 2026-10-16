@@ -21,7 +21,7 @@ namespace Game.Core.Models
         public static RobotOrder Program() => new RobotOrder { Type = OrderType.Program };
     }
 
-    public enum ProgramAction : byte { None = 0, Defend = 1, Attack = 2, Capture = 3, Explore = 4 }
+    public enum ProgramAction : byte { None = 0, Defend = 1, Attack = 2, Capture = 3, Explore = 4, Retreat = 5 }
 
     [Serializable]
     public class RobotState
@@ -54,6 +54,7 @@ namespace Game.Core.Models
         public int DefendMinHealthPercent { get; set; }
         public int AttackMinHealthPercent { get; set; }
         public int CaptureMinHealthPercent { get; set; }
+        public int RetreatHealthPercent { get; set; }
         public EntityId DefendTargetId { get; set; } = EntityId.None;
         public EntityId AttackTargetId { get; set; } = EntityId.None;
         public EntityId CaptureTargetId { get; set; } = EntityId.None;

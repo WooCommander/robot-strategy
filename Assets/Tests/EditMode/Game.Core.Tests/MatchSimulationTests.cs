@@ -322,12 +322,39 @@ namespace Game.Core.Tests
             var command = new ConfigureProgramCommand
             {
                 PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(900) },
-                DefendMinHealthPercent = 25, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 50
+                DefendMinHealthPercent = 25, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 50, RetreatHealthPercent = 40
             };
             var restored = (ConfigureProgramCommand)ReplayCommandRecord.FromCommand(12, command).ToCommand();
             Assert.AreEqual(25, restored.DefendMinHealthPercent);
             Assert.AreEqual(75, restored.AttackMinHealthPercent);
             Assert.AreEqual(50, restored.CaptureMinHealthPercent);
+            Assert.AreEqual(40, restored.RetreatHealthPercent);
+        }
+
+        [Test]
+        public void Program_RetreatPreemptsRulesAndEndsAboveThreshold()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState home = state.Buildings[Player1BaseId];
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1,
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), MaxHealth = 100, CurrentHealth = 30,
+                Position = new SimVector2(home.Position.X + 5f, home.Position.Y), MoveSpeed = 2f };
+            state.Robots[900] = robot;
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map, state);
+            var ids = new List<EntityId> { robot.Id };
+            Assert.IsFalse(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, RetreatHealthPercent = 101 }).IsSuccess);
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, RetreatHealthPercent = 40 }).IsSuccess);
+
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Retreat, robot.ActiveProgramAction);
+            Assert.AreEqual(home.Id, robot.CurrentOrder.TargetEntityId);
+            Assert.AreEqual(home.SpawnPoint, robot.CurrentOrder.TargetPosition);
+
+            robot.CurrentHealth = 60;
+            state.Tick += 8;
+            simulation.Planner.Update(state);
+            Assert.AreNotEqual(ProgramAction.Retreat, robot.ActiveProgramAction);
         }
 
         [Test]

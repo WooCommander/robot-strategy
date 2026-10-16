@@ -61,7 +61,7 @@ namespace Game.Simulation.Systems
         {
             OrderType order = attacker.CurrentOrder?.Type ?? OrderType.None;
             if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture && order != OrderType.Program) ||
-                (order == OrderType.Program && (attacker.ActiveProgramAction == ProgramAction.None || attacker.ActiveProgramAction == ProgramAction.Explore)) ||
+                (order == OrderType.Program && (attacker.ActiveProgramAction == ProgramAction.None || attacker.ActiveProgramAction == ProgramAction.Explore || attacker.ActiveProgramAction == ProgramAction.Retreat)) ||
                 attacker.WeaponCooldowns[weaponIndex] > 0f)
             {
                 return;

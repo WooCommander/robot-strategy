@@ -39,6 +39,9 @@ namespace Game.Core.Commands
         public float TargetY;
         public string OrderId;
         public ReplayBlueprint Blueprint;
+        public int DefendPriority;
+        public int AttackPriority;
+        public int CapturePriority;
 
         public static ReplayCommandRecord FromCommand(int tick, ICommand command)
         {
@@ -54,6 +57,7 @@ namespace Game.Core.Commands
                 case OrderScoutCommand scout: record.SetRobots(scout.RobotIds); record.SetTarget(scout.TargetPosition); break;
                 case OrderDriveCommand drive: record.SetRobots(drive.RobotIds); record.SetTarget(drive.Direction); break;
                 case OrderDetonateCommand detonate: record.SetRobots(detonate.RobotIds); break;
+                case ConfigureProgramCommand program: record.SetRobots(program.RobotIds); record.DefendPriority = program.DefendPriority; record.AttackPriority = program.AttackPriority; record.CapturePriority = program.CapturePriority; break;
                 case EnqueueProductionCommand enqueue: record.TargetEntityId = enqueue.BaseBuildingId.Value; record.Blueprint = ReplayBlueprint.From(enqueue.Blueprint); break;
                 case CancelProductionCommand cancel: record.TargetEntityId = cancel.BaseBuildingId.Value; record.OrderId = cancel.OrderId; break;
                 default: throw new NotSupportedException($"Команда {command.GetType().Name} не поддерживается в replay.");
@@ -75,6 +79,7 @@ namespace Game.Core.Commands
                 CommandType.Scout => new OrderScoutCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, TargetPosition = TargetPosition },
                 CommandType.Detonate => new OrderDetonateCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds },
                 CommandType.Drive => new OrderDriveCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, Direction = TargetPosition },
+                CommandType.ConfigureProgram => new ConfigureProgramCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, RobotIds = robotIds, DefendPriority = DefendPriority, AttackPriority = AttackPriority, CapturePriority = CapturePriority },
                 CommandType.EnqueueProduction => new EnqueueProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), Blueprint = Blueprint?.ToBlueprint() },
                 CommandType.CancelProduction => new CancelProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), OrderId = OrderId },
                 _ => throw new NotSupportedException($"Тип команды {Type} не поддерживается в replay.")

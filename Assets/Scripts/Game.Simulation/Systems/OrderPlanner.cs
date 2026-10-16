@@ -18,6 +18,7 @@ namespace Game.Simulation.Systems
         private const float DefaultManeuverIntervalSeconds = DefaultContentCatalog.BaseManeuverIntervalSeconds;
         private const float MinManeuverIntervalSeconds = 0.05f;
         private const float DefendEngageRadius = 8f;
+        private const float ProgramAttackRadius = 12f;
         private const float MoveArrivalDistance = 0.5f;
 
         private readonly IReadOnlyDictionary<string, ModuleDefinition> _catalog;
@@ -64,6 +65,9 @@ namespace Game.Simulation.Systems
                         break;
                     case OrderType.Move:
                         if (strategicTick) UpdateMove(robot);
+                        break;
+                    case OrderType.Program:
+                        UpdateProgram(robot, state, strategicTick);
                         break;
                 }
             }
@@ -152,6 +156,71 @@ namespace Game.Simulation.Systems
             if (target == null) return;
             robot.CurrentOrder.TargetEntityId = target.Id;
             UpdateCombatManeuver(robot, target, state);
+        }
+
+        private void UpdateProgram(RobotState robot, MatchState state, bool strategicTick)
+        {
+            if (strategicTick || robot.ActiveProgramAction == ProgramAction.None)
+            {
+                RobotState defenseTarget = FindThreatToOwnedBuilding(robot, state);
+                RobotState attackTarget = FindNearestEnemy(robot, state);
+                if (attackTarget != null && SimVector2.SqrDistance(robot.Position, attackTarget.Position) > ProgramAttackRadius * ProgramAttackRadius)
+                    attackTarget = null;
+                BuildingState captureTarget = null;
+                if (robot.ActiveProgramAction == ProgramAction.Capture &&
+                    state.Buildings.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out BuildingState currentBuilding) &&
+                    currentBuilding.Owner != robot.Owner)
+                    captureTarget = currentBuilding;
+                else captureTarget = FindNearestForeignBuilding(robot, state);
+
+                ProgramAction choice = ProgramAction.None;
+                EntityId targetId = EntityId.None;
+                for (int rank = 1; rank <= 3; rank++)
+                {
+                    if (robot.DefendPriority == rank && defenseTarget != null) { choice = ProgramAction.Defend; targetId = defenseTarget.Id; break; }
+                    if (robot.AttackPriority == rank && attackTarget != null) { choice = ProgramAction.Attack; targetId = attackTarget.Id; break; }
+                    if (robot.CapturePriority == rank && captureTarget != null) { choice = ProgramAction.Capture; targetId = captureTarget.Id; break; }
+                }
+
+                if (choice != robot.ActiveProgramAction || targetId != robot.CurrentOrder.TargetEntityId)
+                {
+                    robot.ActiveProgramAction = choice;
+                    robot.CurrentOrder.TargetEntityId = targetId;
+                    robot.ClearPath();
+                    robot.NextManeuverSeconds = 0f;
+                }
+            }
+
+            if (robot.ActiveProgramAction == ProgramAction.Capture)
+            {
+                if (strategicTick) UpdateCapture(robot, state);
+            }
+            else if (robot.ActiveProgramAction == ProgramAction.Attack || robot.ActiveProgramAction == ProgramAction.Defend)
+            {
+                if (state.Robots.TryGetValue(robot.CurrentOrder.TargetEntityId.Value, out RobotState target) && target.IsAlive)
+                    UpdateCombatManeuver(robot, target, state);
+            }
+            else robot.ClearPath();
+        }
+
+        private static RobotState FindThreatToOwnedBuilding(RobotState robot, MatchState state)
+        {
+            RobotState nearest = null;
+            float nearestDistance = float.MaxValue;
+            foreach (BuildingState building in state.Buildings.Values)
+            {
+                if (building.Owner != robot.Owner) continue;
+                foreach (RobotState enemy in state.Robots.Values)
+                {
+                    if (!enemy.IsAlive || enemy.Owner == robot.Owner ||
+                        SimVector2.SqrDistance(enemy.Position, building.Position) > DefendEngageRadius * DefendEngageRadius) continue;
+                    float distance = SimVector2.SqrDistance(robot.Position, enemy.Position);
+                    if (distance >= nearestDistance) continue;
+                    nearest = enemy;
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
         }
 
         private void UpdateCombatManeuver(RobotState robot, RobotState target, MatchState state)

@@ -64,6 +64,29 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void SerializeAndDeserialize_RestoresActiveRobotProgram()
+        {
+            MatchState source = CreateState();
+            RobotState robot = source.Robots[10];
+            robot.CurrentOrder = RobotOrder.Program();
+            robot.CurrentOrder.TargetEntityId = new EntityId(101);
+            robot.DefendPriority = 3;
+            robot.AttackPriority = 2;
+            robot.CapturePriority = 1;
+            robot.ActiveProgramAction = ProgramAction.Capture;
+            var service = new MatchPersistenceService();
+
+            RobotState restored = service.Deserialize(service.Serialize(source)).Robots[10];
+
+            Assert.AreEqual(OrderType.Program, restored.CurrentOrder.Type);
+            Assert.AreEqual(new EntityId(101), restored.CurrentOrder.TargetEntityId);
+            Assert.AreEqual(3, restored.DefendPriority);
+            Assert.AreEqual(2, restored.AttackPriority);
+            Assert.AreEqual(1, restored.CapturePriority);
+            Assert.AreEqual(ProgramAction.Capture, restored.ActiveProgramAction);
+        }
+
+        [Test]
         public void ManualAndAutoSlots_RoundTripToSpecifiedDirectory()
         {
             string directory = Path.Combine(Path.GetTempPath(), "robot-strategy-tests", System.Guid.NewGuid().ToString("N"));

@@ -113,6 +113,7 @@ namespace Game.Presentation.Controllers
             _hudView.SetOrderMode(false);
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
+            _hudView.OnRobotProgramRequested += HandleRobotProgramFromHud;
             _hudView.OnRestartRequested += RestartMatch;
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
             _hudView.OnMinimapPointRequested += point => _cameraController?.FocusOn(point.X, point.Y, instant: false);
@@ -195,6 +196,19 @@ namespace Game.Presentation.Controllers
         {
             if (_currentlySelectedRobot == null || _currentlySelectedRobot.Owner != PlayerId.Player1) return;
             IssueForRobot(CreateRobotOrderCommand(order, _currentlySelectedRobot.State), "Приказ отклонён");
+        }
+
+        private void HandleRobotProgramFromHud(int defend, int attack, int capture)
+        {
+            if (_currentlySelectedRobot?.State == null || _currentlySelectedRobot.Owner != PlayerId.Player1) return;
+            IssueForRobot(new ConfigureProgramCommand
+            {
+                PlayerId = PlayerId.Player1,
+                RobotIds = new List<EntityId> { _currentlySelectedRobot.State.Id },
+                DefendPriority = defend,
+                AttackPriority = attack,
+                CapturePriority = capture
+            }, "Программа робота отклонена");
         }
 
         private ICommand CreateRobotOrderCommand(OrderType order, RobotState robot)

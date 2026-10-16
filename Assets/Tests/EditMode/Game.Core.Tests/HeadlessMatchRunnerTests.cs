@@ -53,6 +53,20 @@ namespace Game.Core.Tests
             Assert.AreEqual(source.Blueprint.ChassisId, production.Blueprint.ChassisId);
         }
 
+        [Test]
+        public void ReplayRecord_RoundTripsRobotProgramPriorities()
+        {
+            var source = new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(7) }, DefendPriority = 3, AttackPriority = 1, CapturePriority = 2 };
+
+            var restored = ReplayCommandRecord.FromCommand(5, source).ToCommand() as ConfigureProgramCommand;
+
+            Assert.NotNull(restored);
+            Assert.AreEqual(source.RobotIds[0], restored.RobotIds[0]);
+            Assert.AreEqual(3, restored.DefendPriority);
+            Assert.AreEqual(1, restored.AttackPriority);
+            Assert.AreEqual(2, restored.CapturePriority);
+        }
+
         private static MatchState CreateMatch()
         {
             var state = new MatchState();

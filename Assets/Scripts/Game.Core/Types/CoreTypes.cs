@@ -72,7 +72,8 @@ namespace Game.Core.Types
         Stop = 5,
         Hunt = 6,
         Scout = 7,
-        Detonate = 8
+        Detonate = 8,
+        Program = 9
     }
 
     public enum BuildingType : byte

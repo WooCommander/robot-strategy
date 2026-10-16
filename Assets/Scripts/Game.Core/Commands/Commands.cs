@@ -17,7 +17,8 @@ namespace Game.Core.Commands
         Drive = 8,
         Detonate = 9,
         EnqueueProduction = 10,
-        CancelProduction = 11
+        CancelProduction = 11,
+        ConfigureProgram = 12
     }
 
     public interface ICommand
@@ -139,6 +140,18 @@ namespace Game.Core.Commands
         public CommandType Type => CommandType.Drive;
         public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
         public SimVector2 Direction { get; set; }
+    }
+
+    [Serializable]
+    public class ConfigureProgramCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.ConfigureProgram;
+        public List<EntityId> RobotIds { get; set; } = new List<EntityId>();
+        public int DefendPriority { get; set; } = 1;
+        public int AttackPriority { get; set; } = 2;
+        public int CapturePriority { get; set; } = 3;
     }
 
     [Serializable]

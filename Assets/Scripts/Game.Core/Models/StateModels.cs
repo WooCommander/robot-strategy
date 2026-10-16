@@ -18,7 +18,10 @@ namespace Game.Core.Models
         public static RobotOrder Hunt() => new RobotOrder { Type = OrderType.Hunt };
         public static RobotOrder Scout(SimVector2 position) => new RobotOrder { Type = OrderType.Scout, TargetPosition = position };
         public static RobotOrder Detonate() => new RobotOrder { Type = OrderType.Detonate };
+        public static RobotOrder Program() => new RobotOrder { Type = OrderType.Program };
     }
+
+    public enum ProgramAction : byte { None = 0, Defend = 1, Attack = 2, Capture = 3 }
 
     [Serializable]
     public class RobotState
@@ -42,6 +45,10 @@ namespace Game.Core.Models
         public System.Collections.Generic.List<float> WeaponCooldowns { get; set; } = new System.Collections.Generic.List<float>();
         public int ScoutPatrolStep { get; set; }
         public RobotOrder CurrentOrder { get; set; } = new RobotOrder();
+        public int DefendPriority { get; set; } = 1;
+        public int AttackPriority { get; set; } = 2;
+        public int CapturePriority { get; set; } = 3;
+        public ProgramAction ActiveProgramAction { get; set; }
 
         // Движение принадлежит симуляции: путь A*, ручной привод и расписание боевого манёвра.
         public System.Collections.Generic.List<SimVector2> Path { get; set; } = new System.Collections.Generic.List<SimVector2>();

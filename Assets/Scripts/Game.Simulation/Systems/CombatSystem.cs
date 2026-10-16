@@ -60,7 +60,7 @@ namespace Game.Simulation.Systems
         private void TryFire(RobotState attacker, ModuleDefinition weapon, int weaponIndex, MatchState state)
         {
             OrderType order = attacker.CurrentOrder?.Type ?? OrderType.None;
-            if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture) ||
+            if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture && order != OrderType.Program) ||
                 attacker.WeaponCooldowns[weaponIndex] > 0f)
             {
                 return;

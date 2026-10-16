@@ -63,6 +63,56 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void Program_PrioritizesCaptureOrAttack_AndManualOrderOverridesIt()
+        {
+            var catalog = DefaultContentCatalog.CreateDefaultModules();
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState factory = state.Buildings[CentralFactoryId];
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, MaxHealth = 100, Position = new SimVector2(factory.Position.X + 2f, factory.Position.Y), MoveSpeed = 2f };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, MaxHealth = 100, Position = new SimVector2(robot.Position.X + 4f, robot.Position.Y), MoveSpeed = 2f };
+            state.Robots[900] = robot;
+            state.Robots[901] = enemy;
+            var simulation = new MatchSimulation(catalog, map, state);
+            var ids = new List<EntityId> { robot.Id };
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3 }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Capture, robot.ActiveProgramAction);
+            Assert.AreEqual(factory.Id, robot.CurrentOrder.TargetEntityId);
+            simulation.Capture.Update(state, 1f);
+            Assert.Greater(factory.CaptureProgressSeconds, 0f);
+
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, AttackPriority = 1, CapturePriority = 2, DefendPriority = 3 }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Attack, robot.ActiveProgramAction);
+            Assert.AreEqual(enemy.Id, robot.CurrentOrder.TargetEntityId);
+
+            enemy.Position = new SimVector2(state.Buildings[Player1BaseId].Position.X + 2f, state.Buildings[Player1BaseId].Position.Y);
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, DefendPriority = 1, CapturePriority = 2, AttackPriority = 3 }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Defend, robot.ActiveProgramAction);
+            Assert.AreEqual(enemy.Id, robot.CurrentOrder.TargetEntityId);
+
+            Assert.IsTrue(simulation.Issue(new OrderStopCommand { PlayerId = PlayerId.Player1, RobotIds = ids }).IsSuccess);
+            Assert.AreEqual(OrderType.Stop, robot.CurrentOrder.Type);
+        }
+
+        [Test]
+        public void Program_RejectsDuplicateRanksWithoutMutatingRobot()
+        {
+            var state = new MatchState();
+            var robot = new RobotState { Id = new EntityId(1), Owner = PlayerId.Player1, CurrentHealth = 10 };
+            state.Robots[1] = robot;
+            var dispatcher = new CommandDispatcher(DefaultContentCatalog.CreateDefaultModules());
+
+            CommandResult result = dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, DefendPriority = 1, AttackPriority = 1, CapturePriority = 3 }, state);
+
+            Assert.IsFalse(result.IsSuccess);
+            Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
+        }
+
+        [Test]
         public void Replay_ReproducesMatchPlayedWithIrregularFrames()
         {
             Dictionary<string, ModuleDefinition> catalog = DefaultContentCatalog.CreateDefaultModules();

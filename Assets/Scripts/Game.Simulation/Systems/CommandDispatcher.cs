@@ -39,6 +39,7 @@ namespace Game.Simulation.Systems
                 OrderScoutCommand scout => HandleScout(scout, state),
                 OrderDriveCommand drive => HandleDrive(drive, state),
                 OrderDetonateCommand detonate => HandleDetonate(detonate, state),
+                ConfigureProgramCommand program => HandleProgram(program, state),
                 _ => CommandResult.Fail($"Неизвестный тип команды: {command.GetType().Name}")
             };
         }
@@ -262,6 +263,27 @@ namespace Game.Simulation.Systems
             }
             // Сам взрыв выполняет CombatSystem на ближайшем тике.
             foreach (var robot in robots) AssignOrder(robot, RobotOrder.Detonate());
+            return CommandResult.Success();
+        }
+
+        private CommandResult HandleProgram(ConfigureProgramCommand cmd, MatchState state)
+        {
+            var robots = ValidateAndGetOwnedRobots(cmd.RobotIds, cmd.PlayerId, state, out var error);
+            if (error != null) return CommandResult.Fail(error);
+            if (cmd.DefendPriority < 1 || cmd.DefendPriority > 3 ||
+                cmd.AttackPriority < 1 || cmd.AttackPriority > 3 ||
+                cmd.CapturePriority < 1 || cmd.CapturePriority > 3 ||
+                cmd.DefendPriority == cmd.AttackPriority || cmd.DefendPriority == cmd.CapturePriority || cmd.AttackPriority == cmd.CapturePriority)
+                return CommandResult.Fail("Приоритеты программы должны быть разными числами от 1 до 3.");
+
+            foreach (var robot in robots)
+            {
+                robot.DefendPriority = cmd.DefendPriority;
+                robot.AttackPriority = cmd.AttackPriority;
+                robot.CapturePriority = cmd.CapturePriority;
+                robot.ActiveProgramAction = ProgramAction.None;
+                AssignOrder(robot, RobotOrder.Program());
+            }
             return CommandResult.Success();
         }
 

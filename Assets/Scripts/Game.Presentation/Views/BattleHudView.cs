@@ -60,6 +60,7 @@ namespace Game.Presentation.Views
         private RectTransform _progressBarFillRect;
         private Button _constructorBtn;
         private readonly Dictionary<OrderType, Button> _orderButtons = new Dictionary<OrderType, Button>();
+        private readonly Dictionary<ProgramAction, Button> _priorityButtons = new Dictionary<ProgramAction, Button>();
 
         // Экран сборки
         private GameObject _constructorOverlay;
@@ -83,6 +84,7 @@ namespace Game.Presentation.Views
 
         public event Action<RobotBlueprint> OnOrderBlueprintRequested;
         public event Action<OrderType> OnRobotOrderRequested;
+        public event Action<int, int, int> OnRobotProgramRequested;
         public event Action OnRestartRequested;
         public event Action OnSelectPlayerBaseRequested;
         public event Action<SimVector2> OnMinimapPointRequested;
@@ -237,7 +239,7 @@ namespace Game.Presentation.Views
         private void CreateBottomPanel()
         {
             _bottomPanel = CreatePanel(_canvas.transform, "BottomDeck", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 18f), new Vector2(980f, 215f), PanelColor);
+                new Vector2(0f, 18f), new Vector2(980f, 300f), PanelColor);
             _bottomPanel.SetActive(false);
 
             _panelTitleText = CreateLabel(_bottomPanel.transform, "Title", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
@@ -268,19 +270,64 @@ namespace Game.Presentation.Views
             CreateOrderButton(OrderType.Defend, "ОБОРОНА", 75f);
             CreateOrderButton(OrderType.Stop, "СТОП", 225f);
             CreateOrderButton(OrderType.Detonate, "ПОДРЫВ", 375f).GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.05f);
+            CreatePriorityButton(ProgramAction.Defend, -300f);
+            CreatePriorityButton(ProgramAction.Attack, -100f);
+            CreatePriorityButton(ProgramAction.Capture, 100f);
+            var activate = CreateButton(_bottomPanel.transform, "ActivateProgram", "ВКЛ. ПРОГРАММУ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(300f, 145f), new Vector2(180f, 48f), new Color(0.12f, 0.32f, 0.28f), 13);
+            activate.onClick.AddListener(() => OnRobotProgramRequested?.Invoke(_shownRobot.DefendPriority, _shownRobot.AttackPriority, _shownRobot.CapturePriority));
+            _programButton = activate;
+            activate.gameObject.SetActive(false);
+        }
+
+        private RobotState _shownRobot;
+        private Button _programButton;
+
+        private void CreatePriorityButton(ProgramAction action, float x)
+        {
+            var button = CreateButton(_bottomPanel.transform, "Priority_" + action, "", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 145f), new Vector2(180f, 48f), new Color(0.15f, 0.24f, 0.34f), 13);
+            button.onClick.AddListener(() => PromotePriority(action));
+            _priorityButtons[action] = button;
+            button.gameObject.SetActive(false);
+        }
+
+        private void PromotePriority(ProgramAction action)
+        {
+            if (_shownRobot == null || _shownRobot.Owner != PlayerId.Player1) return;
+            int defend = _shownRobot.DefendPriority, attack = _shownRobot.AttackPriority, capture = _shownRobot.CapturePriority;
+            int selected = action == ProgramAction.Defend ? defend : action == ProgramAction.Attack ? attack : capture;
+            int previous = selected == 1 ? 3 : selected - 1;
+            if (defend == previous) defend = selected;
+            else if (attack == previous) attack = selected;
+            else capture = selected;
+            if (action == ProgramAction.Defend) defend = previous;
+            else if (action == ProgramAction.Attack) attack = previous;
+            else capture = previous;
+            OnRobotProgramRequested?.Invoke(defend, attack, capture);
         }
 
         private void ShowRobotPanel(RobotState robot)
         {
+            _shownRobot = robot;
             if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
             _panelTitleText.text = $"РОБОТ #{robot.Id.Value}: {DescribeBlueprint(robot.Blueprint)}";
             string controlHint = _isOrderMode
                 ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп" + (robot.Blueprint.HasNuclear ? " | N — подрыв" : "") + "</color>"
                 : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
-            _queueStatusText.text = $"HP: <color=#00FF88><b>{robot.CurrentHealth}/{robot.MaxHealth}</b></color> | Скорость: {robot.MoveSpeed:F1} м/с\n{controlHint}";
+            string programStatus = robot.CurrentOrder.Type == OrderType.Program
+                ? $" | Программа: {(robot.ActiveProgramAction == ProgramAction.Defend ? "защита" : robot.ActiveProgramAction == ProgramAction.Attack ? "атака" : robot.ActiveProgramAction == ProgramAction.Capture ? "захват" : "ожидание")}"
+                : "";
+            _queueStatusText.text = $"HP: <color=#00FF88><b>{robot.CurrentHealth}/{robot.MaxHealth}</b></color> | Скорость: {robot.MoveSpeed:F1} м/с{programStatus}\n{controlHint}";
             SetProgress(0f);
             _constructorBtn.gameObject.SetActive(false);
             bool own = robot.Owner == PlayerId.Player1;
+            _programButton.gameObject.SetActive(own);
+            _programButton.GetComponent<Image>().color = robot.CurrentOrder.Type == OrderType.Program ? new Color(0.15f, 0.65f, 0.45f) : new Color(0.12f, 0.32f, 0.28f);
+            foreach (var pair in _priorityButtons)
+            {
+                pair.Value.gameObject.SetActive(own);
+                int rank = pair.Key == ProgramAction.Defend ? robot.DefendPriority : pair.Key == ProgramAction.Attack ? robot.AttackPriority : robot.CapturePriority;
+                pair.Value.GetComponentInChildren<Text>().text = $"{rank}. {(pair.Key == ProgramAction.Defend ? "ЗАЩИТА" : pair.Key == ProgramAction.Attack ? "АТАКА" : "ЗАХВАТ")} ↑";
+            }
             foreach (var pair in _orderButtons)
             {
                 bool visible = own && (pair.Key != OrderType.Detonate || robot.Blueprint.HasNuclear);
@@ -294,8 +341,11 @@ namespace Game.Presentation.Views
 
         private void ShowBuildingPanel(BuildingState building)
         {
+            _shownRobot = null;
             if (!_bottomPanel.activeSelf) _bottomPanel.SetActive(true);
             foreach (var button in _orderButtons.Values) button.gameObject.SetActive(false);
+            foreach (var button in _priorityButtons.Values) button.gameObject.SetActive(false);
+            _programButton.gameObject.SetActive(false);
             bool ownBase = building.Type == BuildingType.Base && building.Owner == PlayerId.Player1;
             _constructorBtn.gameObject.SetActive(ownBase);
 

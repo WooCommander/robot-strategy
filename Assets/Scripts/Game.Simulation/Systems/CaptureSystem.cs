@@ -26,7 +26,8 @@ namespace Game.Simulation.Systems
                 foreach (var robot in state.Robots.Values)
                 {
                     if (!robot.IsAlive ||
-                        robot.CurrentOrder.Type != OrderType.Capture ||
+                        (robot.CurrentOrder.Type != OrderType.Capture &&
+                         !(robot.CurrentOrder.Type == OrderType.Program && robot.ActiveProgramAction == ProgramAction.Capture)) ||
                         robot.CurrentOrder.TargetEntityId != building.Id ||
                         !IsInCaptureRange(robot, building))
                     {

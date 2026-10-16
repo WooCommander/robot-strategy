@@ -160,8 +160,23 @@ namespace Game.Simulation.Systems
         public const float FactoryRadius = 6f;
 
         private readonly MapDefinition _map;
+        private readonly int[] _mountainPrefix;
 
-        public FogOfWarSystem(MapDefinition map) => _map = map ?? throw new ArgumentNullException(nameof(map));
+        public FogOfWarSystem(MapDefinition map)
+        {
+            _map = map ?? throw new ArgumentNullException(nameof(map));
+            int stride = map.Width + 1;
+            _mountainPrefix = new int[stride * (map.Height + 1)];
+            for (int y = 1; y <= map.Height; y++)
+            {
+                int rowMountains = 0;
+                for (int x = 1; x <= map.Width; x++)
+                {
+                    if (map.GetTile(x - 1, y - 1) == TileType.Mountain) rowMountains++;
+                    _mountainPrefix[y * stride + x] = _mountainPrefix[(y - 1) * stride + x] + rowMountains;
+                }
+            }
+        }
 
         public void Update(MatchState state)
         {
@@ -234,15 +249,29 @@ namespace Game.Simulation.Systems
             {
                 for (int x = Math.Max(0, originX - reach); x <= Math.Min(_map.Width - 1, originX + reach); x++)
                 {
+                    int index = y * _map.Width + x;
+                    if (cells[index] == 2) continue;
                     SimVector2 center = new GridCoord(x, y).ToSimVector2(_map.TileSize);
                     if (SimVector2.SqrDistance(source, center) > radiusSq || IsOccluded(originX, originY, x, y)) continue;
-                    cells[y * _map.Width + x] = 2;
+                    cells[index] = 2;
                 }
             }
         }
 
         private bool IsOccluded(int fromX, int fromY, int toX, int toY)
         {
+            // Карта во время матча неизменна. Если во всём прямоугольнике луча нет скал,
+            // точную трассировку выполнять незачем.
+            if (fromX >= 0 && fromX < _map.Width && fromY >= 0 && fromY < _map.Height &&
+                toX >= 0 && toX < _map.Width && toY >= 0 && toY < _map.Height)
+            {
+                int left = Math.Min(fromX, toX), right = Math.Max(fromX, toX) + 1;
+                int bottom = Math.Min(fromY, toY), top = Math.Max(fromY, toY) + 1;
+                int stride = _map.Width + 1;
+                int mountains = _mountainPrefix[top * stride + right] - _mountainPrefix[bottom * stride + right]
+                    - _mountainPrefix[top * stride + left] + _mountainPrefix[bottom * stride + left];
+                if (mountains == 0) return false;
+            }
             int x = fromX, y = fromY;
             int dx = Math.Abs(toX - fromX), dy = Math.Abs(toY - fromY);
             int stepX = fromX < toX ? 1 : -1, stepY = fromY < toY ? 1 : -1;

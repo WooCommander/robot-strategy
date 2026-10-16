@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using NUnit.Framework;
 using Game.AI;
@@ -50,6 +51,45 @@ namespace Game.Core.Tests
 
             Assert.AreEqual(2, fog.GetCell(PlayerId.Player1, 2, 1), "Сама гора должна быть видна.");
             Assert.AreEqual(0, fog.GetCell(PlayerId.Player1, 4, 1), "За горой обзор закрыт.");
+        }
+
+        [Test]
+        public void FogOfWar_FastVisibilityMatchesDirectRayChecksWithOverlappingScouts()
+        {
+            var map = new MapDefinition { Width = 13, Height = 11, TileSize = 1f, Tiles = new TileType[143] };
+            foreach (GridCoord mountain in new[] { new GridCoord(6, 4), new GridCoord(6, 5), new GridCoord(6, 6), new GridCoord(2, 2), new GridCoord(10, 8) })
+                map.SetTile(mountain.X, mountain.Y, TileType.Mountain);
+            var first = new SimVector2(3.5f, 5.5f);
+            var second = new SimVector2(9.5f, 5.5f);
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            simulation.State.Robots[900] = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, CurrentHealth = 100, Position = first };
+            simulation.State.Robots[901] = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player1, CurrentHealth = 100, Position = second };
+            simulation.Vision.Update(simulation.State);
+
+            for (int y = 0; y < map.Height; y++)
+                for (int x = 0; x < map.Width; x++)
+                {
+                    bool expected = ReferenceSees(map, first, x, y) || ReferenceSees(map, second, x, y);
+                    Assert.AreEqual(expected, simulation.State.FogOfWar.GetCell(PlayerId.Player1, x, y) == 2, $"Клетка {x},{y}");
+                }
+        }
+
+        private static bool ReferenceSees(MapDefinition map, SimVector2 source, int targetX, int targetY)
+        {
+            SimVector2 center = new GridCoord(targetX, targetY).ToSimVector2(map.TileSize);
+            if (SimVector2.SqrDistance(source, center) > FogOfWarSystem.RobotRadius * FogOfWarSystem.RobotRadius) return false;
+            int x = (int)Math.Floor(source.X / map.TileSize), y = (int)Math.Floor(source.Y / map.TileSize);
+            int dx = Math.Abs(targetX - x), dy = Math.Abs(targetY - y);
+            int stepX = x < targetX ? 1 : -1, stepY = y < targetY ? 1 : -1;
+            int error = dx - dy;
+            while (x != targetX || y != targetY)
+            {
+                int twice = error * 2;
+                if (twice > -dy) { error -= dy; x += stepX; }
+                if (twice < dx) { error += dx; y += stepY; }
+                if ((x != targetX || y != targetY) && map.GetTile(x, y) == TileType.Mountain) return false;
+            }
+            return true;
         }
 
         [Test]

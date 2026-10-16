@@ -11,12 +11,14 @@ namespace Game.Presentation.Views
         private readonly Queue<LineRenderer> _freeTraces = new Queue<LineRenderer>();
         private readonly Queue<Transform> _freeImpacts = new Queue<Transform>();
         private readonly List<ActiveEffect> _active = new List<ActiveEffect>();
-        private readonly MaterialPropertyBlock _impactProperties = new MaterialPropertyBlock();
+        private MaterialPropertyBlock _impactProperties;
         private Material _traceMaterial;
         private Material _impactMaterial;
 
         public void Initialize(int prewarmCount = 16)
         {
+            // Unity запрещает создавать нативный MaterialPropertyBlock в инициализаторе MonoBehaviour.
+            if (_impactProperties == null) _impactProperties = new MaterialPropertyBlock();
             if (_traceMaterial != null) return;
             _traceMaterial = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
             _impactMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color"));

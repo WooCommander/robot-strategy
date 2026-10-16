@@ -49,6 +49,8 @@ namespace Game.Core.Commands
         public int AttackMinHealthPercent;
         public int CaptureMinHealthPercent;
         public int RetreatHealthPercent;
+        public int CaptureResourceType;
+        public int CaptureResourceBelow;
         public int DefendTargetId;
         public int AttackTargetId;
         public int CaptureTargetId;
@@ -73,6 +75,8 @@ namespace Game.Core.Commands
                     record.DefendRadius = program.DefendRadius; record.AttackRadius = program.AttackRadius; record.CaptureRadius = program.CaptureRadius;
                     record.DefendMinHealthPercent = program.DefendMinHealthPercent; record.AttackMinHealthPercent = program.AttackMinHealthPercent; record.CaptureMinHealthPercent = program.CaptureMinHealthPercent;
                     record.RetreatHealthPercent = program.RetreatHealthPercent;
+                    record.CaptureResourceType = program.CaptureResourceType;
+                    record.CaptureResourceBelow = program.CaptureResourceBelow;
                     record.DefendTargetId = program.DefendTargetId.Value; record.AttackTargetId = program.AttackTargetId.Value; record.CaptureTargetId = program.CaptureTargetId.Value;
                     break;
                 case EnqueueProductionCommand enqueue: record.TargetEntityId = enqueue.BaseBuildingId.Value; record.Blueprint = ReplayBlueprint.From(enqueue.Blueprint); break;
@@ -101,6 +105,7 @@ namespace Game.Core.Commands
                     DefendRadius = DefendRadius > 0f ? DefendRadius : 8f, AttackRadius = AttackRadius > 0f ? AttackRadius : 12f, CaptureRadius = CaptureRadius > 0f ? CaptureRadius : 200f,
                     DefendMinHealthPercent = DefendMinHealthPercent, AttackMinHealthPercent = AttackMinHealthPercent, CaptureMinHealthPercent = CaptureMinHealthPercent,
                     RetreatHealthPercent = RetreatHealthPercent,
+                    CaptureResourceType = CaptureResourceType, CaptureResourceBelow = CaptureResourceBelow,
                     DefendTargetId = new EntityId(DefendTargetId), AttackTargetId = new EntityId(AttackTargetId), CaptureTargetId = new EntityId(CaptureTargetId) },
                 CommandType.EnqueueProduction => new EnqueueProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), Blueprint = Blueprint?.ToBlueprint() },
                 CommandType.CancelProduction => new CancelProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), OrderId = OrderId },

@@ -242,6 +242,7 @@ namespace Game.Presentation.Controllers
                 AttackMinHealthPercent = values.AttackMinHealthPercent,
                 CaptureMinHealthPercent = values.CaptureMinHealthPercent,
                 RetreatHealthPercent = values.RetreatHealthPercent,
+                CaptureResourceType = values.CaptureResourceType, CaptureResourceBelow = values.CaptureResourceBelow,
                 DefendTargetId = values.DefendTargetId,
                 AttackTargetId = values.AttackTargetId,
                 CaptureTargetId = values.CaptureTargetId

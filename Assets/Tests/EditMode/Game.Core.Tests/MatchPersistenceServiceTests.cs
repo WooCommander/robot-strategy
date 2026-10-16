@@ -80,6 +80,8 @@ namespace Game.Core.Tests
             robot.DefendMinHealthPercent = 25;
             robot.AttackMinHealthPercent = 75;
             robot.CaptureMinHealthPercent = 50;
+            robot.CaptureResourceType = (int)ResourceType.Missiles;
+            robot.CaptureResourceBelow = 5;
             robot.DefendTargetId = new EntityId(1);
             robot.AttackTargetId = new EntityId(11);
             robot.CaptureTargetId = new EntityId(101);
@@ -93,6 +95,8 @@ namespace Game.Core.Tests
             Assert.AreEqual(2, restored.AttackPriority);
             Assert.AreEqual(1, restored.CapturePriority);
             Assert.AreEqual(ProgramAction.Capture, restored.ActiveProgramAction);
+            Assert.AreEqual((int)ResourceType.Missiles, restored.CaptureResourceType);
+            Assert.AreEqual(5, restored.CaptureResourceBelow);
             Assert.AreEqual(6f, restored.DefendRadius);
             Assert.AreEqual(18f, restored.AttackRadius);
             Assert.AreEqual(80f, restored.CaptureRadius);

@@ -288,6 +288,7 @@ namespace Game.Core.Tests
             Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
             Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackRadius = 0f }, state).IsSuccess);
             Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackMinHealthPercent = 101 }, state).IsSuccess);
+            Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, CaptureResourceType = 4 }, state).IsSuccess);
             Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackTargetId = robot.Id }, state).IsSuccess);
             Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
         }
@@ -322,13 +323,43 @@ namespace Game.Core.Tests
             var command = new ConfigureProgramCommand
             {
                 PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(900) },
-                DefendMinHealthPercent = 25, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 50, RetreatHealthPercent = 40
+                DefendMinHealthPercent = 25, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 50, RetreatHealthPercent = 40,
+                CaptureResourceType = (int)ResourceType.Missiles, CaptureResourceBelow = 5
             };
             var restored = (ConfigureProgramCommand)ReplayCommandRecord.FromCommand(12, command).ToCommand();
             Assert.AreEqual(25, restored.DefendMinHealthPercent);
             Assert.AreEqual(75, restored.AttackMinHealthPercent);
             Assert.AreEqual(50, restored.CaptureMinHealthPercent);
             Assert.AreEqual(40, restored.RetreatHealthPercent);
+            Assert.AreEqual((int)ResourceType.Missiles, restored.CaptureResourceType);
+            Assert.AreEqual(5, restored.CaptureResourceBelow);
+        }
+
+        [Test]
+        public void Program_CapturesFactoryOnlyWhileItsResourceIsScarce()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState factory = state.Buildings[CentralFactoryId];
+            factory.ProducedResource = ResourceType.Missiles;
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1,
+                Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), MaxHealth = 100, CurrentHealth = 100,
+                Position = new SimVector2(factory.Position.X + 2f, factory.Position.Y), MoveSpeed = 2f };
+            state.Robots[900] = robot;
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map, state);
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1,
+                RobotIds = new List<EntityId> { robot.Id }, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3,
+                CaptureTargetId = factory.Id, CaptureResourceType = (int)ResourceType.Missiles, CaptureResourceBelow = 5 }).IsSuccess);
+
+            state.GetPlayer(PlayerId.Player1).Resources[ResourceType.Missiles] = 4;
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Capture, robot.ActiveProgramAction);
+            Assert.AreEqual(factory.Id, robot.CurrentOrder.TargetEntityId);
+
+            state.GetPlayer(PlayerId.Player1).Resources[ResourceType.Missiles] = 5;
+            state.Tick += 8;
+            simulation.Planner.Update(state);
+            Assert.AreNotEqual(ProgramAction.Capture, robot.ActiveProgramAction);
         }
 
         [Test]

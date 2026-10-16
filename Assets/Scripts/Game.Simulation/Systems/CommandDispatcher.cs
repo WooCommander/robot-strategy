@@ -285,6 +285,10 @@ namespace Game.Simulation.Systems
             if (!IsValidHealthThreshold(cmd.DefendMinHealthPercent) || !IsValidHealthThreshold(cmd.AttackMinHealthPercent) ||
                 !IsValidHealthThreshold(cmd.CaptureMinHealthPercent) || !IsValidHealthThreshold(cmd.RetreatHealthPercent))
                 return CommandResult.Fail("Минимальное здоровье должно быть в пределах 0–100%." );
+            if (cmd.CaptureResourceType < 0 || cmd.CaptureResourceType > (int)ResourceType.Chassis ||
+                cmd.CaptureResourceBelow < 0 || cmd.CaptureResourceBelow > 100 ||
+                (cmd.CaptureResourceType == 0) != (cmd.CaptureResourceBelow == 0))
+                return CommandResult.Fail("Условие захвата: тип заводского ресурса и порог запаса 1–100 либо оба выключены.");
             if (cmd.DefendTargetId.IsValid &&
                 (!state.Buildings.TryGetValue(cmd.DefendTargetId.Value, out BuildingState defendBuilding) || defendBuilding.Owner != cmd.PlayerId))
                 return CommandResult.Fail("Цель защиты должна быть собственным зданием.");
@@ -313,6 +317,8 @@ namespace Game.Simulation.Systems
                 robot.AttackMinHealthPercent = cmd.AttackMinHealthPercent;
                 robot.CaptureMinHealthPercent = cmd.CaptureMinHealthPercent;
                 robot.RetreatHealthPercent = cmd.RetreatHealthPercent;
+                robot.CaptureResourceType = cmd.CaptureResourceType;
+                robot.CaptureResourceBelow = cmd.CaptureResourceBelow;
                 robot.DefendTargetId = cmd.DefendTargetId;
                 robot.AttackTargetId = cmd.AttackTargetId;
                 robot.CaptureTargetId = cmd.CaptureTargetId;

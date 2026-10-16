@@ -55,6 +55,8 @@ namespace Game.Core.Models
         public int AttackMinHealthPercent { get; set; }
         public int CaptureMinHealthPercent { get; set; }
         public int RetreatHealthPercent { get; set; }
+        public int CaptureResourceType { get; set; }
+        public int CaptureResourceBelow { get; set; }
         public EntityId DefendTargetId { get; set; } = EntityId.None;
         public EntityId AttackTargetId { get; set; } = EntityId.None;
         public EntityId CaptureTargetId { get; set; } = EntityId.None;

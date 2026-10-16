@@ -318,6 +318,9 @@ namespace Game.Simulation.Systems
 
         private static bool IsProgramCaptureCandidate(RobotState robot, BuildingState building, MatchState state) =>
             building.Owner != robot.Owner &&
+            (robot.CaptureResourceType == 0 ||
+                (building.Type == BuildingType.Factory && EconomyRules.GetProducedResource(building) == (ResourceType)robot.CaptureResourceType &&
+                 state.GetPlayer(robot.Owner).Resources[(ResourceType)robot.CaptureResourceType] < robot.CaptureResourceBelow)) &&
             (!robot.CaptureTargetId.IsValid || robot.CaptureTargetId == building.Id) &&
             (state.FogOfWar == null || state.FogOfWar.IsExplored(robot.Owner, building.Position)) &&
             SimVector2.SqrDistance(robot.Position, building.Position) <= robot.CaptureRadius * robot.CaptureRadius;

@@ -20,6 +20,7 @@ namespace Game.Presentation.Views
         public float DefendRadius, AttackRadius, CaptureRadius;
         public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
         public int RetreatHealthPercent;
+        public int CaptureResourceType, CaptureResourceBelow;
         public EntityId DefendTargetId, AttackTargetId, CaptureTargetId;
 
         public static ProgramEditorValues FromRobot(RobotState robot) => new ProgramEditorValues
@@ -29,6 +30,7 @@ namespace Game.Presentation.Views
             DefendRadius = robot.DefendRadius, AttackRadius = robot.AttackRadius, CaptureRadius = robot.CaptureRadius,
             DefendMinHealthPercent = robot.DefendMinHealthPercent, AttackMinHealthPercent = robot.AttackMinHealthPercent, CaptureMinHealthPercent = robot.CaptureMinHealthPercent,
             RetreatHealthPercent = robot.RetreatHealthPercent,
+            CaptureResourceType = robot.CaptureResourceType, CaptureResourceBelow = robot.CaptureResourceBelow,
             DefendTargetId = robot.DefendTargetId, AttackTargetId = robot.AttackTargetId, CaptureTargetId = robot.CaptureTargetId
         };
     }
@@ -49,13 +51,15 @@ namespace Game.Presentation.Views
             public float DefendRadius, AttackRadius, CaptureRadius;
             public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
             public int RetreatHealthPercent;
+            public int CaptureResourceType, CaptureResourceBelow;
 
             public static ProgramPreset From(ProgramEditorValues values) => new ProgramPreset
             {
                 DefendPriority = values.DefendPriority, AttackPriority = values.AttackPriority, CapturePriority = values.CapturePriority,
                 DefendRadius = values.DefendRadius, AttackRadius = values.AttackRadius, CaptureRadius = values.CaptureRadius,
                 DefendMinHealthPercent = values.DefendMinHealthPercent, AttackMinHealthPercent = values.AttackMinHealthPercent, CaptureMinHealthPercent = values.CaptureMinHealthPercent,
-                RetreatHealthPercent = values.RetreatHealthPercent
+                RetreatHealthPercent = values.RetreatHealthPercent,
+                CaptureResourceType = values.CaptureResourceType, CaptureResourceBelow = values.CaptureResourceBelow
             };
 
             public void ApplyTo(ProgramEditorValues values)
@@ -64,6 +68,7 @@ namespace Game.Presentation.Views
                 values.DefendRadius = DefendRadius; values.AttackRadius = AttackRadius; values.CaptureRadius = CaptureRadius;
                 values.DefendMinHealthPercent = DefendMinHealthPercent; values.AttackMinHealthPercent = AttackMinHealthPercent; values.CaptureMinHealthPercent = CaptureMinHealthPercent;
                 values.RetreatHealthPercent = RetreatHealthPercent;
+                values.CaptureResourceType = CaptureResourceType; values.CaptureResourceBelow = CaptureResourceBelow;
                 // ID принадлежат конкретному матчу, поэтому в шаблон не входят.
                 values.DefendTargetId = EntityId.None; values.AttackTargetId = EntityId.None; values.CaptureTargetId = EntityId.None;
             }
@@ -118,6 +123,8 @@ namespace Game.Presentation.Views
         private readonly Text[] _programRadiusLabels = new Text[3];
         private readonly Button[] _programTargetButtons = new Button[3];
         private readonly Button[] _programHealthButtons = new Button[3];
+        private readonly Button[] _programResourceButtons = new Button[3];
+        private readonly Button[] _programResourceLimitButtons = new Button[3];
         private Button _programPresetSlotButton;
         private Button _programRetreatButton;
         private int _programPresetSlot;
@@ -505,6 +512,10 @@ namespace Game.Presentation.Views
                 plus.onClick.AddListener(() => ChangeProgramRadius(slot, 1));
                 _programTargetButtons[index] = CreateButton(row.transform, "Target", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(790f, -66f), new Vector2(300f, 92f), new Color(0.2f, 0.3f, 0.4f), 16);
                 _programTargetButtons[index].onClick.AddListener(() => CycleProgramTarget(slot));
+                _programResourceButtons[index] = CreateButton(row.transform, "ResourceType", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(715f, -101f), new Vector2(145f, 42f), new Color(0.18f, 0.32f, 0.27f), 13);
+                _programResourceButtons[index].onClick.AddListener(() => CycleCaptureResource());
+                _programResourceLimitButtons[index] = CreateButton(row.transform, "ResourceLimit", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(865f, -101f), new Vector2(145f, 42f), new Color(0.18f, 0.32f, 0.27f), 13);
+                _programResourceLimitButtons[index].onClick.AddListener(() => CycleCaptureResourceLimit());
             }
 
             _programError = CreateText(root, "Error", "", new Vector2(35f, -590f), new Vector2(970f, 40f), 17, FontStyle.Bold, new Color(1f, 0.45f, 0.35f), TextAnchor.MiddleCenter);
@@ -535,7 +546,30 @@ namespace Game.Presentation.Views
                 _programRadiusLabels[slot].text = $"{GetProgramRadius(action):0} м";
                 _programHealthButtons[slot].GetComponentInChildren<Text>().text = $"HP ≥ {GetProgramMinHealth(action)}% ›";
                 _programTargetButtons[slot].GetComponentInChildren<Text>().text = "ЦЕЛЬ\n" + DescribeProgramTarget(action, GetProgramTarget(action));
+                bool isCapture = action == ProgramAction.Capture;
+                RectTransform targetRect = (RectTransform)_programTargetButtons[slot].transform;
+                targetRect.anchoredPosition = new Vector2(790f, isCapture ? -42f : -66f);
+                targetRect.sizeDelta = new Vector2(300f, isCapture ? 44f : 92f);
+                _programResourceButtons[slot].gameObject.SetActive(isCapture);
+                _programResourceLimitButtons[slot].gameObject.SetActive(isCapture && _programDraft.CaptureResourceType != 0);
+                _programResourceButtons[slot].GetComponentInChildren<Text>().text = _programDraft.CaptureResourceType == 0
+                    ? "РЕСУРС: ЛЮБОЙ ›" : DefaultContentCatalog.GetResourceName((ResourceType)_programDraft.CaptureResourceType).ToUpperInvariant() + " ›";
+                _programResourceLimitButtons[slot].GetComponentInChildren<Text>().text = $"ЗАПАС < {_programDraft.CaptureResourceBelow} ›";
             }
+        }
+
+        private void CycleCaptureResource()
+        {
+            _programDraft.CaptureResourceType = (_programDraft.CaptureResourceType + 1) % 7;
+            _programDraft.CaptureResourceBelow = _programDraft.CaptureResourceType == 0 ? 0 : 5;
+            RefreshProgramEditor();
+        }
+
+        private void CycleCaptureResourceLimit()
+        {
+            int current = _programDraft.CaptureResourceBelow;
+            _programDraft.CaptureResourceBelow = current < 5 ? 5 : current < 10 ? 10 : current < 20 ? 20 : 3;
+            RefreshProgramEditor();
         }
 
         private void SaveProgramPreset()
@@ -556,7 +590,10 @@ namespace Game.Presentation.Views
                 if (preset == null || preset.DefendPriority < 1 || preset.AttackPriority < 1 || preset.CapturePriority < 1 ||
                     preset.DefendPriority == preset.AttackPriority || preset.DefendPriority == preset.CapturePriority || preset.AttackPriority == preset.CapturePriority ||
                     preset.DefendRadius < 1f || preset.AttackRadius < 1f || preset.CaptureRadius < 1f ||
-                    preset.RetreatHealthPercent < 0 || preset.RetreatHealthPercent > 100)
+                    preset.RetreatHealthPercent < 0 || preset.RetreatHealthPercent > 100 ||
+                    preset.CaptureResourceType < 0 || preset.CaptureResourceType > 6 ||
+                    preset.CaptureResourceBelow < 0 || preset.CaptureResourceBelow > 100 ||
+                    (preset.CaptureResourceType == 0) != (preset.CaptureResourceBelow == 0))
                 { _programError.text = "Шаблон повреждён или устарел."; return; }
                 preset.ApplyTo(_programDraft);
                 _programError.text = $"Шаблон {_programPresetSlot + 1} загружен; примените его к роботу.";

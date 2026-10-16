@@ -18,6 +18,7 @@ namespace Game.Presentation.Views
         public EntityId RobotId;
         public int DefendPriority, AttackPriority, CapturePriority;
         public float DefendRadius, AttackRadius, CaptureRadius;
+        public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
         public EntityId DefendTargetId, AttackTargetId, CaptureTargetId;
 
         public static ProgramEditorValues FromRobot(RobotState robot) => new ProgramEditorValues
@@ -25,6 +26,7 @@ namespace Game.Presentation.Views
             RobotId = robot.Id,
             DefendPriority = robot.DefendPriority, AttackPriority = robot.AttackPriority, CapturePriority = robot.CapturePriority,
             DefendRadius = robot.DefendRadius, AttackRadius = robot.AttackRadius, CaptureRadius = robot.CaptureRadius,
+            DefendMinHealthPercent = robot.DefendMinHealthPercent, AttackMinHealthPercent = robot.AttackMinHealthPercent, CaptureMinHealthPercent = robot.CaptureMinHealthPercent,
             DefendTargetId = robot.DefendTargetId, AttackTargetId = robot.AttackTargetId, CaptureTargetId = robot.CaptureTargetId
         };
     }
@@ -36,6 +38,31 @@ namespace Game.Presentation.Views
     public class BattleHudView : MonoBehaviour
     {
         private const float StatusRefreshSeconds = 0.25f;
+        private const string ProgramPresetKey = "RobotStrategy.ProgramPreset.";
+
+        [Serializable]
+        private sealed class ProgramPreset
+        {
+            public int DefendPriority, AttackPriority, CapturePriority;
+            public float DefendRadius, AttackRadius, CaptureRadius;
+            public int DefendMinHealthPercent, AttackMinHealthPercent, CaptureMinHealthPercent;
+
+            public static ProgramPreset From(ProgramEditorValues values) => new ProgramPreset
+            {
+                DefendPriority = values.DefendPriority, AttackPriority = values.AttackPriority, CapturePriority = values.CapturePriority,
+                DefendRadius = values.DefendRadius, AttackRadius = values.AttackRadius, CaptureRadius = values.CaptureRadius,
+                DefendMinHealthPercent = values.DefendMinHealthPercent, AttackMinHealthPercent = values.AttackMinHealthPercent, CaptureMinHealthPercent = values.CaptureMinHealthPercent
+            };
+
+            public void ApplyTo(ProgramEditorValues values)
+            {
+                values.DefendPriority = DefendPriority; values.AttackPriority = AttackPriority; values.CapturePriority = CapturePriority;
+                values.DefendRadius = DefendRadius; values.AttackRadius = AttackRadius; values.CaptureRadius = CaptureRadius;
+                values.DefendMinHealthPercent = DefendMinHealthPercent; values.AttackMinHealthPercent = AttackMinHealthPercent; values.CaptureMinHealthPercent = CaptureMinHealthPercent;
+                // ID принадлежат конкретному матчу, поэтому в шаблон не входят.
+                values.DefendTargetId = EntityId.None; values.AttackTargetId = EntityId.None; values.CaptureTargetId = EntityId.None;
+            }
+        }
 
         // Палитра в духе оригинала: тёмный фон, голубые названия, зелёные запасы, пурпурные цены.
         private static readonly Color PanelColor = new Color(0.02f, 0.03f, 0.06f, 0.94f);
@@ -85,6 +112,9 @@ namespace Game.Presentation.Views
         private readonly Text[] _programRuleLabels = new Text[3];
         private readonly Text[] _programRadiusLabels = new Text[3];
         private readonly Button[] _programTargetButtons = new Button[3];
+        private readonly Button[] _programHealthButtons = new Button[3];
+        private Button _programPresetSlotButton;
+        private int _programPresetSlot;
         private Text _programError;
 
         // Экран сборки
@@ -102,6 +132,7 @@ namespace Game.Presentation.Views
 
         // Миникарта и итог матча
         private RectTransform _minimapContent;
+        private RawImage _minimapFog;
         private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
         private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
         private GameObject _resultOverlay;
@@ -169,7 +200,10 @@ namespace Game.Presentation.Views
             foreach (var building in state.Buildings.Values)
             {
                 var marker = GetOrCreateMarker(_minimapBuildingMarkers, building.Id.Value, "Building", 10f);
-                marker.color = GetOwnerColor(building.Owner, 0.95f);
+                bool visible = building.Owner == PlayerId.Player1 || state.FogOfWar == null || state.FogOfWar.IsVisible(PlayerId.Player1, building.Position);
+                bool explored = visible || state.FogOfWar.IsExplored(PlayerId.Player1, building.Position);
+                marker.gameObject.SetActive(explored);
+                marker.color = visible ? GetOwnerColor(building.Owner, 0.95f) : new Color(0.75f, 0.75f, 0.75f, 0.5f);
                 PlaceMarker(marker.rectTransform, building.Position);
             }
 
@@ -179,6 +213,7 @@ namespace Game.Presentation.Views
                 if (!robot.IsAlive) continue;
                 activeRobotIds.Add(robot.Id.Value);
                 var marker = GetOrCreateMarker(_minimapRobotMarkers, robot.Id.Value, "Robot", 5f);
+                marker.gameObject.SetActive(robot.Owner == PlayerId.Player1 || state.FogOfWar == null || state.FogOfWar.IsVisible(PlayerId.Player1, robot.Position));
                 marker.color = GetOwnerColor(robot.Owner, 1f);
                 PlaceMarker(marker.rectTransform, robot.Position);
             }
@@ -253,12 +288,16 @@ namespace Game.Presentation.Views
             foreach (BuildingState building in state.Buildings.Values)
             {
                 if (building.Owner != owner) continue;
+                if (owner != PlayerId.Player1 && state.FogOfWar != null && !state.FogOfWar.IsVisible(PlayerId.Player1, building.Position)) continue;
                 if (building.Type == BuildingType.Base) bases++;
                 else factories[(int)building.ProducedResource]++;
             }
             string column = bases.ToString();
             foreach (ResourceType type in FactoryTypes) column += "\n" + factories[(int)type];
-            return column + "\n" + state.GetPlayer(owner).ActiveRobotsCount.ToString("00");
+            int visibleRobots = 0;
+            foreach (RobotState robot in state.Robots.Values)
+                if (robot.IsAlive && robot.Owner == owner && (owner == PlayerId.Player1 || state.FogOfWar == null || state.FogOfWar.IsVisible(PlayerId.Player1, robot.Position))) visibleRobots++;
+            return column + "\n" + visibleRobots.ToString("00");
         }
 
         // ───────────────────────── Нижняя панель ─────────────────────────
@@ -311,7 +350,7 @@ namespace Game.Presentation.Views
                 ? "<color=#66CCFF>ПРИКАЗЫ: C — захват | H — охота | R — разведка | F — оборона | S — стоп" + (robot.Blueprint.HasNuclear ? " | N — подрыв" : "") + "</color>"
                 : "<color=#FFFF00>РУЧНОЙ РЕЖИМ: WASD / стрелки — движение</color>";
             string programStatus = robot.CurrentOrder.Type == OrderType.Program
-                ? $" | Программа: {(robot.ActiveProgramAction == ProgramAction.Defend ? "защита" : robot.ActiveProgramAction == ProgramAction.Attack ? "атака" : robot.ActiveProgramAction == ProgramAction.Capture ? "захват" : "ожидание")}"
+                ? $" | Программа: {(robot.ActiveProgramAction == ProgramAction.Defend ? "защита" : robot.ActiveProgramAction == ProgramAction.Attack ? "атака" : robot.ActiveProgramAction == ProgramAction.Capture ? "захват" : robot.ActiveProgramAction == ProgramAction.Explore ? "разведка" : "ожидание")}"
                 : "";
             _queueStatusText.text = $"HP: <color=#00FF88><b>{robot.CurrentHealth}/{robot.MaxHealth}</b></color> | Скорость: {robot.MoveSpeed:F1} м/с{programStatus}\n{controlHint}";
             SetProgress(0f);
@@ -413,14 +452,22 @@ namespace Game.Presentation.Views
             var card = CreatePanel(_programOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1040f, 730f), new Color(0.04f, 0.08f, 0.15f));
             Transform root = card.transform;
             CreateText(root, "Title", "ПРОГРАММА РОБОТА", new Vector2(35f, -25f), new Vector2(750f, 55f), 32, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
-            CreateText(root, "Help", "Первая доступная операция выполняется. Цель «любая» выбирается автоматически. Радиус задаёт условие срабатывания, а не дальность оружия.", new Vector2(35f, -85f), new Vector2(970f, 65f), 18, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            CreateText(root, "Help", "Первая доступная операция выполняется. Радиус и минимум HP задают условия; цель «любая» выбирается автоматически.", new Vector2(35f, -85f), new Vector2(620f, 65f), 17, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
+            _programPresetSlotButton = CreateButton(root, "PresetSlot", "ШАБЛОН 1", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(710f, -110f), new Vector2(110f, 48f), new Color(0.16f, 0.30f, 0.4f), 14);
+            _programPresetSlotButton.onClick.AddListener(() => { _programPresetSlot = (_programPresetSlot + 1) % 3; RefreshProgramEditor(); });
+            var savePreset = CreateButton(root, "SavePreset", "СОХР.", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(830f, -110f), new Vector2(90f, 48f), new Color(0.08f, 0.42f, 0.23f), 14);
+            savePreset.onClick.AddListener(SaveProgramPreset);
+            var loadPreset = CreateButton(root, "LoadPreset", "ЗАГР.", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(935f, -110f), new Vector2(90f, 48f), new Color(0.16f, 0.38f, 0.5f), 14);
+            loadPreset.onClick.AddListener(LoadProgramPreset);
 
             for (int index = 0; index < 3; index++)
             {
                 int slot = index;
                 var row = CreatePanel(root, "Rule_" + (index + 1), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(35f, -160f - index * 145f), new Vector2(970f, 130f), new Color(0.09f, 0.15f, 0.25f, 0.98f));
-                _programRuleLabels[index] = CreateText(row.transform, "Name", "", new Vector2(15f, -12f), new Vector2(280f, 105f), 19, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
+                _programRuleLabels[index] = CreateText(row.transform, "Name", "", new Vector2(15f, -12f), new Vector2(280f, 74f), 19, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
                 _programRuleLabels[index].raycastTarget = false;
+                _programHealthButtons[index] = CreateButton(row.transform, "MinHealth", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(160f, -103f), new Vector2(250f, 36f), new Color(0.2f, 0.3f, 0.4f), 14);
+                _programHealthButtons[index].onClick.AddListener(() => CycleProgramHealth(slot));
                 var up = CreateButton(row.transform, "MoveUp", "↑", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(340f, -62f), new Vector2(54f, 60f), new Color(0.16f, 0.38f, 0.5f), 24);
                 up.onClick.AddListener(() => MoveProgramRule(slot, -1));
                 var down = CreateButton(row.transform, "MoveDown", "↓", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(404f, -62f), new Vector2(54f, 60f), new Color(0.16f, 0.38f, 0.5f), 24);
@@ -452,6 +499,7 @@ namespace Game.Presentation.Views
         private void RefreshProgramEditor()
         {
             if (_programDraft == null || _programState == null) return;
+            _programPresetSlotButton.GetComponentInChildren<Text>().text = $"ШАБЛОН {_programPresetSlot + 1}";
             for (int slot = 0; slot < 3; slot++)
             {
                 ProgramAction action = ProgramActionAt(slot);
@@ -459,8 +507,35 @@ namespace Game.Presentation.Views
                 string condition = action == ProgramAction.Defend ? "Враг возле своего здания" : action == ProgramAction.Attack ? "Враг рядом с роботом" : "Чужое здание рядом";
                 _programRuleLabels[slot].text = $"{slot + 1}. {name}\n<size=15>{condition}</size>";
                 _programRadiusLabels[slot].text = $"{GetProgramRadius(action):0} м";
+                _programHealthButtons[slot].GetComponentInChildren<Text>().text = $"HP ≥ {GetProgramMinHealth(action)}% ›";
                 _programTargetButtons[slot].GetComponentInChildren<Text>().text = "ЦЕЛЬ\n" + DescribeProgramTarget(action, GetProgramTarget(action));
             }
+        }
+
+        private void SaveProgramPreset()
+        {
+            if (_programDraft == null) return;
+            PlayerPrefs.SetString(ProgramPresetKey + _programPresetSlot, JsonUtility.ToJson(ProgramPreset.From(_programDraft)));
+            PlayerPrefs.Save();
+            _programError.text = $"Шаблон {_programPresetSlot + 1} сохранён без целей конкретного матча.";
+        }
+
+        private void LoadProgramPreset()
+        {
+            string key = ProgramPresetKey + _programPresetSlot;
+            if (!PlayerPrefs.HasKey(key)) { _programError.text = "Этот шаблон ещё не сохранён."; return; }
+            try
+            {
+                ProgramPreset preset = JsonUtility.FromJson<ProgramPreset>(PlayerPrefs.GetString(key));
+                if (preset == null || preset.DefendPriority < 1 || preset.AttackPriority < 1 || preset.CapturePriority < 1 ||
+                    preset.DefendPriority == preset.AttackPriority || preset.DefendPriority == preset.CapturePriority || preset.AttackPriority == preset.CapturePriority ||
+                    preset.DefendRadius < 1f || preset.AttackRadius < 1f || preset.CaptureRadius < 1f)
+                { _programError.text = "Шаблон повреждён или устарел."; return; }
+                preset.ApplyTo(_programDraft);
+                _programError.text = $"Шаблон {_programPresetSlot + 1} загружен; примените его к роботу.";
+                RefreshProgramEditor();
+            }
+            catch (Exception) { _programError.text = "Не удалось загрузить шаблон."; }
         }
 
         private ProgramAction ProgramActionAt(int slot)
@@ -489,6 +564,18 @@ namespace Game.Presentation.Views
 
         private float GetProgramRadius(ProgramAction action) => action == ProgramAction.Defend ? _programDraft.DefendRadius : action == ProgramAction.Attack ? _programDraft.AttackRadius : _programDraft.CaptureRadius;
 
+        private int GetProgramMinHealth(ProgramAction action) => action == ProgramAction.Defend ? _programDraft.DefendMinHealthPercent : action == ProgramAction.Attack ? _programDraft.AttackMinHealthPercent : _programDraft.CaptureMinHealthPercent;
+
+        private void CycleProgramHealth(int slot)
+        {
+            ProgramAction action = ProgramActionAt(slot);
+            int next = (GetProgramMinHealth(action) + 25) % 125;
+            if (action == ProgramAction.Defend) _programDraft.DefendMinHealthPercent = next;
+            else if (action == ProgramAction.Attack) _programDraft.AttackMinHealthPercent = next;
+            else _programDraft.CaptureMinHealthPercent = next;
+            RefreshProgramEditor();
+        }
+
         private void ChangeProgramRadius(int slot, int direction)
         {
             ProgramAction action = ProgramActionAt(slot);
@@ -509,12 +596,14 @@ namespace Game.Presentation.Views
             if (action == ProgramAction.Attack)
             {
                 foreach (RobotState robot in _programState.Robots.Values)
-                    if (robot.IsAlive && robot.Owner != PlayerId.Player1) options.Add(robot.Id.Value);
+                    if (robot.IsAlive && robot.Owner != PlayerId.Player1 &&
+                        (_programState.FogOfWar == null || _programState.FogOfWar.IsVisible(PlayerId.Player1, robot.Position))) options.Add(robot.Id.Value);
             }
             else
             {
                 foreach (BuildingState building in _programState.Buildings.Values)
-                    if (action == ProgramAction.Defend ? building.Owner == PlayerId.Player1 : building.Owner != PlayerId.Player1) options.Add(building.Id.Value);
+                    if (action == ProgramAction.Defend ? building.Owner == PlayerId.Player1 :
+                        building.Owner != PlayerId.Player1 && (_programState.FogOfWar == null || _programState.FogOfWar.IsExplored(PlayerId.Player1, building.Position))) options.Add(building.Id.Value);
             }
             options.Sort();
             int currentIndex = options.IndexOf(GetProgramTarget(action).Value);
@@ -754,9 +843,23 @@ namespace Game.Presentation.Views
             var mapArea = CreatePanel(panel.transform, "Map", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
                 new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.05f, 0.12f, 0.3f, 1f));
             _minimapContent = mapArea.GetComponent<RectTransform>();
+            var fogGo = new GameObject("FogOfWar", typeof(RectTransform));
+            fogGo.transform.SetParent(mapArea.transform, false);
+            var fogRect = (RectTransform)fogGo.transform;
+            fogRect.anchorMin = Vector2.zero;
+            fogRect.anchorMax = Vector2.one;
+            fogRect.offsetMin = Vector2.zero;
+            fogRect.offsetMax = Vector2.zero;
+            _minimapFog = fogGo.AddComponent<RawImage>();
+            _minimapFog.raycastTarget = false;
             // Нажатие по радару переносит камеру в эту точку карты; перетаскивание ведёт её следом.
             mapArea.AddComponent<MinimapInput>().OnPointRequested += normalized =>
                 OnMinimapPointRequested?.Invoke(new SimVector2(normalized.x * _mapDefinition.Width, normalized.y * _mapDefinition.Height));
+        }
+
+        public void SetFogTexture(Texture2D texture)
+        {
+            if (_minimapFog != null) _minimapFog.texture = texture;
         }
 
         private void EnsureResultOverlay()

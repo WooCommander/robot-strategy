@@ -61,7 +61,7 @@ namespace Game.Simulation.Systems
         {
             OrderType order = attacker.CurrentOrder?.Type ?? OrderType.None;
             if ((order != OrderType.Attack && order != OrderType.Hunt && order != OrderType.Defend && order != OrderType.Capture && order != OrderType.Program) ||
-                (order == OrderType.Program && attacker.ActiveProgramAction == ProgramAction.None) ||
+                (order == OrderType.Program && (attacker.ActiveProgramAction == ProgramAction.None || attacker.ActiveProgramAction == ProgramAction.Explore)) ||
                 attacker.WeaponCooldowns[weaponIndex] > 0f)
             {
                 return;
@@ -78,6 +78,7 @@ namespace Game.Simulation.Systems
                     if (order == OrderType.Attack) attacker.CurrentOrder = RobotOrder.Stop();
                     return;
                 }
+                if (state.FogOfWar != null && !state.FogOfWar.IsVisible(attacker.Owner, target.Position)) return;
             }
             else
             {
@@ -86,7 +87,8 @@ namespace Game.Simulation.Systems
                 float minRangeSq = weapon.MinRange * weapon.MinRange;
                 foreach (var candidate in state.Robots.Values)
                 {
-                    if (!candidate.IsAlive || candidate.Owner == attacker.Owner) continue;
+                    if (!candidate.IsAlive || candidate.Owner == attacker.Owner ||
+                        (state.FogOfWar != null && !state.FogOfWar.IsVisible(attacker.Owner, candidate.Position))) continue;
                     float distance = SimVector2.SqrDistance(attacker.Position, candidate.Position);
                     if (distance > nearest || distance < minRangeSq) continue;
                     nearest = distance;

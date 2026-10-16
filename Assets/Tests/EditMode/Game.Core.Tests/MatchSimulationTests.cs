@@ -16,6 +16,90 @@ namespace Game.Core.Tests
         private const int CentralFactoryId = 102;
 
         [Test]
+        public void FogOfWar_RevealsAndRemembersTerrainButHidesEnemyAgain()
+        {
+            MapDefinition map = DefaultMapFactory.CreatePrototypeMap();
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            MatchState state = simulation.State;
+            BuildingState ownBase = state.Buildings[Player1BaseId];
+            BuildingState enemyBase = null;
+            foreach (BuildingState building in state.Buildings.Values)
+                if (building.Type == BuildingType.Base && building.Owner == PlayerId.Player2) { enemyBase = building; break; }
+            Assert.NotNull(enemyBase);
+            Assert.IsTrue(state.FogOfWar.IsVisible(PlayerId.Player1, ownBase.Position));
+            Assert.IsFalse(state.FogOfWar.IsExplored(PlayerId.Player1, enemyBase.Position));
+
+            var scout = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, CurrentHealth = 100, Position = enemyBase.Position };
+            state.Robots[900] = scout;
+            simulation.Vision.Update(state);
+            Assert.IsTrue(state.FogOfWar.IsVisible(PlayerId.Player1, enemyBase.Position));
+            state.Robots.Remove(900);
+            simulation.Vision.Update(state);
+            Assert.IsFalse(state.FogOfWar.IsVisible(PlayerId.Player1, enemyBase.Position));
+            Assert.IsTrue(state.FogOfWar.IsExplored(PlayerId.Player1, enemyBase.Position));
+        }
+
+        [Test]
+        public void FogOfWar_MountainBlocksSightBehindIt()
+        {
+            var map = new MapDefinition { Width = 5, Height = 3, TileSize = 1f, Tiles = new TileType[15] };
+            map.SetTile(2, 1, TileType.Mountain);
+            map.Buildings.Add(new BuildingSpawnDefinition { EntityIdValue = 1, Type = BuildingType.Base, InitialOwner = PlayerId.Player1, Position = new SimVector2(0.5f, 1.5f) });
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            FogOfWarState fog = simulation.State.FogOfWar;
+
+            Assert.AreEqual(2, fog.GetCell(PlayerId.Player1, 2, 1), "Сама гора должна быть видна.");
+            Assert.AreEqual(0, fog.GetCell(PlayerId.Player1, 4, 1), "За горой обзор закрыт.");
+        }
+
+        [Test]
+        public void AttackCommand_RejectsHiddenEnemyUntilScoutRevealsIt()
+        {
+            MapDefinition map = DefaultMapFactory.CreatePrototypeMap();
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            BuildingState ownBase = simulation.State.Buildings[Player1BaseId];
+            BuildingState enemyBase = null;
+            foreach (BuildingState building in simulation.State.Buildings.Values)
+                if (building.Type == BuildingType.Base && building.Owner == PlayerId.Player2) { enemyBase = building; break; }
+            Assert.NotNull(enemyBase);
+            var attacker = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, CurrentHealth = 100, Position = ownBase.Position };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, CurrentHealth = 100, Position = enemyBase.Position };
+            simulation.State.Robots[900] = attacker;
+            simulation.State.Robots[901] = enemy;
+            var command = new OrderAttackCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { attacker.Id }, TargetEntityId = enemy.Id };
+            Assert.IsFalse(simulation.Issue(command).IsSuccess);
+
+            attacker.Position = new SimVector2(enemy.Position.X + 2f, enemy.Position.Y);
+            simulation.Vision.Update(simulation.State);
+            Assert.IsTrue(simulation.Issue(command).IsSuccess);
+        }
+
+        [Test]
+        public void Program_ExploresUntilForeignBuildingIsDiscovered()
+        {
+            MapDefinition map = DefaultMapFactory.CreatePrototypeMap();
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            MatchState state = simulation.State;
+            BuildingState ownBase = state.Buildings[Player1BaseId];
+            BuildingState unknown = null;
+            foreach (BuildingState building in state.Buildings.Values)
+                if (building.Owner != PlayerId.Player1 && !state.FogOfWar.IsExplored(PlayerId.Player1, building.Position)) { unknown = building; break; }
+            Assert.NotNull(unknown);
+            var scout = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, Position = ownBase.SpawnPoint, MoveSpeed = 2f };
+            state.Robots[900] = scout;
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { scout.Id }, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3 }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Explore, scout.ActiveProgramAction);
+            Assert.IsTrue(scout.HasPath, "Робот должен искать ещё неизвестную проходимую клетку.");
+
+            scout.Position = new SimVector2(unknown.Position.X + 2f, unknown.Position.Y);
+            simulation.Vision.Update(state);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Capture, scout.ActiveProgramAction);
+            Assert.AreEqual(unknown.Id, scout.CurrentOrder.TargetEntityId);
+        }
+
+        [Test]
         public void AdvanceFrame_RunsFixedTicksIndependentOfFrameRate()
         {
             var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), DefaultMapFactory.CreatePrototypeMap());
@@ -111,8 +195,47 @@ namespace Game.Core.Tests
             Assert.IsFalse(result.IsSuccess);
             Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
             Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackRadius = 0f }, state).IsSuccess);
+            Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackMinHealthPercent = 101 }, state).IsSuccess);
             Assert.IsFalse(dispatcher.Dispatch(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackTargetId = robot.Id }, state).IsSuccess);
             Assert.AreEqual(OrderType.None, robot.CurrentOrder.Type);
+        }
+
+        [Test]
+        public void Program_HealthThresholdSkipsAttackAndReturnsWhenRepaired()
+        {
+            var map = DefaultMapFactory.CreatePrototypeMap();
+            MatchState state = MatchSimulation.CreateInitialState(map);
+            BuildingState factory = state.Buildings[CentralFactoryId];
+            var robot = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), MaxHealth = 100, CurrentHealth = 50, Position = new SimVector2(factory.Position.X + 2f, factory.Position.Y), MoveSpeed = 2f };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, MaxHealth = 100, CurrentHealth = 100, Position = new SimVector2(robot.Position.X + 3f, robot.Position.Y) };
+            state.Robots[900] = robot;
+            state.Robots[901] = enemy;
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map, state);
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackPriority = 1, CapturePriority = 2, DefendPriority = 3, AttackMinHealthPercent = 75 }).IsSuccess);
+
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Capture, robot.ActiveProgramAction);
+            Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { robot.Id }, AttackPriority = 1, CapturePriority = 2, DefendPriority = 3, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 75, DefendMinHealthPercent = 75 }).IsSuccess);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.None, robot.ActiveProgramAction, "Недостаток HP не должен отправлять робота на разведку.");
+            robot.CurrentHealth = 75;
+            simulation.Planner.Update(state);
+            Assert.AreEqual(ProgramAction.Attack, robot.ActiveProgramAction);
+            Assert.AreEqual(enemy.Id, robot.CurrentOrder.TargetEntityId);
+        }
+
+        [Test]
+        public void Program_HealthThresholdsSurviveReplayRecord()
+        {
+            var command = new ConfigureProgramCommand
+            {
+                PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { new EntityId(900) },
+                DefendMinHealthPercent = 25, AttackMinHealthPercent = 75, CaptureMinHealthPercent = 50
+            };
+            var restored = (ConfigureProgramCommand)ReplayCommandRecord.FromCommand(12, command).ToCommand();
+            Assert.AreEqual(25, restored.DefendMinHealthPercent);
+            Assert.AreEqual(75, restored.AttackMinHealthPercent);
+            Assert.AreEqual(50, restored.CaptureMinHealthPercent);
         }
 
         [Test]
@@ -131,10 +254,12 @@ namespace Game.Core.Tests
             foreach (BuildingState building in state.Buildings.Values)
                 if (building.Id != factory.Id && building.Owner != PlayerId.Player1 && SimVector2.Distance(robot.Position, building.Position) > 3f) { otherFactory = building; break; }
             Assert.NotNull(otherFactory);
+            GridCoord knownCell = GridCoord.FromSimVector2(otherFactory.Position, map.TileSize);
+            state.FogOfWar.Player1Cells[knownCell.Y * map.Width + knownCell.X] = 1;
 
             Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3, CaptureRadius = 1f, AttackRadius = 1f, DefendRadius = 1f, CaptureTargetId = factory.Id }).IsSuccess);
             simulation.Planner.Update(state);
-            Assert.AreEqual(ProgramAction.None, robot.ActiveProgramAction);
+            Assert.AreEqual(ProgramAction.Explore, robot.ActiveProgramAction);
 
             Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, CapturePriority = 1, AttackPriority = 2, DefendPriority = 3, CaptureRadius = 3f, AttackRadius = 1f, DefendRadius = 1f, CaptureTargetId = factory.Id }).IsSuccess);
             simulation.Planner.Update(state);
@@ -164,7 +289,7 @@ namespace Game.Core.Tests
 
             Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, DefendRadius = 5f, AttackRadius = 1f, CaptureRadius = 1f, DefendTargetId = anotherOwned.Id }).IsSuccess);
             simulation.Planner.Update(state);
-            Assert.AreEqual(ProgramAction.None, robot.ActiveProgramAction);
+            Assert.AreEqual(ProgramAction.Explore, robot.ActiveProgramAction);
 
             Assert.IsTrue(simulation.Issue(new ConfigureProgramCommand { PlayerId = PlayerId.Player1, RobotIds = ids, DefendRadius = 5f, AttackRadius = 1f, CaptureRadius = 1f, DefendTargetId = baseBuilding.Id }).IsSuccess);
             simulation.Planner.Update(state);
@@ -188,7 +313,7 @@ namespace Game.Core.Tests
             {
                 if (!captureIssued && TryGetFirstRobot(live.State, PlayerId.Player1, out RobotState scout))
                 {
-                    captureIssued = live.Issue(new OrderCaptureCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { scout.Id }, TargetBuildingId = new EntityId(CentralFactoryId) }).IsSuccess;
+                    captureIssued = live.Issue(new OrderCaptureCommand { PlayerId = PlayerId.Player1, RobotIds = new List<EntityId> { scout.Id }, TargetBuildingId = EntityId.None }).IsSuccess;
                 }
                 live.AdvanceFrame(frames[frame % frames.Length]);
             }

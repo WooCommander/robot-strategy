@@ -21,7 +21,7 @@ namespace Game.Core.Models
         public static RobotOrder Program() => new RobotOrder { Type = OrderType.Program };
     }
 
-    public enum ProgramAction : byte { None = 0, Defend = 1, Attack = 2, Capture = 3 }
+    public enum ProgramAction : byte { None = 0, Defend = 1, Attack = 2, Capture = 3, Explore = 4 }
 
     [Serializable]
     public class RobotState
@@ -51,6 +51,9 @@ namespace Game.Core.Models
         public float DefendRadius { get; set; } = 8f;
         public float AttackRadius { get; set; } = 12f;
         public float CaptureRadius { get; set; } = 200f;
+        public int DefendMinHealthPercent { get; set; }
+        public int AttackMinHealthPercent { get; set; }
+        public int CaptureMinHealthPercent { get; set; }
         public EntityId DefendTargetId { get; set; } = EntityId.None;
         public EntityId AttackTargetId { get; set; } = EntityId.None;
         public EntityId CaptureTargetId { get; set; } = EntityId.None;
@@ -159,6 +162,41 @@ namespace Game.Core.Models
         Draw = 3
     }
 
+    /// <summary>0 — неизвестно, 1 — изучено, 2 — видно сейчас. Массивы принадлежат состоянию матча.</summary>
+    [Serializable]
+    public sealed class FogOfWarState
+    {
+        public int Width { get; set; }
+        public int Height { get; set; }
+        public float TileSize { get; set; } = 1f;
+        public byte[] Player1Cells { get; set; }
+        public byte[] Player2Cells { get; set; }
+
+        public FogOfWarState() { }
+
+        public FogOfWarState(int width, int height, float tileSize)
+        {
+            Width = width;
+            Height = height;
+            TileSize = tileSize;
+            Player1Cells = new byte[width * height];
+            Player2Cells = new byte[width * height];
+        }
+
+        public byte GetCell(PlayerId player, int x, int y)
+        {
+            if (x < 0 || x >= Width || y < 0 || y >= Height) return 0;
+            byte[] cells = player == PlayerId.Player1 ? Player1Cells : player == PlayerId.Player2 ? Player2Cells : null;
+            return cells != null && cells.Length == Width * Height ? cells[y * Width + x] : (byte)0;
+        }
+
+        public bool IsVisible(PlayerId player, SimVector2 position) => GetCell(player,
+            (int)Math.Floor(position.X / TileSize), (int)Math.Floor(position.Y / TileSize)) == 2;
+
+        public bool IsExplored(PlayerId player, SimVector2 position) => GetCell(player,
+            (int)Math.Floor(position.X / TileSize), (int)Math.Floor(position.Y / TileSize)) > 0;
+    }
+
     [Serializable]
     public class MatchState
     {
@@ -170,6 +208,7 @@ namespace Game.Core.Models
         public int NextProductionOrderId { get; set; } = 1;
         /// <summary>Сколько игровых часов дохода уже начислено.</summary>
         public int IncomeHoursPaid { get; set; }
+        public FogOfWarState FogOfWar { get; set; }
 
         public PlayerState Player1 { get; set; } = new PlayerState { Id = PlayerId.Player1 };
         public PlayerState Player2 { get; set; } = new PlayerState { Id = PlayerId.Player2 };

@@ -162,6 +162,8 @@ namespace Game.Simulation.Systems
             {
                 return CommandResult.Fail("Нельзя атаковать своего робота.");
             }
+            if (state.FogOfWar != null && !state.FogOfWar.IsVisible(cmd.PlayerId, targetRobot.Position))
+                return CommandResult.Fail("Вражеский робот скрыт туманом войны.");
 
             foreach (var robot in robots)
             {
@@ -185,6 +187,9 @@ namespace Game.Simulation.Systems
             {
                 return CommandResult.Fail("Нельзя захватывать собственное здание.");
             }
+            if (cmd.TargetBuildingId.IsValid && state.FogOfWar != null &&
+                !state.FogOfWar.IsExplored(cmd.PlayerId, targetBuilding.Position))
+                return CommandResult.Fail("Здание ещё не разведано.");
 
             foreach (var robot in robots)
             {
@@ -277,15 +282,23 @@ namespace Game.Simulation.Systems
                 return CommandResult.Fail("Приоритеты программы должны быть разными числами от 1 до 3.");
             if (!IsValidProgramRadius(cmd.DefendRadius) || !IsValidProgramRadius(cmd.AttackRadius) || !IsValidProgramRadius(cmd.CaptureRadius))
                 return CommandResult.Fail("Радиус условия должен быть в пределах 1–256 м.");
+            if (!IsValidHealthThreshold(cmd.DefendMinHealthPercent) || !IsValidHealthThreshold(cmd.AttackMinHealthPercent) || !IsValidHealthThreshold(cmd.CaptureMinHealthPercent))
+                return CommandResult.Fail("Минимальное здоровье должно быть в пределах 0–100%." );
             if (cmd.DefendTargetId.IsValid &&
                 (!state.Buildings.TryGetValue(cmd.DefendTargetId.Value, out BuildingState defendBuilding) || defendBuilding.Owner != cmd.PlayerId))
                 return CommandResult.Fail("Цель защиты должна быть собственным зданием.");
             if (cmd.AttackTargetId.IsValid &&
                 (!state.Robots.TryGetValue(cmd.AttackTargetId.Value, out RobotState attackRobot) || !attackRobot.IsAlive || attackRobot.Owner == cmd.PlayerId))
                 return CommandResult.Fail("Цель атаки должна быть живым вражеским роботом.");
+            if (cmd.AttackTargetId.IsValid && state.FogOfWar != null &&
+                !state.FogOfWar.IsVisible(cmd.PlayerId, state.Robots[cmd.AttackTargetId.Value].Position))
+                return CommandResult.Fail("Цель атаки скрыта туманом войны.");
             if (cmd.CaptureTargetId.IsValid &&
                 (!state.Buildings.TryGetValue(cmd.CaptureTargetId.Value, out BuildingState captureBuilding) || captureBuilding.Owner == cmd.PlayerId))
                 return CommandResult.Fail("Цель захвата должна быть чужим или нейтральным зданием.");
+            if (cmd.CaptureTargetId.IsValid && state.FogOfWar != null &&
+                !state.FogOfWar.IsExplored(cmd.PlayerId, state.Buildings[cmd.CaptureTargetId.Value].Position))
+                return CommandResult.Fail("Цель захвата ещё не разведана.");
 
             foreach (var robot in robots)
             {
@@ -295,6 +308,9 @@ namespace Game.Simulation.Systems
                 robot.DefendRadius = cmd.DefendRadius;
                 robot.AttackRadius = cmd.AttackRadius;
                 robot.CaptureRadius = cmd.CaptureRadius;
+                robot.DefendMinHealthPercent = cmd.DefendMinHealthPercent;
+                robot.AttackMinHealthPercent = cmd.AttackMinHealthPercent;
+                robot.CaptureMinHealthPercent = cmd.CaptureMinHealthPercent;
                 robot.DefendTargetId = cmd.DefendTargetId;
                 robot.AttackTargetId = cmd.AttackTargetId;
                 robot.CaptureTargetId = cmd.CaptureTargetId;
@@ -305,6 +321,7 @@ namespace Game.Simulation.Systems
         }
 
         private static bool IsValidProgramRadius(float radius) => radius >= 1f && radius <= 256f && !float.IsNaN(radius);
+        private static bool IsValidHealthThreshold(int value) => value >= 0 && value <= 100;
 
         /// <summary>Новый приказ отменяет старый маршрут и ручной привод; путь строит планировщик симуляции.</summary>
         private static void AssignOrder(RobotState robot, RobotOrder order)

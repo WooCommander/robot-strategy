@@ -64,13 +64,14 @@ namespace Game.Persistence
             public int Version;
             public int Tick; public float MatchTimeSeconds; public MatchResult Result; public bool IsPaused; public int NextRobotId; public int NextProductionOrderId; public int IncomeHoursPaid;
             public PlayerSnapshot Player1; public PlayerSnapshot Player2;
+            public FogSnapshot Fog;
             public List<RobotSnapshot> Robots = new List<RobotSnapshot>();
             public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
             public List<ProjectileSnapshot> Projectiles = new List<ProjectileSnapshot>();
 
             public static MatchSnapshot FromState(MatchState state)
             {
-                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, NextRobotId = state.NextRobotId, NextProductionOrderId = state.NextProductionOrderId, IncomeHoursPaid = state.IncomeHoursPaid, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2) };
+                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, NextRobotId = state.NextRobotId, NextProductionOrderId = state.NextProductionOrderId, IncomeHoursPaid = state.IncomeHoursPaid, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2), Fog = FogSnapshot.FromState(state.FogOfWar) };
                 foreach (RobotState robot in state.Robots.Values) snapshot.Robots.Add(RobotSnapshot.FromState(robot));
                 foreach (BuildingState building in state.Buildings.Values) snapshot.Buildings.Add(BuildingSnapshot.FromState(building));
                 foreach (ProjectileState projectile in state.Projectiles) snapshot.Projectiles.Add(ProjectileSnapshot.FromState(projectile));
@@ -79,7 +80,7 @@ namespace Game.Persistence
 
             public MatchState ToState()
             {
-                var state = new MatchState { Tick = Tick, MatchTimeSeconds = MatchTimeSeconds, IncomeHoursPaid = IncomeHoursPaid, Result = Result, IsPaused = IsPaused, Player1 = Player1?.ToState() ?? new PlayerState { Id = PlayerId.Player1 }, Player2 = Player2?.ToState() ?? new PlayerState { Id = PlayerId.Player2 } };
+                var state = new MatchState { Tick = Tick, MatchTimeSeconds = MatchTimeSeconds, IncomeHoursPaid = IncomeHoursPaid, Result = Result, IsPaused = IsPaused, Player1 = Player1?.ToState() ?? new PlayerState { Id = PlayerId.Player1 }, Player2 = Player2?.ToState() ?? new PlayerState { Id = PlayerId.Player2 }, FogOfWar = Fog?.ToState() };
                 foreach (RobotSnapshot robot in Robots ?? new List<RobotSnapshot>()) { RobotState restored = robot.ToState(); state.Robots[restored.Id.Value] = restored; }
                 foreach (BuildingSnapshot building in Buildings ?? new List<BuildingSnapshot>()) { BuildingState restored = building.ToState(); state.Buildings[restored.Id.Value] = restored; }
                 foreach (ProjectileSnapshot projectile in Projectiles ?? new List<ProjectileSnapshot>()) state.Projectiles.Add(projectile.ToState());
@@ -89,6 +90,26 @@ namespace Game.Persistence
                 if (NextProductionOrderId > 0) state.NextProductionOrderId = NextProductionOrderId;
                 return state;
             }
+        }
+
+        [Serializable]
+        private sealed class FogSnapshot
+        {
+            public int Width; public int Height; public float TileSize;
+            public byte[] Player1Cells; public byte[] Player2Cells;
+
+            public static FogSnapshot FromState(FogOfWarState state) => state == null ? null : new FogSnapshot
+            {
+                Width = state.Width, Height = state.Height, TileSize = state.TileSize,
+                Player1Cells = (byte[])state.Player1Cells.Clone(), Player2Cells = (byte[])state.Player2Cells.Clone()
+            };
+
+            public FogOfWarState ToState() => new FogOfWarState
+            {
+                Width = Width, Height = Height, TileSize = TileSize,
+                Player1Cells = Player1Cells != null ? (byte[])Player1Cells.Clone() : null,
+                Player2Cells = Player2Cells != null ? (byte[])Player2Cells.Clone() : null
+            };
         }
 
         [Serializable]
@@ -105,12 +126,15 @@ namespace Game.Persistence
             public int Id; public PlayerId Owner; public BlueprintSnapshot Blueprint; public VectorSnapshot Position; public VectorSnapshot Velocity; public float RotationDegrees; public int MaxHealth; public int CurrentHealth; public float MoveSpeed; public MobilityClass Mobility; public int TotalCost; public List<float> WeaponCooldowns = new List<float>(); public int ScoutPatrolStep; public OrderSnapshot Order; public List<VectorSnapshot> Path = new List<VectorSnapshot>(); public int PathIndex; public VectorSnapshot DriveDirection; public float NextManeuverSeconds;
             public int DefendPriority; public int AttackPriority; public int CapturePriority; public ProgramAction ActiveProgramAction;
             public float DefendRadius; public float AttackRadius; public float CaptureRadius;
+            public int DefendMinHealthPercent; public int AttackMinHealthPercent; public int CaptureMinHealthPercent;
             public int DefendTargetId; public int AttackTargetId; public int CaptureTargetId;
             public static RobotSnapshot FromState(RobotState state) => new RobotSnapshot { Id = state.Id.Value, Owner = state.Owner, Blueprint = BlueprintSnapshot.FromState(state.Blueprint), Position = VectorSnapshot.From(state.Position), Velocity = VectorSnapshot.From(state.Velocity), RotationDegrees = state.RotationDegrees, MaxHealth = state.MaxHealth, CurrentHealth = state.CurrentHealth, MoveSpeed = state.MoveSpeed, Mobility = state.Mobility, TotalCost = state.TotalCost, WeaponCooldowns = new List<float>(state.WeaponCooldowns ?? new List<float>()), ScoutPatrolStep = state.ScoutPatrolStep, Order = OrderSnapshot.FromState(state.CurrentOrder), Path = VectorSnapshot.FromList(state.Path), PathIndex = state.PathIndex, DriveDirection = VectorSnapshot.From(state.DriveDirection), NextManeuverSeconds = state.NextManeuverSeconds, DefendPriority = state.DefendPriority, AttackPriority = state.AttackPriority, CapturePriority = state.CapturePriority, ActiveProgramAction = state.ActiveProgramAction,
                 DefendRadius = state.DefendRadius, AttackRadius = state.AttackRadius, CaptureRadius = state.CaptureRadius,
+                DefendMinHealthPercent = state.DefendMinHealthPercent, AttackMinHealthPercent = state.AttackMinHealthPercent, CaptureMinHealthPercent = state.CaptureMinHealthPercent,
                 DefendTargetId = state.DefendTargetId.Value, AttackTargetId = state.AttackTargetId.Value, CaptureTargetId = state.CaptureTargetId.Value };
             public RobotState ToState() => new RobotState { Id = new EntityId(Id), Owner = Owner, Blueprint = Blueprint?.ToState(), Position = Position.ToState(), Velocity = Velocity?.ToState() ?? SimVector2.Zero, RotationDegrees = RotationDegrees, MaxHealth = MaxHealth, CurrentHealth = CurrentHealth, MoveSpeed = MoveSpeed, Mobility = Mobility, TotalCost = TotalCost, WeaponCooldowns = new List<float>(WeaponCooldowns ?? new List<float>()), ScoutPatrolStep = ScoutPatrolStep, CurrentOrder = Order?.ToState() ?? new RobotOrder(), Path = VectorSnapshot.ToList(Path), PathIndex = PathIndex, DriveDirection = DriveDirection?.ToState() ?? SimVector2.Zero, NextManeuverSeconds = NextManeuverSeconds, DefendPriority = DefendPriority == 0 ? 1 : DefendPriority, AttackPriority = AttackPriority == 0 ? 2 : AttackPriority, CapturePriority = CapturePriority == 0 ? 3 : CapturePriority, ActiveProgramAction = ActiveProgramAction,
                 DefendRadius = DefendRadius > 0f ? DefendRadius : 8f, AttackRadius = AttackRadius > 0f ? AttackRadius : 12f, CaptureRadius = CaptureRadius > 0f ? CaptureRadius : 200f,
+                DefendMinHealthPercent = DefendMinHealthPercent, AttackMinHealthPercent = AttackMinHealthPercent, CaptureMinHealthPercent = CaptureMinHealthPercent,
                 DefendTargetId = new EntityId(DefendTargetId), AttackTargetId = new EntityId(AttackTargetId), CaptureTargetId = new EntityId(CaptureTargetId) };
         }
 

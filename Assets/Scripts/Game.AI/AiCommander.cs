@@ -37,7 +37,11 @@ namespace Game.AI
             }
 
             BuildingState objective = ChooseObjective(state, baseBuilding.Position, robots.Count, PlayerId.Player2);
-            if (objective == null) return;
+            if (objective == null)
+            {
+                if (state.FogOfWar != null) IssueScout(robots, state);
+                return;
+            }
             int defenders = robots.Count >= 4 ? 1 : 0;
             int attackersCount = robots.Count - defenders;
             if (attackersCount > 0) IssueCapture(robots.GetRange(0, attackersCount), objective.Id, state);
@@ -80,7 +84,8 @@ namespace Game.AI
             float bestScore = float.MaxValue;
             foreach (BuildingState building in state.Buildings.Values)
             {
-                if (building.Owner == owner || (building.Type == BuildingType.Base && armySize < 3)) continue;
+                if (building.Owner == owner || (building.Type == BuildingType.Base && armySize < 3) ||
+                    (state.FogOfWar != null && !state.FogOfWar.IsExplored(owner, building.Position))) continue;
                 // Объект уже оспаривается противником: ищем свободную цель, а не кружим у зоны.
                 if (building.CapturingPlayer != PlayerId.Neutral && building.CapturingPlayer != owner && building.CaptureProgressSeconds > 0f) continue;
                 float score = SimVector2.SqrDistance(from, building.Position);
@@ -103,6 +108,22 @@ namespace Game.AI
             _dispatcher.Dispatch(new OrderDefendCommand { PlayerId = PlayerId.Player2, RobotIds = ToIds(robots), TargetPosition = position }, state);
         }
 
+        private void IssueScout(List<RobotState> robots, MatchState state)
+        {
+            float x = state.FogOfWar.Width * state.FogOfWar.TileSize * 0.5f;
+            foreach (RobotState robot in robots)
+            {
+                if (robot.CurrentOrder.Type == OrderType.Scout) continue;
+                float y = state.FogOfWar.Height * state.FogOfWar.TileSize * (0.3f + 0.2f * (robot.Id.Value % 3));
+                _dispatcher.Dispatch(new OrderScoutCommand
+                {
+                    PlayerId = PlayerId.Player2,
+                    RobotIds = new List<EntityId> { robot.Id },
+                    TargetPosition = new SimVector2(x, y)
+                }, state);
+            }
+        }
+
         private static List<RobotState> GetActiveRobots(MatchState state, PlayerId owner)
         {
             var result = new List<RobotState>();
@@ -123,7 +144,8 @@ namespace Game.AI
             RobotState nearest = null;
             foreach (RobotState robot in state.Robots.Values)
             {
-                if (!robot.IsAlive || robot.Owner != PlayerId.Player1) continue;
+                if (!robot.IsAlive || robot.Owner != PlayerId.Player1 ||
+                    (state.FogOfWar != null && !state.FogOfWar.IsVisible(PlayerId.Player2, robot.Position))) continue;
                 float distance = SimVector2.SqrDistance(position, robot.Position);
                 if (distance <= nearestDistance) { nearest = robot; nearestDistance = distance; }
             }

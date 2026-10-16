@@ -61,7 +61,10 @@ namespace Game.Presentation.Controllers
             _simulation.Combat.OnWeaponFired += HandleWeaponFired;
             _simulation.Combat.OnProjectileImpact += HandleProjectileImpact;
             _simulation.Combat.OnDamageDealt += HandleDamageDealt;
-            _simulation.Combat.OnNuclearDetonated += (carrier, center, radius) => _weaponEffects.PlayNuclearBlast(center, radius);
+            _simulation.Combat.OnNuclearDetonated += (carrier, center, radius) =>
+            {
+                if (IsVisibleToPlayer(center)) _weaponEffects.PlayNuclearBlast(center, radius);
+            };
             _simulation.Capture.OnBuildingCaptured += HandleBuildingCaptured;
             _simulation.StepCompleted += HandleSimulationStep;
             _persistence = new MatchPersistenceService();
@@ -110,6 +113,7 @@ namespace Game.Presentation.Controllers
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
+            _hudView.SetFogTexture(_mapRenderer.FogTexture);
             _hudView.SetOrderMode(false);
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
@@ -142,6 +146,8 @@ namespace Game.Presentation.Controllers
                 view?.ApplyInterpolation(alpha);
             }
 
+            _mapRenderer.UpdateFog(MatchState);
+            UpdateEntityVisibility();
             UpdateCombatAndCaptureVisuals();
             if (!_matchResultReported && MatchState.Result != MatchResult.InProgress)
             {
@@ -170,6 +176,27 @@ namespace Game.Presentation.Controllers
             foreach (var view in _spawnedRobots.Values)
             {
                 view?.CaptureSimulationStep();
+            }
+        }
+
+        private bool IsVisibleToPlayer(SimVector2 position) =>
+            MatchState?.FogOfWar == null || MatchState.FogOfWar.IsVisible(PlayerId.Player1, position);
+
+        private void UpdateEntityVisibility()
+        {
+            foreach (RobotView view in _spawnedRobots.Values)
+            {
+                if (view == null || view.State == null) continue;
+                bool visible = view.Owner == PlayerId.Player1 || IsVisibleToPlayer(view.State.Position);
+                if (!visible && _currentlySelectedRobot == view) HandleRobotSelected(null);
+                if (view.gameObject.activeSelf != visible) view.gameObject.SetActive(visible);
+            }
+            foreach (BuildingView view in _mapRenderer.SpawnedBuildings)
+            {
+                if (view == null || !MatchState.Buildings.TryGetValue(view.EntityId, out BuildingState building)) continue;
+                bool visible = building.Owner == PlayerId.Player1 || IsVisibleToPlayer(building.Position);
+                if (!visible && _currentlySelectedBuilding == view) HandleBuildingSelected(null);
+                if (view.gameObject.activeSelf != visible) view.gameObject.SetActive(visible);
             }
         }
 
@@ -211,6 +238,9 @@ namespace Game.Presentation.Controllers
                 DefendRadius = values.DefendRadius,
                 AttackRadius = values.AttackRadius,
                 CaptureRadius = values.CaptureRadius,
+                DefendMinHealthPercent = values.DefendMinHealthPercent,
+                AttackMinHealthPercent = values.AttackMinHealthPercent,
+                CaptureMinHealthPercent = values.CaptureMinHealthPercent,
                 DefendTargetId = values.DefendTargetId,
                 AttackTargetId = values.AttackTargetId,
                 CaptureTargetId = values.CaptureTargetId
@@ -316,17 +346,19 @@ namespace Game.Presentation.Controllers
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
         {
-            _weaponEffects.PlayLaunch(attacker.Position, target.Position, weaponType);
+            if (IsVisibleToPlayer(attacker.Position) || IsVisibleToPlayer(target.Position))
+                _weaponEffects.PlayLaunch(attacker.Position, target.Position, weaponType);
         }
 
         private void HandleProjectileImpact(RobotState attacker, SimVector2 impactPosition, WeaponType weaponType)
         {
-            _weaponEffects.PlayImpact(impactPosition, weaponType);
+            if (IsVisibleToPlayer(impactPosition)) _weaponEffects.PlayImpact(impactPosition, weaponType);
         }
 
         private void HandleDamageDealt(RobotState target, int damage)
         {
-            _combatFeedback?.ShowDamage(target.Position, damage);
+            if (target.Owner == PlayerId.Player1 || IsVisibleToPlayer(target.Position))
+                _combatFeedback?.ShowDamage(target.Position, damage);
         }
 
         private void HandleBuildingSelected(BuildingView view)

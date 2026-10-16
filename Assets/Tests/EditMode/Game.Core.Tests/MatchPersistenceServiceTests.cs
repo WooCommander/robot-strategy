@@ -77,6 +77,9 @@ namespace Game.Core.Tests
             robot.DefendRadius = 6f;
             robot.AttackRadius = 18f;
             robot.CaptureRadius = 80f;
+            robot.DefendMinHealthPercent = 25;
+            robot.AttackMinHealthPercent = 75;
+            robot.CaptureMinHealthPercent = 50;
             robot.DefendTargetId = new EntityId(1);
             robot.AttackTargetId = new EntityId(11);
             robot.CaptureTargetId = new EntityId(101);
@@ -93,9 +96,28 @@ namespace Game.Core.Tests
             Assert.AreEqual(6f, restored.DefendRadius);
             Assert.AreEqual(18f, restored.AttackRadius);
             Assert.AreEqual(80f, restored.CaptureRadius);
+            Assert.AreEqual(25, restored.DefendMinHealthPercent);
+            Assert.AreEqual(75, restored.AttackMinHealthPercent);
+            Assert.AreEqual(50, restored.CaptureMinHealthPercent);
             Assert.AreEqual(new EntityId(1), restored.DefendTargetId);
             Assert.AreEqual(new EntityId(11), restored.AttackTargetId);
             Assert.AreEqual(new EntityId(101), restored.CaptureTargetId);
+        }
+
+        [Test]
+        public void SerializeAndDeserialize_RestoresExploredFogCells()
+        {
+            MatchState source = CreateState();
+            source.FogOfWar = new FogOfWarState(4, 3, 1f);
+            source.FogOfWar.Player1Cells[5] = 1;
+            source.FogOfWar.Player2Cells[8] = 2;
+            var service = new MatchPersistenceService();
+
+            MatchState restored = service.Deserialize(service.Serialize(source));
+
+            Assert.AreEqual(1, restored.FogOfWar.Player1Cells[5]);
+            Assert.AreEqual(2, restored.FogOfWar.Player2Cells[8]);
+            Assert.AreEqual(4, restored.FogOfWar.Width);
         }
 
         [Test]

@@ -21,8 +21,14 @@ namespace Game.Presentation.Views
         [SerializeField] private BuildingView _buildingPrefab;
 
         private readonly List<BuildingView> _spawnedBuildings = new List<BuildingView>();
+        private Texture2D _fogTexture;
+        private Color32[] _fogPixels;
+        private Material _fogMaterial;
+        private Mesh _fogMesh;
+        private int _lastFogTick = -1;
 
         public IReadOnlyList<BuildingView> SpawnedBuildings => _spawnedBuildings;
+        public Texture2D FogTexture => _fogTexture;
 
         public void BuildMap(MapDefinition map)
         {
@@ -31,6 +37,49 @@ namespace Game.Presentation.Views
             EnsureMaterials();
             GenerateMapGeometry(map);
             SpawnBuildings(map);
+            CreateFogOverlay(map);
+        }
+
+        private void CreateFogOverlay(MapDefinition map)
+        {
+            _fogTexture = new Texture2D(map.Width, map.Height, TextureFormat.RGBA32, false)
+            {
+                name = "FogOfWar", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp
+            };
+            _fogPixels = new Color32[map.Width * map.Height];
+            var go = new GameObject("FogOfWarOverlay");
+            go.transform.SetParent(transform, false);
+            float width = map.Width * map.TileSize, height = map.Height * map.TileSize;
+            _fogMesh = new Mesh { name = "FogOfWarMesh" };
+            _fogMesh.vertices = new[] { new Vector3(0f, 3.2f, 0f), new Vector3(width, 3.2f, 0f), new Vector3(width, 3.2f, height), new Vector3(0f, 3.2f, height) };
+            _fogMesh.uv = new[] { Vector2.zero, Vector2.right, Vector2.one, Vector2.up };
+            _fogMesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
+            _fogMesh.RecalculateNormals();
+            go.AddComponent<MeshFilter>().sharedMesh = _fogMesh;
+            Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent");
+            _fogMaterial = new Material(shader) { name = "FogOfWarMaterial", mainTexture = _fogTexture, renderQueue = 3100 };
+            go.AddComponent<MeshRenderer>().sharedMaterial = _fogMaterial;
+            _lastFogTick = -1;
+        }
+
+        public void UpdateFog(MatchState state)
+        {
+            if (_fogTexture == null || state?.FogOfWar == null || _lastFogTick == state.Tick) return;
+            FogOfWarState fog = state.FogOfWar;
+            if (fog.Player1Cells == null || fog.Player1Cells.Length != _fogPixels.Length) return;
+            for (int i = 0; i < _fogPixels.Length; i++)
+                _fogPixels[i] = fog.Player1Cells[i] == 2 ? new Color32(0, 0, 0, 0) :
+                    fog.Player1Cells[i] == 1 ? new Color32(0, 0, 0, 155) : new Color32(0, 0, 0, 245);
+            _fogTexture.SetPixels32(_fogPixels);
+            _fogTexture.Apply(false, false);
+            _lastFogTick = state.Tick;
+        }
+
+        private void OnDestroy()
+        {
+            if (_fogTexture != null) Destroy(_fogTexture);
+            if (_fogMaterial != null) Destroy(_fogMaterial);
+            if (_fogMesh != null) Destroy(_fogMesh);
         }
 
         private void EnsureMaterials()

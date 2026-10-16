@@ -155,6 +155,9 @@ namespace Game.Core.Commands
         public float DefendRadius { get; set; } = 8f;
         public float AttackRadius { get; set; } = 12f;
         public float CaptureRadius { get; set; } = 200f;
+        public int DefendMinHealthPercent { get; set; }
+        public int AttackMinHealthPercent { get; set; }
+        public int CaptureMinHealthPercent { get; set; }
         public EntityId DefendTargetId { get; set; } = EntityId.None;
         public EntityId AttackTargetId { get; set; } = EntityId.None;
         public EntityId CaptureTargetId { get; set; } = EntityId.None;

@@ -64,6 +64,23 @@ namespace Game.Core.Tests
             Assert.AreEqual(new EntityId(102), state.Robots[20].CurrentOrder.TargetEntityId);
         }
 
+        [Test]
+        public void Think_ScoutsInsteadOfKnowingUnexploredEnemyBase()
+        {
+            var map = new MapDefinition { Width = 40, Height = 12, TileSize = 1f, Tiles = new TileType[40 * 12] };
+            map.Buildings.Add(new BuildingSpawnDefinition { EntityIdValue = 1, Type = BuildingType.Base, InitialOwner = PlayerId.Player1, Position = new SimVector2(3.5f, 6.5f) });
+            map.Buildings.Add(new BuildingSpawnDefinition { EntityIdValue = 2, Type = BuildingType.Base, InitialOwner = PlayerId.Player2, Position = new SimVector2(36.5f, 6.5f) });
+            var simulation = new MatchSimulation(_catalog, map);
+            MatchState state = simulation.State;
+            state.Robots[20] = CreateRobot(20, PlayerId.Player2, new SimVector2(36.5f, 6.5f));
+            simulation.Vision.Update(state);
+            Assert.IsFalse(state.FogOfWar.IsExplored(PlayerId.Player2, state.Buildings[1].Position));
+
+            new AiCommander(simulation.Dispatcher, _catalog).Think(state);
+
+            Assert.AreEqual(OrderType.Scout, state.Robots[20].CurrentOrder.Type);
+        }
+
         private static MatchState CreateMatch()
         {
             var state = new MatchState();

@@ -171,6 +171,8 @@ namespace Game.Simulation.Systems
             if (fog == null || fog.Width != _map.Width || fog.Height != _map.Height || fog.TileSize != _map.TileSize ||
                 fog.Player1Cells == null || fog.Player1Cells.Length != count || fog.Player2Cells == null || fog.Player2Cells.Length != count)
                 state.FogOfWar = fog = new FogOfWarState(_map.Width, _map.Height, _map.TileSize);
+            if (fog.Player1LastSeenEnemies == null) fog.Player1LastSeenEnemies = new List<LastSeenEnemyState>();
+            if (fog.Player2LastSeenEnemies == null) fog.Player2LastSeenEnemies = new List<LastSeenEnemyState>();
 
             DemoteVisible(fog.Player1Cells);
             DemoteVisible(fog.Player2Cells);
@@ -183,6 +185,36 @@ namespace Game.Simulation.Systems
             {
                 if (!robot.IsAlive || (robot.Owner != PlayerId.Player1 && robot.Owner != PlayerId.Player2)) continue;
                 Mark(fog, robot.Owner, robot.Position, RobotRadius + (robot.Blueprint != null && robot.Blueprint.HasElectronics ? ElectronicsBonus : 0f));
+            }
+            UpdateLastSeenEnemies(state, fog, PlayerId.Player1);
+            UpdateLastSeenEnemies(state, fog, PlayerId.Player2);
+        }
+
+        private static void UpdateLastSeenEnemies(MatchState state, FogOfWarState fog, PlayerId observer)
+        {
+            List<LastSeenEnemyState> contacts = fog.GetLastSeenEnemies(observer);
+            foreach (RobotState enemy in state.Robots.Values)
+            {
+                if (!enemy.IsAlive || enemy.Owner == observer ||
+                    (enemy.Owner != PlayerId.Player1 && enemy.Owner != PlayerId.Player2) ||
+                    !fog.IsVisible(observer, enemy.Position)) continue;
+                LastSeenEnemyState contact = null;
+                for (int index = 0; index < contacts.Count; index++)
+                    if (contacts[index].RobotId == enemy.Id) { contact = contacts[index]; break; }
+                if (contact == null)
+                {
+                    contact = new LastSeenEnemyState { RobotId = enemy.Id };
+                    contacts.Add(contact);
+                }
+                contact.Position = enemy.Position;
+                contact.SeenTick = state.Tick;
+            }
+            for (int index = contacts.Count - 1; index >= 0; index--)
+            {
+                LastSeenEnemyState contact = contacts[index];
+                if (!fog.IsVisible(observer, contact.Position)) continue;
+                if (!state.Robots.TryGetValue(contact.RobotId.Value, out RobotState enemy) || !enemy.IsAlive ||
+                    !fog.IsVisible(observer, enemy.Position)) contacts.RemoveAt(index);
             }
         }
 

@@ -111,6 +111,7 @@ namespace Game.Core.Tests
             source.FogOfWar = new FogOfWarState(4, 3, 1f);
             source.FogOfWar.Player1Cells[5] = 1;
             source.FogOfWar.Player2Cells[8] = 2;
+            source.FogOfWar.Player1LastSeenEnemies.Add(new LastSeenEnemyState { RobotId = new EntityId(20), Position = new SimVector2(2.5f, 1.5f), SeenTick = 17 });
             var service = new MatchPersistenceService();
 
             MatchState restored = service.Deserialize(service.Serialize(source));
@@ -118,6 +119,9 @@ namespace Game.Core.Tests
             Assert.AreEqual(1, restored.FogOfWar.Player1Cells[5]);
             Assert.AreEqual(2, restored.FogOfWar.Player2Cells[8]);
             Assert.AreEqual(4, restored.FogOfWar.Width);
+            Assert.AreEqual(new EntityId(20), restored.FogOfWar.Player1LastSeenEnemies[0].RobotId);
+            Assert.AreEqual(new SimVector2(2.5f, 1.5f), restored.FogOfWar.Player1LastSeenEnemies[0].Position);
+            Assert.AreEqual(17, restored.FogOfWar.Player1LastSeenEnemies[0].SeenTick);
         }
 
         [Test]

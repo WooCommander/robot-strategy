@@ -152,9 +152,19 @@ namespace Game.Simulation.Systems
 
         private void UpdateHunt(RobotState robot, MatchState state)
         {
-            if (state.MatchTimeSeconds < robot.NextManeuverSeconds) return;
             RobotState target = FindNearestEnemy(robot, state);
-            if (target == null) return;
+            if (target == null)
+            {
+                robot.CurrentOrder.TargetEntityId = EntityId.None;
+                if (state.FogOfWar != null) RouteToExplore(robot, state);
+                return;
+            }
+            if (robot.CurrentOrder.TargetEntityId != target.Id)
+            {
+                robot.ClearPath();
+                robot.NextManeuverSeconds = 0f;
+            }
+            if (state.MatchTimeSeconds < robot.NextManeuverSeconds) return;
             robot.CurrentOrder.TargetEntityId = target.Id;
             UpdateCombatManeuver(robot, target, state);
         }

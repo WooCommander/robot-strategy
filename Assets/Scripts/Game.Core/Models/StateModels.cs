@@ -162,6 +162,15 @@ namespace Game.Core.Models
         Draw = 3
     }
 
+    /// <summary>Последняя подтверждённая позиция врага; не является текущей целью для приказов.</summary>
+    [Serializable]
+    public sealed class LastSeenEnemyState
+    {
+        public EntityId RobotId { get; set; }
+        public SimVector2 Position { get; set; }
+        public int SeenTick { get; set; }
+    }
+
     /// <summary>0 — неизвестно, 1 — изучено, 2 — видно сейчас. Массивы принадлежат состоянию матча.</summary>
     [Serializable]
     public sealed class FogOfWarState
@@ -171,6 +180,8 @@ namespace Game.Core.Models
         public float TileSize { get; set; } = 1f;
         public byte[] Player1Cells { get; set; }
         public byte[] Player2Cells { get; set; }
+        public System.Collections.Generic.List<LastSeenEnemyState> Player1LastSeenEnemies { get; set; } = new System.Collections.Generic.List<LastSeenEnemyState>();
+        public System.Collections.Generic.List<LastSeenEnemyState> Player2LastSeenEnemies { get; set; } = new System.Collections.Generic.List<LastSeenEnemyState>();
 
         public FogOfWarState() { }
 
@@ -195,6 +206,9 @@ namespace Game.Core.Models
 
         public bool IsExplored(PlayerId player, SimVector2 position) => GetCell(player,
             (int)Math.Floor(position.X / TileSize), (int)Math.Floor(position.Y / TileSize)) > 0;
+
+        public System.Collections.Generic.List<LastSeenEnemyState> GetLastSeenEnemies(PlayerId player) =>
+            player == PlayerId.Player1 ? Player1LastSeenEnemies : Player2LastSeenEnemies;
     }
 
     [Serializable]

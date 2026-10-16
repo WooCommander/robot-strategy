@@ -53,6 +53,58 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void FogOfWar_LastSeenEnemyStaysUntilOldPositionIsChecked()
+        {
+            var map = new MapDefinition { Width = 40, Height = 3, TileSize = 1f, Tiles = new TileType[120] };
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            MatchState state = simulation.State;
+            var scout = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, CurrentHealth = 100, Position = new SimVector2(10.5f, 1.5f) };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, CurrentHealth = 100, Position = new SimVector2(12.5f, 1.5f) };
+            state.Robots[900] = scout;
+            state.Robots[901] = enemy;
+            simulation.Vision.Update(state);
+            Assert.AreEqual(enemy.Position, state.FogOfWar.Player1LastSeenEnemies[0].Position);
+
+            scout.Position = new SimVector2(0.5f, 1.5f);
+            enemy.Position = new SimVector2(30.5f, 1.5f);
+            simulation.Vision.Update(state);
+            Assert.AreEqual(1, state.FogOfWar.Player1LastSeenEnemies.Count);
+            Assert.AreEqual(new SimVector2(12.5f, 1.5f), state.FogOfWar.Player1LastSeenEnemies[0].Position);
+
+            scout.Position = new SimVector2(12.5f, 1.5f);
+            simulation.Vision.Update(state);
+            Assert.IsEmpty(state.FogOfWar.Player1LastSeenEnemies, "Ложную отметку убираем после повторной разведки места.");
+
+            scout.Position = new SimVector2(31.5f, 1.5f);
+            state.Tick = 5;
+            simulation.Vision.Update(state);
+            Assert.AreEqual(enemy.Position, state.FogOfWar.Player1LastSeenEnemies[0].Position);
+            Assert.AreEqual(5, state.FogOfWar.Player1LastSeenEnemies[0].SeenTick);
+        }
+
+        [Test]
+        public void Hunt_ExploresWhenEnemyHiddenThenPursuesVisibleTarget()
+        {
+            var map = new MapDefinition { Width = 30, Height = 5, TileSize = 1f, Tiles = new TileType[150] };
+            var simulation = new MatchSimulation(DefaultContentCatalog.CreateDefaultModules(), map);
+            MatchState state = simulation.State;
+            var hunter = new RobotState { Id = new EntityId(900), Owner = PlayerId.Player1, Blueprint = RobotPresetCatalog.Scout.CreateBlueprint(), CurrentHealth = 100, MaxHealth = 100, Position = new SimVector2(4.5f, 2.5f), MoveSpeed = 2f, CurrentOrder = RobotOrder.Hunt() };
+            var enemy = new RobotState { Id = new EntityId(901), Owner = PlayerId.Player2, CurrentHealth = 100, MaxHealth = 100, Position = new SimVector2(24.5f, 2.5f) };
+            state.Robots[900] = hunter;
+            state.Robots[901] = enemy;
+            simulation.Vision.Update(state);
+
+            simulation.Planner.Update(state);
+            Assert.IsFalse(hunter.CurrentOrder.TargetEntityId.IsValid);
+            Assert.IsTrue(hunter.HasPath, "Охота должна искать противника, а не ждать неподвижно.");
+
+            hunter.Position = new SimVector2(20.5f, 2.5f);
+            simulation.Vision.Update(state);
+            simulation.Planner.Update(state);
+            Assert.AreEqual(enemy.Id, hunter.CurrentOrder.TargetEntityId);
+        }
+
+        [Test]
         public void AttackCommand_RejectsHiddenEnemyUntilScoutRevealsIt()
         {
             MapDefinition map = DefaultMapFactory.CreatePrototypeMap();

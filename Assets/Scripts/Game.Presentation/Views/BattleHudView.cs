@@ -215,7 +215,23 @@ namespace Game.Presentation.Views
                 var marker = GetOrCreateMarker(_minimapRobotMarkers, robot.Id.Value, "Robot", 5f);
                 marker.gameObject.SetActive(robot.Owner == PlayerId.Player1 || state.FogOfWar == null || state.FogOfWar.IsVisible(PlayerId.Player1, robot.Position));
                 marker.color = GetOwnerColor(robot.Owner, 1f);
+                marker.rectTransform.sizeDelta = Vector2.one * 5f;
                 PlaceMarker(marker.rectTransform, robot.Position);
+            }
+
+            if (state.FogOfWar != null)
+            {
+                foreach (LastSeenEnemyState contact in state.FogOfWar.Player1LastSeenEnemies)
+                {
+                    if (state.Robots.TryGetValue(contact.RobotId.Value, out RobotState enemy) &&
+                        enemy.IsAlive && state.FogOfWar.IsVisible(PlayerId.Player1, enemy.Position)) continue;
+                    activeRobotIds.Add(contact.RobotId.Value);
+                    Image marker = GetOrCreateMarker(_minimapRobotMarkers, contact.RobotId.Value, "Robot", 7f);
+                    marker.gameObject.SetActive(true);
+                    marker.color = new Color(1f, 0.78f, 0.25f, 0.7f);
+                    marker.rectTransform.sizeDelta = Vector2.one * 7f;
+                    PlaceMarker(marker.rectTransform, contact.Position);
+                }
             }
 
             RemoveMissingRobotMarkers(activeRobotIds);

@@ -97,18 +97,47 @@ namespace Game.Persistence
         {
             public int Width; public int Height; public float TileSize;
             public byte[] Player1Cells; public byte[] Player2Cells;
+            public List<LastSeenEnemySnapshot> Player1LastSeenEnemies = new List<LastSeenEnemySnapshot>();
+            public List<LastSeenEnemySnapshot> Player2LastSeenEnemies = new List<LastSeenEnemySnapshot>();
 
-            public static FogSnapshot FromState(FogOfWarState state) => state == null ? null : new FogSnapshot
+            public static FogSnapshot FromState(FogOfWarState state)
             {
-                Width = state.Width, Height = state.Height, TileSize = state.TileSize,
-                Player1Cells = (byte[])state.Player1Cells.Clone(), Player2Cells = (byte[])state.Player2Cells.Clone()
+                if (state == null) return null;
+                var snapshot = new FogSnapshot
+                {
+                    Width = state.Width, Height = state.Height, TileSize = state.TileSize,
+                    Player1Cells = (byte[])state.Player1Cells.Clone(), Player2Cells = (byte[])state.Player2Cells.Clone()
+                };
+                foreach (LastSeenEnemyState enemy in state.Player1LastSeenEnemies) snapshot.Player1LastSeenEnemies.Add(LastSeenEnemySnapshot.FromState(enemy));
+                foreach (LastSeenEnemyState enemy in state.Player2LastSeenEnemies) snapshot.Player2LastSeenEnemies.Add(LastSeenEnemySnapshot.FromState(enemy));
+                return snapshot;
+            }
+
+            public FogOfWarState ToState()
+            {
+                var state = new FogOfWarState
+                {
+                    Width = Width, Height = Height, TileSize = TileSize,
+                    Player1Cells = Player1Cells != null ? (byte[])Player1Cells.Clone() : null,
+                    Player2Cells = Player2Cells != null ? (byte[])Player2Cells.Clone() : null
+                };
+                foreach (LastSeenEnemySnapshot enemy in Player1LastSeenEnemies ?? new List<LastSeenEnemySnapshot>()) state.Player1LastSeenEnemies.Add(enemy.ToState());
+                foreach (LastSeenEnemySnapshot enemy in Player2LastSeenEnemies ?? new List<LastSeenEnemySnapshot>()) state.Player2LastSeenEnemies.Add(enemy.ToState());
+                return state;
+            }
+        }
+
+        [Serializable]
+        private sealed class LastSeenEnemySnapshot
+        {
+            public int RobotId; public VectorSnapshot Position; public int SeenTick;
+            public static LastSeenEnemySnapshot FromState(LastSeenEnemyState state) => new LastSeenEnemySnapshot
+            {
+                RobotId = state.RobotId.Value, Position = VectorSnapshot.From(state.Position), SeenTick = state.SeenTick
             };
-
-            public FogOfWarState ToState() => new FogOfWarState
+            public LastSeenEnemyState ToState() => new LastSeenEnemyState
             {
-                Width = Width, Height = Height, TileSize = TileSize,
-                Player1Cells = Player1Cells != null ? (byte[])Player1Cells.Clone() : null,
-                Player2Cells = Player2Cells != null ? (byte[])Player2Cells.Clone() : null
+                RobotId = new EntityId(RobotId), Position = Position.ToState(), SeenTick = SeenTick
             };
         }
 

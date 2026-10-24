@@ -23,8 +23,9 @@ namespace Game.Presentation.Robots
         private static readonly Quaternion AlongX = Quaternion.Euler(0f, 0f, -90f);
 
         // Точки крепления ног шагающего шасси (бедро).
-        private const float HipHeight = 0.78f;
-        private const float HipOffset = 0.38f;
+        private const float HipHeight = 0.8f;
+        private const float HipOffset = 0.42f;
+        private const float WalkerDeck = 0.97f;
 
         public static GameObject BuildRobotModel(RobotBlueprint blueprint, PlayerId owner)
         {
@@ -51,7 +52,7 @@ namespace Game.Presentation.Robots
             }
             else
             {
-                deckHeight = 0.92f;
+                deckHeight = WalkerDeck;
                 AddPart(body, "Chassis", GetMesh("chassis_bipod", BuildBipodHip), material);
                 Mesh leg = GetMesh("bipod_leg", BuildLeg);
                 rig.LeftLeg = AddPart(root.transform, "Leg_Left", leg, material).transform;
@@ -218,22 +219,64 @@ namespace Game.Presentation.Robots
             }
         }
 
+        /// <summary>
+        /// Таз шагохода по эскизу «тяжёлое шагающее шасси»: блок с белой палубой и полосой стороны,
+        /// по бокам ребристые приводы бёдер до шарниров ног.
+        /// </summary>
         private static void BuildBipodHip(LowPolyMeshBuilder b)
         {
-            b.Frustum(I, new Vector3(0f, 0.7f, 0f), new Vector2(0.62f, 0.46f), new Vector2(0.5f, 0.38f), 0.22f, Vector2.zero, Swatch.MetalMid, Swatch.MetalLight);
+            b.ChamferBox(I, new Vector3(0f, 0.82f, 0f), new Vector3(0.5f, 0.24f, 0.42f), 0.04f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0f, WalkerDeck - 0.03f, -0.02f), new Vector3(0.56f, 0.06f, 0.44f), 0.02f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0f, 0.78f, 0.22f), new Vector3(0.3f, 0.2f, 0.04f), 0.015f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.Box(I, new Vector3(0f, WalkerDeck - 0.002f, 0.12f), new Vector3(0.36f, 0.006f, 0.04f), Swatch.TeamAccent);
+            b.Box(I, new Vector3(0f, 0.76f, 0.242f), new Vector3(0.1f, 0.02f, 0.006f), Swatch.Glow);
+
+            // Ребристые приводы бёдер: от борта таза до шарнира ноги.
             foreach (float side in new[] { -1f, 1f })
-                b.Cylinder(At(new Vector3(side > 0f ? 0.28f : -0.38f, HipHeight, 0f), AlongX), Vector3.zero, 0.09f, 0.1f, 8, Swatch.MetalDark);
-            b.Box(I, new Vector3(0f, 0.8f, 0.215f), new Vector3(0.4f, 0.12f, 0.04f), Swatch.TeamAccent);
-            b.Box(I, new Vector3(0f, 0.86f, 0.236f), new Vector3(0.16f, 0.03f, 0.01f), Swatch.Glow);
+            {
+                float start = side > 0f ? 0.22f : -HipOffset;
+                b.Cylinder(At(new Vector3(start, HipHeight, 0f), AlongX), Vector3.zero, 0.12f, HipOffset - 0.22f, 10, Swatch.MetalDark);
+                for (int rib = 0; rib < 3; rib++)
+                    b.Cylinder(At(new Vector3(start + 0.03f + rib * 0.055f, HipHeight, 0f), AlongX), Vector3.zero, 0.128f, 0.016f, 10, Swatch.Steel);
+                b.ChamferBox(I, new Vector3(side * 0.22f, WalkerDeck + 0.02f, -0.12f), new Vector3(0.12f, 0.06f, 0.14f), 0.015f, Swatch.MetalDark);
+                b.Box(I, new Vector3(side * 0.22f, WalkerDeck + 0.02f, -0.049f), new Vector3(0.05f, 0.015f, 0.006f), Swatch.Glow);
+            }
+
+            // Тёмный блок на корме с решёткой.
+            b.ChamferBox(I, new Vector3(0f, 0.84f, -0.24f), new Vector3(0.4f, 0.16f, 0.06f), 0.015f, Swatch.MetalDark);
+            for (int slat = 0; slat < 4; slat++)
+                b.Box(I, new Vector3(0f, 0.79f + slat * 0.035f, -0.272f), new Vector3(0.3f, 0.012f, 0.006f), Swatch.Grille);
         }
 
-        /// <summary>Нога шагающего относительно бедра: опора стопы на y = −HipHeight (уровень земли).</summary>
+        /// <summary>
+        /// Нога шагохода относительно шарнира бедра; опора стопы на y = −HipHeight (уровень земли).
+        /// Бедро с диагональной полосой стороны, дисковое колено, голень с накладкой, привод голеностопа,
+        /// широкая стопа с двумя «пальцами» и пяткой. Нога симметрична: один меш на обе стороны.
+        /// </summary>
         private static void BuildLeg(LowPolyMeshBuilder b)
         {
-            b.Box(At(new Vector3(0f, -0.18f, 0.04f), Quaternion.Euler(-12f, 0f, 0f)), Vector3.zero, new Vector3(0.14f, 0.38f, 0.16f), Swatch.TeamAccent);
-            b.Cylinder(At(new Vector3(-0.07f, -0.37f, 0.08f), AlongX), Vector3.zero, 0.07f, 0.14f, 8, Swatch.MetalDark);
-            b.Box(At(new Vector3(0f, -0.56f, 0.03f), Quaternion.Euler(10f, 0f, 0f)), Vector3.zero, new Vector3(0.11f, 0.38f, 0.12f), Swatch.MetalMid);
-            b.Frustum(I, new Vector3(0f, -HipHeight, 0.04f), new Vector2(0.2f, 0.34f), new Vector2(0.14f, 0.22f), 0.08f, Swatch.MetalDark);
+            Matrix4x4 thigh = At(new Vector3(0f, -0.18f, 0.03f), Quaternion.Euler(-10f, 0f, 0f));
+            b.ChamferBox(thigh, Vector3.zero, new Vector3(0.2f, 0.36f, 0.22f), 0.04f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(thigh, new Vector3(0f, 0.01f, 0.115f), new Vector3(0.17f, 0.26f, 0.03f), 0.012f, Swatch.ArmorWhite);
+            b.Box(thigh * At(new Vector3(0f, 0.01f, 0.132f), Quaternion.Euler(0f, 0f, 38f)), Vector3.zero, new Vector3(0.035f, 0.22f, 0.006f), Swatch.TeamAccent);
+
+            // Колено: тёмный диск-привод с ободом.
+            b.Cylinder(At(new Vector3(-0.13f, -0.37f, 0.06f), AlongX), Vector3.zero, 0.1f, 0.26f, 12, Swatch.MetalDark);
+            b.Cylinder(At(new Vector3(-0.14f, -0.37f, 0.06f), AlongX), Vector3.zero, 0.055f, 0.28f, 10, Swatch.Steel);
+
+            Matrix4x4 shin = At(new Vector3(0f, -0.54f, 0.01f), Quaternion.Euler(8f, 0f, 0f));
+            b.ChamferBox(shin, Vector3.zero, new Vector3(0.18f, 0.3f, 0.2f), 0.035f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(shin, new Vector3(0f, 0.02f, 0.105f), new Vector3(0.15f, 0.2f, 0.025f), 0.01f, Swatch.ArmorWhite);
+            b.Box(shin, new Vector3(0f, -0.06f, 0.12f), new Vector3(0.04f, 0.015f, 0.006f), Swatch.Glow);
+
+            // Голеностоп и стопа.
+            b.Cylinder(At(new Vector3(-0.1f, -0.68f, -0.01f), AlongX), Vector3.zero, 0.06f, 0.2f, 10, Swatch.MetalDark);
+            float sole = -HipHeight;
+            b.ChamferBox(I, new Vector3(0f, sole + 0.04f, 0.02f), new Vector3(0.3f, 0.08f, 0.34f), 0.02f, Swatch.MetalDark);
+            b.ChamferBox(I, new Vector3(0f, sole + 0.1f, -0.01f), new Vector3(0.22f, 0.06f, 0.22f), 0.02f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            foreach (float x in new[] { -0.075f, 0.075f })
+                b.ChamferBox(I, new Vector3(x, sole + 0.035f, 0.24f), new Vector3(0.12f, 0.07f, 0.14f), 0.02f, Swatch.MetalDark, Swatch.ArmorGrey);
+            b.ChamferBox(I, new Vector3(0f, sole + 0.035f, -0.19f), new Vector3(0.2f, 0.07f, 0.1f), 0.02f, Swatch.MetalDark);
         }
 
         private static void BuildAntiGrav(LowPolyMeshBuilder b)

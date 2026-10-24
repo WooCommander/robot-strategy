@@ -129,6 +129,20 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void SerializeAndDeserialize_KeepsFogOfWarDisabled()
+        {
+            MatchState source = CreateState();
+            source.FogOfWarDisabled = true;
+            var service = new MatchPersistenceService();
+
+            MatchState restored = service.Deserialize(service.Serialize(source));
+
+            Assert.IsTrue(restored.FogOfWarDisabled);
+            Assert.IsNull(restored.FogOfWar);
+            Assert.IsFalse(service.Deserialize(service.Serialize(CreateState())).FogOfWarDisabled, "По умолчанию туман включён.");
+        }
+
+        [Test]
         public void ManualAndAutoSlots_RoundTripToSpecifiedDirectory()
         {
             string directory = Path.Combine(Path.GetTempPath(), "robot-strategy-tests", System.Guid.NewGuid().ToString("N"));

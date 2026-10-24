@@ -41,6 +41,22 @@ namespace Game.Core.Tests
         }
 
         [Test]
+        public void FogOfWarDisabled_KeepsEverythingVisibleAndSurvivesRestore()
+        {
+            MapDefinition map = DefaultMapFactory.CreatePrototypeMap();
+            var catalog = DefaultContentCatalog.CreateDefaultModules();
+            var simulation = new MatchSimulation(catalog, map, fogOfWar: false);
+            for (int tick = 0; tick < 5; tick++) simulation.Step(MatchSimulation.FixedDeltaSeconds);
+
+            Assert.IsTrue(simulation.State.FogOfWarDisabled);
+            Assert.IsNull(simulation.State.FogOfWar, "Без тумана проверки обзора должны видеть всё.");
+            Assert.IsNull(simulation.Vision);
+
+            var restored = new MatchSimulation(catalog, map, simulation.State);
+            Assert.IsNull(restored.State.FogOfWar, "Восстановленный матч берёт настройку из состояния, а не из параметра.");
+        }
+
+        [Test]
         public void FogOfWar_MountainBlocksSightBehindIt()
         {
             var map = new MapDefinition { Width = 5, Height = 3, TileSize = 1f, Tiles = new TileType[15] };

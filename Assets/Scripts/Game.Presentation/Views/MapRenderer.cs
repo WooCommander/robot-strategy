@@ -25,6 +25,7 @@ namespace Game.Presentation.Views
         private readonly List<BuildingView> _spawnedBuildings = new List<BuildingView>();
         private readonly List<Object> _generatedAssets = new List<Object>();
         private TerrainField _terrain;
+        private GameObject _fogOverlay;
         private Texture2D _fogTexture;
         private Color32[] _fogPixels;
         private int _lastFogTick = -1;
@@ -47,6 +48,11 @@ namespace Game.Presentation.Views
 
         /// <summary>Высота, на которой стоит робот: по рельефу, над водой — по её поверхности.</summary>
         public float SampleSurfaceHeight(float x, float z) => _terrain?.SampleSurface(x, z) ?? 0f;
+
+        public void SetFogVisible(bool visible)
+        {
+            if (_fogOverlay != null) _fogOverlay.SetActive(visible);
+        }
 
         public void UpdateFog(MatchState state)
         {
@@ -259,6 +265,7 @@ namespace Game.Presentation.Views
 
             var go = new GameObject("FogOfWarOverlay");
             go.transform.SetParent(transform, false);
+            _fogOverlay = go;
             go.AddComponent<MeshFilter>().sharedMesh = mesh;
             var renderer = go.AddComponent<MeshRenderer>();
             renderer.sharedMaterial = material;

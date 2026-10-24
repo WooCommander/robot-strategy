@@ -46,11 +46,13 @@ namespace Game.Simulation.Systems
         public event Action StepCompleted;
 
         /// <param name="map">Карта; без неё движение и планирование приказов отключены (боевые unit-тесты).</param>
-        public MatchSimulation(IReadOnlyDictionary<string, ModuleDefinition> catalog, MapDefinition map, MatchState state = null)
+        /// <param name="fogOfWar">Туман войны для нового матча; восстановленный state хранит эту настройку сам.</param>
+        public MatchSimulation(IReadOnlyDictionary<string, ModuleDefinition> catalog, MapDefinition map, MatchState state = null, bool fogOfWar = true)
         {
             if (catalog == null) throw new ArgumentNullException(nameof(catalog));
             Map = map;
             State = state ?? (map != null ? CreateInitialState(map) : new MatchState());
+            if (state == null) State.FogOfWarDisabled = !fogOfWar;
             Dispatcher = new CommandDispatcher(catalog);
             Production = new ProductionSystem(catalog);
             Combat = new CombatSystem(catalog);
@@ -60,8 +62,16 @@ namespace Game.Simulation.Systems
                 Navigation = new MatchNavigation(map);
                 Movement = new MovementSystem(Navigation);
                 Planner = new OrderPlanner(catalog, map, Navigation, Movement);
-                Vision = new FogOfWarSystem(map);
-                Vision.Update(State);
+                if (State.FogOfWarDisabled)
+                {
+                    // Все проверки обзора трактуют отсутствие FogOfWar как «видно всё».
+                    State.FogOfWar = null;
+                }
+                else
+                {
+                    Vision = new FogOfWarSystem(map);
+                    Vision.Update(State);
+                }
             }
         }
 

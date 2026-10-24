@@ -56,7 +56,7 @@ namespace Game.Presentation.Controllers
             // 1. Загрузка каталога модулей, карты и симуляции матча
             _moduleCatalog = DefaultContentCatalog.CreateDefaultModules();
             _mapDefinition = DefaultMapFactory.CreatePrototypeMap();
-            _simulation = new MatchSimulation(_moduleCatalog, _mapDefinition);
+            _simulation = new MatchSimulation(_moduleCatalog, _mapDefinition, fogOfWar: IsFogOfWarPreferred);
             _simulation.AddAgent(new AiCommander(_simulation.Dispatcher, _moduleCatalog));
             _simulation.Production.OnRobotSpawned += HandleRobotSpawned;
             _simulation.Combat.OnRobotDestroyed += HandleRobotDestroyed;
@@ -118,7 +118,11 @@ namespace Game.Presentation.Controllers
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
-            _hudView.SetFogTexture(_mapRenderer.FogTexture);
+            bool fogEnabled = !MatchState.FogOfWarDisabled;
+            _mapRenderer.SetFogVisible(fogEnabled);
+            _hudView.SetFogTexture(fogEnabled ? _mapRenderer.FogTexture : null);
+            _hudView.SetFogOfWarEnabled(fogEnabled);
+            _hudView.OnFogOfWarToggleRequested += ToggleFogOfWar;
             _hudView.SetOrderMode(false);
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
@@ -272,6 +276,22 @@ namespace Game.Presentation.Controllers
         private void RestartMatch()
         {
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
+        }
+
+        private const string FogOfWarPrefKey = "settings.fogOfWar";
+
+        /// <summary>Выбор игрока запоминается между запусками; по умолчанию туман включён.</summary>
+        private static bool IsFogOfWarPreferred => PlayerPrefs.GetInt(FogOfWarPrefKey, 1) == 1;
+
+        /// <summary>
+        /// Туман — настройка матча: он влияет на ИИ, приказы и наведение, и replay должен воспроизводиться
+        /// одинаково. Поэтому переключение запоминает выбор и начинает новый матч.
+        /// </summary>
+        private void ToggleFogOfWar()
+        {
+            PlayerPrefs.SetInt(FogOfWarPrefKey, IsFogOfWarPreferred ? 0 : 1);
+            PlayerPrefs.Save();
+            RestartMatch();
         }
 
         private void OnApplicationPause(bool pauseStatus)

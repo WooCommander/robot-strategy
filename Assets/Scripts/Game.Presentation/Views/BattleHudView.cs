@@ -146,6 +146,7 @@ namespace Game.Presentation.Views
         // Миникарта и итог матча
         private RectTransform _minimapContent;
         private RawImage _minimapFog;
+        private Button _fogToggleButton;
         private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
         private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
         private GameObject _resultOverlay;
@@ -156,6 +157,7 @@ namespace Game.Presentation.Views
         public event Func<ProgramEditorValues, string> OnRobotProgramRequested;
         public event Action OnRestartRequested;
         public event Action OnSelectPlayerBaseRequested;
+        public event Action OnFogOfWarToggleRequested;
         public event Action<SimVector2> OnMinimapPointRequested;
 
         public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
@@ -255,11 +257,16 @@ namespace Game.Presentation.Views
         private void CreateTopLeftBar()
         {
             var bar = CreatePanel(_canvas.transform, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(20f, -20f), new Vector2(330f, 70f), PanelColor);
+                new Vector2(20f, -20f), new Vector2(450f, 70f), PanelColor);
             _armyText = CreateText(bar.transform, "Army", "", new Vector2(14f, -8f), new Vector2(190f, 54f), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
             var selectBase = CreateButton(bar.transform, "SelectBaseBtn", "БАЗА", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-62f, 0f), new Vector2(106f, 54f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 15);
+                new Vector2(-182f, 0f), new Vector2(106f, 54f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 15);
             selectBase.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
+            // Переключение тумана начинает новый матч: это настройка матча, а не фильтр отображения.
+            _fogToggleButton = CreateButton(bar.transform, "FogToggleBtn", "", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-64f, 0f), new Vector2(118f, 54f), new Color(0.2f, 0.24f, 0.32f, 0.98f), 13);
+            _fogToggleButton.onClick.AddListener(() => OnFogOfWarToggleRequested?.Invoke());
+            SetFogOfWarEnabled(true);
         }
 
         private void CreateClockAndStatus()
@@ -923,7 +930,16 @@ namespace Game.Presentation.Views
 
         public void SetFogTexture(Texture2D texture)
         {
-            if (_minimapFog != null) _minimapFog.texture = texture;
+            if (_minimapFog == null) return;
+            _minimapFog.texture = texture;
+            // RawImage без текстуры рисуется белым прямоугольником поверх радара.
+            _minimapFog.enabled = texture != null;
+        }
+
+        public void SetFogOfWarEnabled(bool enabled)
+        {
+            if (_fogToggleButton == null) return;
+            _fogToggleButton.GetComponentInChildren<Text>().text = enabled ? "ТУМАН: ВКЛ" : "ТУМАН: ВЫКЛ";
         }
 
         private void EnsureResultOverlay()

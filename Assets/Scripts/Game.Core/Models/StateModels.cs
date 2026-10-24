@@ -226,6 +226,8 @@ namespace Game.Core.Models
         /// <summary>Сколько игровых часов дохода уже начислено.</summary>
         public int IncomeHoursPaid { get; set; }
         public FogOfWarState FogOfWar { get; set; }
+        /// <summary>Настройка матча: без тумана обе стороны видят всё, ограничений обзора нет (FogOfWar остаётся null).</summary>
+        public bool FogOfWarDisabled { get; set; }
 
         public PlayerState Player1 { get; set; } = new PlayerState { Id = PlayerId.Player1 };
         public PlayerState Player2 { get; set; } = new PlayerState { Id = PlayerId.Player2 };

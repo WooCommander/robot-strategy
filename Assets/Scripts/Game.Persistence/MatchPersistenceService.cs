@@ -65,13 +65,15 @@ namespace Game.Persistence
             public int Tick; public float MatchTimeSeconds; public MatchResult Result; public bool IsPaused; public int NextRobotId; public int NextProductionOrderId; public int IncomeHoursPaid;
             public PlayerSnapshot Player1; public PlayerSnapshot Player2;
             public FogSnapshot Fog;
+            // Хранится как «выключен», чтобы старые сохранения без поля загружались с туманом.
+            public bool FogDisabled;
             public List<RobotSnapshot> Robots = new List<RobotSnapshot>();
             public List<BuildingSnapshot> Buildings = new List<BuildingSnapshot>();
             public List<ProjectileSnapshot> Projectiles = new List<ProjectileSnapshot>();
 
             public static MatchSnapshot FromState(MatchState state)
             {
-                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, NextRobotId = state.NextRobotId, NextProductionOrderId = state.NextProductionOrderId, IncomeHoursPaid = state.IncomeHoursPaid, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2), Fog = FogSnapshot.FromState(state.FogOfWar) };
+                var snapshot = new MatchSnapshot { Version = CurrentVersion, Tick = state.Tick, MatchTimeSeconds = state.MatchTimeSeconds, Result = state.Result, IsPaused = state.IsPaused, NextRobotId = state.NextRobotId, NextProductionOrderId = state.NextProductionOrderId, IncomeHoursPaid = state.IncomeHoursPaid, Player1 = PlayerSnapshot.FromState(state.Player1), Player2 = PlayerSnapshot.FromState(state.Player2), Fog = FogSnapshot.FromState(state.FogOfWar), FogDisabled = state.FogOfWarDisabled };
                 foreach (RobotState robot in state.Robots.Values) snapshot.Robots.Add(RobotSnapshot.FromState(robot));
                 foreach (BuildingState building in state.Buildings.Values) snapshot.Buildings.Add(BuildingSnapshot.FromState(building));
                 foreach (ProjectileState projectile in state.Projectiles) snapshot.Projectiles.Add(ProjectileSnapshot.FromState(projectile));
@@ -80,7 +82,7 @@ namespace Game.Persistence
 
             public MatchState ToState()
             {
-                var state = new MatchState { Tick = Tick, MatchTimeSeconds = MatchTimeSeconds, IncomeHoursPaid = IncomeHoursPaid, Result = Result, IsPaused = IsPaused, Player1 = Player1?.ToState() ?? new PlayerState { Id = PlayerId.Player1 }, Player2 = Player2?.ToState() ?? new PlayerState { Id = PlayerId.Player2 }, FogOfWar = Fog?.ToState() };
+                var state = new MatchState { Tick = Tick, MatchTimeSeconds = MatchTimeSeconds, IncomeHoursPaid = IncomeHoursPaid, Result = Result, IsPaused = IsPaused, Player1 = Player1?.ToState() ?? new PlayerState { Id = PlayerId.Player1 }, Player2 = Player2?.ToState() ?? new PlayerState { Id = PlayerId.Player2 }, FogOfWar = FogDisabled ? null : Fog?.ToState(), FogOfWarDisabled = FogDisabled };
                 foreach (RobotSnapshot robot in Robots ?? new List<RobotSnapshot>()) { RobotState restored = robot.ToState(); state.Robots[restored.Id.Value] = restored; }
                 foreach (BuildingSnapshot building in Buildings ?? new List<BuildingSnapshot>()) { BuildingState restored = building.ToState(); state.Buildings[restored.Id.Value] = restored; }
                 foreach (ProjectileSnapshot projectile in Projectiles ?? new List<ProjectileSnapshot>()) state.Projectiles.Add(projectile.ToState());

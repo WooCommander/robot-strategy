@@ -17,10 +17,11 @@ namespace Game.Presentation.Rendering
         public enum Swatch
         {
             Bark, PineDark, PineMid, PineLight, RockDark, RockLight, Bush, Concrete,
-            MetalLight, MetalMid, MetalDark, Rubber, TeamAccent, TeamDark, Glow, Hazard
+            MetalLight, MetalMid, MetalDark, Rubber, TeamAccent, TeamDark, Glow, Hazard,
+            ArmorWhite, ArmorGrey, Steel, Grille
         }
 
-        private const int SwatchCount = 16;
+        private const int SwatchCount = 20;
         private static readonly Color32[] SwatchColors =
         {
             new Color32(92, 64, 44, 255),     // Bark
@@ -39,6 +40,10 @@ namespace Game.Presentation.Rendering
             new Color32(72, 72, 72, 255),     // TeamDark (заменяется цветом стороны)
             new Color32(220, 230, 235, 255),  // Glow (заменяется цветом стороны)
             new Color32(226, 176, 34, 255),   // Hazard
+            new Color32(192, 189, 182, 255),  // ArmorWhite — светлая броневая плита
+            new Color32(148, 147, 143, 255),  // ArmorGrey — затенённые и вторичные плиты
+            new Color32(142, 145, 150, 255),  // Steel — траки, шарниры, ступицы
+            new Color32(36, 38, 42, 255),     // Grille — решётки, ниши, дульные срезы
         };
 
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -144,6 +149,70 @@ namespace Game.Presentation.Rendering
             Quad(P(1, -1, 1), P(1, 1, 1), P(-1, 1, 1), P(-1, -1, 1), swatch);       // +z
             Quad(P(-1, -1, 1), P(-1, 1, 1), P(-1, 1, -1), P(-1, -1, -1), swatch);   // -x
             Quad(P(1, -1, -1), P(1, 1, -1), P(1, 1, 1), P(1, -1, 1), swatch);       // +x
+        }
+
+        /// <summary>Выпуклый многоугольник; порядок обхода выбирается сам по направлению наружу.</summary>
+        public void Polygon(Vector3 outward, Swatch swatch, params Vector3[] points)
+        {
+            bool flip = Vector3.Dot(Vector3.Cross(points[1] - points[0], points[2] - points[0]), outward) < 0f;
+            for (int i = 1; i < points.Length - 1; i++)
+            {
+                if (flip) Triangle(points[0], points[i + 1], points[i], swatch);
+                else Triangle(points[0], points[i], points[i + 1], swatch);
+            }
+        }
+
+        /// <summary>
+        /// Брус со скошенными рёбрами: на фасках ловится свет, и плита брони читается как деталь, а не коробка.
+        /// Верх и верхние фаски — top, остальное — sides.
+        /// </summary>
+        public void ChamferBox(Matrix4x4 transform, Vector3 center, Vector3 size, float chamfer, Swatch sides, Swatch top)
+        {
+            Vector3 h = size * 0.5f;
+            float c = Mathf.Min(chamfer, Mathf.Min(h.x, Mathf.Min(h.y, h.z)) * 0.9f);
+            // Вершина угла (sx, sy, sz), лежащая на грани оси axis: по этой оси — полный размер, по остальным — минус фаска.
+            Vector3 V(int axis, int sx, int sy, int sz) => transform.MultiplyPoint3x4(center + new Vector3(
+                sx * (h.x - (axis == 0 ? 0f : c)), sy * (h.y - (axis == 1 ? 0f : c)), sz * (h.z - (axis == 2 ? 0f : c))));
+            Vector3 Out(float x, float y, float z) => transform.MultiplyVector(new Vector3(x, y, z));
+
+            foreach (int s in new[] { -1, 1 })
+            {
+                Polygon(Out(s, 0, 0), sides, V(0, s, -1, -1), V(0, s, 1, -1), V(0, s, 1, 1), V(0, s, -1, 1));
+                Polygon(Out(0, s, 0), s > 0 ? top : sides, V(1, -1, s, -1), V(1, 1, s, -1), V(1, 1, s, 1), V(1, -1, s, 1));
+                Polygon(Out(0, 0, s), sides, V(2, -1, -1, s), V(2, 1, -1, s), V(2, 1, 1, s), V(2, -1, 1, s));
+            }
+            foreach (int a in new[] { -1, 1 })
+            {
+                foreach (int b in new[] { -1, 1 })
+                {
+                    Polygon(Out(a, b, 0), b > 0 ? top : sides, V(0, a, b, -1), V(1, a, b, -1), V(1, a, b, 1), V(0, a, b, 1));   // вдоль z
+                    Polygon(Out(0, a, b), a > 0 ? top : sides, V(1, -1, a, b), V(2, -1, a, b), V(2, 1, a, b), V(1, 1, a, b));   // вдоль x
+                    Polygon(Out(a, 0, b), sides, V(0, a, -1, b), V(2, a, -1, b), V(2, a, 1, b), V(0, a, 1, b));                 // вдоль y
+                    foreach (int d in new[] { -1, 1 })
+                        Polygon(Out(a, b, d), b > 0 ? top : sides, V(0, a, b, d), V(1, a, b, d), V(2, a, b, d));             // угол
+                }
+            }
+        }
+
+        public void ChamferBox(Matrix4x4 transform, Vector3 center, Vector3 size, float chamfer, Swatch swatch) =>
+            ChamferBox(transform, center, size, chamfer, swatch, swatch);
+
+        /// <summary>
+        /// Шеврон «Λ» на плоскости: normal — наружу из плоскости, up — куда смотрит вершина. Две приподнятые планки.
+        /// </summary>
+        public void Chevron(Vector3 center, Vector3 normal, Vector3 up, float size, Swatch swatch)
+        {
+            normal.Normalize();
+            up.Normalize();
+            Vector3 right = Vector3.Cross(up, normal).normalized;
+            Vector3 apex = center + up * size * 0.5f;
+            foreach (float side in new[] { -1f, 1f })
+            {
+                Vector3 foot = center - up * size * 0.5f + right * side * size * 0.45f;
+                Vector3 along = foot - apex;
+                var arm = Matrix4x4.TRS((apex + foot) * 0.5f + normal * 0.006f, Quaternion.LookRotation(along, normal), Vector3.one);
+                Box(arm, Vector3.zero, new Vector3(size * 0.16f, 0.012f, along.magnitude), swatch);
+            }
         }
 
         /// <summary>

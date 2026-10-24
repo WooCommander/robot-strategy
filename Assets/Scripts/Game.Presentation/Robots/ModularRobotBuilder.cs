@@ -40,7 +40,7 @@ namespace Game.Presentation.Robots
             float deckHeight;
             if (chassisId == DefaultContentCatalog.ChassisTracks)
             {
-                deckHeight = 0.5f;
+                deckHeight = TracksDeck;
                 AddPart(body, "Chassis", GetMesh("chassis_tracks", BuildTracks), material);
             }
             else if (chassisId == DefaultContentCatalog.ChassisAntiGrav)
@@ -104,26 +104,118 @@ namespace Game.Presentation.Robots
 
         // ───────────────────────── Шасси ─────────────────────────
 
+        // Гусеничное шасси по эскизу «Тяжёлая гусеничная платформа»: петля траков, шесть катков, белые плиты.
+        private const float TrackX = 0.44f;        // центр гусеницы по x
+        private const float TrackWidth = 0.24f;
+        private const float TrackEndZ = 0.6f;      // центры ленивца и ведущего колеса
+        private const float TrackAxleY = 0.22f;
+        private const float TrackRadius = 0.19f;   // радиус петли по центру траков
+        private const float TracksDeck = 0.56f;
+        // Полки и короба уже гусеницы и сдвинуты к корпусу: внешняя половина ленты видна сверху.
+        private const float ShelfX = 0.38f;
+        private const float ShelfWidth = 0.15f;
+
         private static void BuildTracks(LowPolyMeshBuilder b)
         {
             foreach (float side in new[] { -1f, 1f })
             {
-                float x = side * 0.47f;
-                b.Box(I, new Vector3(x, 0.19f, 0f), new Vector3(0.24f, 0.3f, 1.2f), Swatch.Rubber);
-                // Скруглённые концы гусеницы и опорные катки снаружи.
-                foreach (float z in new[] { -0.6f, 0.6f })
-                    b.Cylinder(At(new Vector3(x - 0.12f, 0.19f, z), AlongX), Vector3.zero, 0.15f, 0.24f, 8, Swatch.Rubber);
-                float outer = side > 0f ? 0.59f : -0.63f;
-                foreach (float z in new[] { -0.4f, -0.13f, 0.13f, 0.4f })
-                    b.Cylinder(At(new Vector3(outer, 0.17f, z), AlongX), Vector3.zero, 0.1f, 0.04f, 8, Swatch.MetalMid);
-                b.Box(I, new Vector3(x, 0.38f, 0f), new Vector3(0.3f, 0.05f, 1.32f), Swatch.TeamAccent);
+                BuildTrackLoop(b, side * TrackX);
+                BuildRoadWheels(b, side);
+
+                // Надгусеничные полки спереди и сзади, бортовой короб с полосой цвета стороны.
+                b.ChamferBox(I, new Vector3(side * ShelfX, 0.48f, 0.56f), new Vector3(ShelfWidth, 0.1f, 0.34f), 0.035f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+                b.ChamferBox(I, new Vector3(side * ShelfX, 0.47f, -0.6f), new Vector3(ShelfWidth, 0.09f, 0.26f), 0.03f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+                b.ChamferBox(I, new Vector3(side * ShelfX, 0.5f, -0.05f), new Vector3(ShelfWidth, 0.13f, 0.6f), 0.035f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+                b.Box(I, new Vector3(side * ShelfX, 0.5f, 0.12f), new Vector3(ShelfWidth + 0.006f, 0.136f, 0.05f), Swatch.TeamAccent);
+                b.ChamferBox(I, new Vector3(side * ShelfX, 0.5f, -0.42f), new Vector3(ShelfWidth - 0.02f, 0.1f, 0.14f), 0.02f, Swatch.MetalDark);
             }
-            // Корпус со скошенным лбом.
-            b.Frustum(I, new Vector3(0f, 0.2f, 0f), new Vector2(0.7f, 1.15f), new Vector2(0.6f, 0.85f), 0.3f, new Vector2(0f, -0.08f), Swatch.MetalMid, Swatch.MetalLight);
-            b.Box(I, new Vector3(0f, 0.505f, 0.22f), new Vector3(0.46f, 0.02f, 0.1f), Swatch.TeamAccent);
-            b.Box(I, new Vector3(0f, 0.36f, -0.56f), new Vector3(0.46f, 0.14f, 0.06f), Swatch.MetalDark);
+
+            // Корпус между гусеницами и верхняя палуба.
+            b.Box(I, new Vector3(0f, 0.26f, 0f), new Vector3(0.64f, 0.3f, 1.2f), Swatch.Grille);
+            b.ChamferBox(I, new Vector3(0f, 0.5f, -0.08f), new Vector3(0.62f, 0.12f, 1.0f), 0.04f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+
+            // Скошенный лоб с шевроном стороны и тёмной нижней плитой.
+            Matrix4x4 glacis = At(new Vector3(0f, 0.42f, 0.56f), Quaternion.Euler(32f, 0f, 0f));
+            b.ChamferBox(glacis, Vector3.zero, new Vector3(0.6f, 0.1f, 0.34f), 0.035f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(glacis, new Vector3(0f, 0.055f, 0.02f), new Vector3(0.2f, 0.012f, 0.16f), 0.004f, Swatch.TeamAccent);
+            b.Chevron(glacis.MultiplyPoint3x4(new Vector3(0f, 0.062f, 0.02f)), glacis.MultiplyVector(Vector3.up), glacis.MultiplyVector(Vector3.back), 0.11f, Swatch.ArmorWhite);
+            b.Box(I, new Vector3(0f, 0.28f, 0.66f), new Vector3(0.48f, 0.16f, 0.06f), Swatch.Grille);
             foreach (float x in new[] { -0.2f, 0.2f })
-                b.Box(I, new Vector3(x, 0.36f, 0.575f), new Vector3(0.08f, 0.05f, 0.02f), Swatch.Glow);
+            {
+                b.Cylinder(At(new Vector3(x, 0.27f, 0.69f), AlongZ), Vector3.zero, 0.025f, 0.05f, 6, Swatch.Steel);
+                b.Box(I, new Vector3(x * 1.3f, 0.36f, 0.705f), new Vector3(0.07f, 0.035f, 0.015f), Swatch.Glow);
+            }
+
+            // Погон башни, решётка двигателя и ящики на корме.
+            b.Cylinder(I, new Vector3(0f, TracksDeck, 0.02f), 0.27f, 0.015f, 14, Swatch.Grille);
+            b.Cylinder(I, new Vector3(0f, TracksDeck, 0.02f), 0.21f, 0.02f, 14, Swatch.Steel);
+            b.Box(I, new Vector3(0f, 0.565f, -0.4f), new Vector3(0.3f, 0.012f, 0.24f), Swatch.Grille);
+            for (int slat = 0; slat < 5; slat++)
+                b.Box(I, new Vector3(0f, 0.575f, -0.49f + slat * 0.045f), new Vector3(0.28f, 0.012f, 0.014f), Swatch.MetalDark);
+            b.ChamferBox(I, new Vector3(-0.2f, 0.6f, -0.24f), new Vector3(0.14f, 0.08f, 0.12f), 0.015f, Swatch.MetalDark);
+            b.ChamferBox(I, new Vector3(0.21f, 0.6f, -0.26f), new Vector3(0.16f, 0.08f, 0.18f), 0.02f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.Box(I, new Vector3(0.21f, 0.6f, -0.2f), new Vector3(0.165f, 0.085f, 0.03f), Swatch.TeamAccent);
+        }
+
+        /// <summary>
+        /// Петля гусеницы в плоскости (z, y): нижняя и верхняя ветви, полукруги вокруг ленивца и ведущего колеса.
+        /// Траки — отдельные бруски по касательной, через один темнее, чтобы лента читалась звеньями.
+        /// </summary>
+        private static void BuildTrackLoop(LowPolyMeshBuilder b, float x)
+        {
+            float straight = TrackEndZ * 2f, arc = Mathf.PI * TrackRadius;
+            float perimeter = 2f * straight + 2f * arc;
+            const float pitch = 0.08f;
+            int links = Mathf.RoundToInt(perimeter / pitch);
+            for (int i = 0; i < links; i++)
+            {
+                float s = i * perimeter / links;
+                Vector3 position, tangent, normal;
+                if (s < straight)
+                {
+                    position = new Vector3(x, TrackAxleY - TrackRadius, -TrackEndZ + s);
+                    tangent = Vector3.forward; normal = Vector3.down;
+                }
+                else if (s < straight + arc)
+                {
+                    float a = -Mathf.PI * 0.5f + (s - straight) / TrackRadius;
+                    normal = new Vector3(0f, Mathf.Sin(a), Mathf.Cos(a));
+                    position = new Vector3(x, TrackAxleY, TrackEndZ) + normal * TrackRadius;
+                    tangent = new Vector3(0f, Mathf.Cos(a), -Mathf.Sin(a));
+                }
+                else if (s < 2f * straight + arc)
+                {
+                    position = new Vector3(x, TrackAxleY + TrackRadius, TrackEndZ - (s - straight - arc));
+                    tangent = Vector3.back; normal = Vector3.up;
+                }
+                else
+                {
+                    float a = Mathf.PI * 0.5f + (s - 2f * straight - arc) / TrackRadius;
+                    normal = new Vector3(0f, Mathf.Sin(a), Mathf.Cos(a));
+                    position = new Vector3(x, TrackAxleY, -TrackEndZ) + normal * TrackRadius;
+                    tangent = new Vector3(0f, Mathf.Cos(a), -Mathf.Sin(a));
+                }
+                b.Box(At(position, Quaternion.LookRotation(tangent, normal)), Vector3.zero, new Vector3(TrackWidth, 0.045f, pitch * 0.82f),
+                    i % 2 == 0 ? Swatch.Steel : Swatch.MetalMid);
+            }
+            // Ленивец и ведущее колесо внутри петли.
+            foreach (float z in new[] { -TrackEndZ, TrackEndZ })
+                b.Cylinder(At(new Vector3(x - TrackWidth * 0.45f, TrackAxleY, z), AlongX), Vector3.zero, 0.15f, TrackWidth * 0.9f, 10, Swatch.Steel);
+        }
+
+        /// <summary>Шесть опорных катков снаружи: шина, обод и колпак цвета стороны.</summary>
+        private static void BuildRoadWheels(LowPolyMeshBuilder b, float side)
+        {
+            float inner = TrackX - TrackWidth * 0.42f, outer = TrackX + TrackWidth * 0.5f;
+            for (int i = 0; i < 6; i++)
+            {
+                float z = -0.5f + i * 0.2f;
+                // Цилиндр растёт по +x от основания, поэтому для левого борта основание — у внешнего края.
+                float tireStart = side > 0f ? inner : -outer;
+                b.Cylinder(At(new Vector3(tireStart, 0.19f, z), AlongX), Vector3.zero, 0.145f, outer - inner, 12, Swatch.MetalDark);
+                b.Cylinder(At(new Vector3(side > 0f ? outer : -outer - 0.015f, 0.19f, z), AlongX), Vector3.zero, 0.105f, 0.015f, 12, Swatch.Steel);
+                b.Cylinder(At(new Vector3(side > 0f ? outer + 0.015f : -outer - 0.03f, 0.19f, z), AlongX), Vector3.zero, 0.045f, 0.015f, 8, Swatch.MetalDark);
+            }
         }
 
         private static void BuildBipodHip(LowPolyMeshBuilder b)
@@ -184,17 +276,44 @@ namespace Game.Presentation.Robots
             return y;
         }
 
+        /// <summary>
+        /// Пушечная башня по эскизу тяжёлого танка: угловатые плиты, бортовые панели с шевроном,
+        /// маска, длинный ствол с кольцами и дульным срезом, блок датчиков с огнями, башенка и антенна.
+        /// </summary>
         private static float Cannon(LowPolyMeshBuilder b, float y)
         {
-            if (b == null) return 0.28f;
-            b.Frustum(I, new Vector3(0f, y, -0.03f), new Vector2(0.56f, 0.64f), new Vector2(0.44f, 0.44f), 0.24f, new Vector2(0f, -0.04f), Swatch.MetalLight, Swatch.MetalMid);
+            const float height = 0.36f;
+            if (b == null) return height;
+
+            b.ChamferBox(I, new Vector3(0f, y + 0.13f, -0.06f), new Vector3(0.58f, 0.26f, 0.62f), 0.05f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0f, y + 0.12f, 0.24f), new Vector3(0.46f, 0.22f, 0.2f), 0.045f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0.04f, y + 0.29f, -0.12f), new Vector3(0.4f, 0.08f, 0.38f), 0.03f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+
+            // Бортовые панели цвета стороны с белым шевроном.
             foreach (float side in new[] { -1f, 1f })
-                b.Box(I, new Vector3(side * 0.255f, y + 0.11f, -0.05f), new Vector3(0.04f, 0.12f, 0.4f), Swatch.TeamAccent);
-            b.Box(I, new Vector3(0f, y + 0.12f, 0.27f), new Vector3(0.2f, 0.14f, 0.1f), Swatch.MetalDark);
-            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.3f), AlongZ), Vector3.zero, 0.045f, 0.58f, 6, Swatch.MetalDark);
-            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.84f), AlongZ), Vector3.zero, 0.07f, 0.1f, 6, Swatch.MetalDark);
-            b.Cylinder(I, new Vector3(-0.1f, y + 0.24f, -0.12f), 0.08f, 0.04f, 8, Swatch.MetalMid);
-            return 0.28f;
+            {
+                var panel = new Vector3(side * 0.298f, y + 0.13f, -0.06f);
+                b.ChamferBox(I, panel, new Vector3(0.022f, 0.17f, 0.34f), 0.008f, Swatch.TeamAccent);
+                b.Chevron(panel + new Vector3(side * 0.011f, 0f, 0f), new Vector3(side, 0f, 0f), Vector3.up, 0.12f, Swatch.ArmorWhite);
+            }
+
+            // Маска и ствол: тёмная труба, светлая обойма, полоса стороны, дульный тормоз.
+            b.ChamferBox(I, new Vector3(0f, y + 0.12f, 0.36f), new Vector3(0.2f, 0.16f, 0.1f), 0.025f, Swatch.MetalDark, Swatch.ArmorGrey);
+            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.4f), AlongZ), Vector3.zero, 0.048f, 0.5f, 8, Swatch.MetalDark);
+            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.46f), AlongZ), Vector3.zero, 0.064f, 0.1f, 8, Swatch.ArmorWhite);
+            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.72f), AlongZ), Vector3.zero, 0.055f, 0.03f, 8, Swatch.TeamAccent);
+            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.86f), AlongZ), Vector3.zero, 0.074f, 0.12f, 8, Swatch.MetalDark);
+            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.98f), AlongZ), Vector3.zero, 0.042f, 0.004f, 8, Swatch.Grille);
+
+            // Блок датчиков с тремя огнями, командирская башенка и антенна.
+            b.ChamferBox(I, new Vector3(-0.19f, y + 0.3f, 0.06f), new Vector3(0.13f, 0.08f, 0.1f), 0.015f, Swatch.MetalDark);
+            for (int light = -1; light <= 1; light++)
+                b.Box(I, new Vector3(-0.19f + light * 0.03f, y + 0.3f, 0.112f), new Vector3(0.018f, 0.018f, 0.006f), Swatch.Glow);
+            b.Cylinder(I, new Vector3(0.14f, y + 0.33f, -0.16f), 0.075f, 0.065f, 0.05f, 10, Swatch.ArmorGrey, Swatch.MetalDark);
+            b.Cylinder(I, new Vector3(0.14f, y + 0.365f, -0.16f), 0.077f, 0.015f, 10, Swatch.TeamAccent);
+            b.Cylinder(I, new Vector3(-0.22f, y + 0.26f, -0.3f), 0.012f, 0.42f, 5, Swatch.MetalDark);
+            b.Cylinder(I, new Vector3(-0.22f, y + 0.6f, -0.3f), 0.016f, 0.05f, 5, Swatch.TeamAccent);
+            return height;
         }
 
         private static float Missiles(LowPolyMeshBuilder b, float y)

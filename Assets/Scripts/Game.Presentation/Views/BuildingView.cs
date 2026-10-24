@@ -17,10 +17,10 @@ namespace Game.Presentation.Views
 
         [Header("Visuals")]
         [SerializeField] private MeshRenderer _buildingRenderer;
-        [SerializeField] private LineRenderer _captureZoneCircle;
+        [SerializeField] private MeshRenderer _captureZoneCircle;
         [SerializeField] private TextMesh _nameLabel;
         [SerializeField] private TextMesh _captureLabel;
-        [SerializeField] private LineRenderer _captureProgressArc;
+        [SerializeField] private MeshRenderer _captureProgressArc;
 
 
         public int EntityId => _entityId;
@@ -76,33 +76,11 @@ namespace Game.Presentation.Views
                 rootCol.size = new Vector3(2.5f, 2.0f, 2.5f);
             }
 
-            // Добавляем круг зоны захвата с помощью LineRenderer
+            // Зона захвата — тонкое светящееся кольцо цвета владельца; при выборе поверх загорается широкое жёлтое.
             if (_captureZoneCircle == null)
-            {
-                var zoneObj = new GameObject("CaptureZone");
-                zoneObj.transform.SetParent(transform, false);
-                zoneObj.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-
-                _captureZoneCircle = zoneObj.AddComponent<LineRenderer>();
-                _captureZoneCircle.useWorldSpace = false;
-                _captureZoneCircle.loop = true;
-                _captureZoneCircle.startWidth = 0.15f;
-                _captureZoneCircle.endWidth = 0.15f;
-
-                var lineShader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
-                _captureZoneCircle.material = new Material(lineShader);
-
-                const int segments = 40;
-                _captureZoneCircle.positionCount = segments;
-                float angleStep = 360f / segments;
-                for (int i = 0; i < segments; i++)
-                {
-                    float rad = Mathf.Deg2Rad * (i * angleStep);
-                    float x = Mathf.Cos(rad) * _captureRadius;
-                    float z = Mathf.Sin(rad) * _captureRadius;
-                    _captureZoneCircle.SetPosition(i, new Vector3(x, 0f, z));
-                }
-            }
+                _captureZoneCircle = FxLibrary.CreateGroundRing("CaptureZone", transform, _captureRadius - 0.07f, _captureRadius + 0.07f, Color.white);
+            _selectionRing = FxLibrary.CreateGroundRing("SelectionRing", transform, _captureRadius - 0.22f, _captureRadius + 0.22f, SelectedRingColor, 0.07f);
+            _selectionRing.enabled = false;
 
             // Название здания
             if (_nameLabel == null)
@@ -132,15 +110,9 @@ namespace Game.Presentation.Views
             _captureLabel.anchor = TextAnchor.MiddleCenter;
             _captureLabel.gameObject.SetActive(false);
 
-            var arcObj = new GameObject("CaptureProgressArc");
-            arcObj.transform.SetParent(transform, false);
-            arcObj.transform.localPosition = new Vector3(0f, 0.08f, 0f);
-            _captureProgressArc = arcObj.AddComponent<LineRenderer>();
-            _captureProgressArc.useWorldSpace = false;
-            _captureProgressArc.alignment = LineAlignment.TransformZ;
-            _captureProgressArc.startWidth = 0.28f;
-            _captureProgressArc.endWidth = 0.28f;
-            _captureProgressArc.material = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
+            // Дуга прогресса захвата снаружи зоны; меш пересобирается при изменении процента.
+            _captureProgressArc = FxLibrary.CreateGroundRing("CaptureProgressArc", transform, _captureRadius + 0.12f, _captureRadius + 0.4f, Color.white, 0.08f);
+            _captureArcMesh = _captureProgressArc.GetComponent<MeshFilter>().sharedMesh;
             _captureProgressArc.gameObject.SetActive(false);
 
             // Золотой 3D-маркер выбора над зданием
@@ -170,16 +142,11 @@ namespace Game.Presentation.Views
             // Пояса, баки и огни окрашены материалом стороны: захват меняет только материал.
             if (_buildingRenderer != null) _buildingRenderer.sharedMaterial = TeamPalette.Get(newOwner, teamColor);
 
-            if (_captureZoneCircle != null)
-            {
-                _captureZoneCircle.startColor = teamColor;
-                _captureZoneCircle.endColor = teamColor;
-                if (_captureZoneCircle.material != null)
-                {
-                    _captureZoneCircle.material.color = teamColor;
-                }
-            }
+            if (_captureZoneCircle != null) _captureZoneCircle.sharedMaterial.color = ZoneColor(teamColor);
         }
+
+        /// <summary>HDR-цвет кольца зоны: чуть ярче 1, чтобы bloom дал мягкое свечение.</summary>
+        private static Color ZoneColor(Color teamColor) => new Color(teamColor.r * 1.5f, teamColor.g * 1.5f, teamColor.b * 1.5f, 0.85f);
 
         public void UpdateCaptureVisual(BuildingState state)
         {
@@ -205,19 +172,19 @@ namespace Game.Presentation.Views
 
         private void UpdateCaptureArc(float progress, Color color)
         {
-            const int segments = 40;
-            int points = Mathf.Max(2, Mathf.CeilToInt(segments * progress));
-            _captureProgressArc.positionCount = points;
-            _captureProgressArc.startColor = color;
-            _captureProgressArc.endColor = color;
-            for (int index = 0; index < points; index++)
-            {
-                float angle = Mathf.Deg2Rad * (360f * index / (segments - 1));
-                _captureProgressArc.SetPosition(index, new Vector3(Mathf.Cos(angle) * _captureRadius, 0f, Mathf.Sin(angle) * _captureRadius));
-            }
+            _captureProgressArc.sharedMaterial.color = new Color(color.r * 2f, color.g * 2f, color.b * 2f, 1f);
+            // Пересобираем дугу только при видимом изменении — не каждый кадр.
+            if (Mathf.Abs(progress - _shownArcProgress) < 0.005f) return;
+            _shownArcProgress = progress;
+            FxLibrary.Ring(_captureRadius + 0.12f, _captureRadius + 0.4f, Mathf.Max(0.01f, progress), 64, _captureArcMesh);
         }
 
+        private static readonly Color SelectedRingColor = new Color(2.2f, 1.8f, 0.35f, 0.9f);
+
         [SerializeField] private GameObject _selectionMarker;
+        private MeshRenderer _selectionRing;
+        private Mesh _captureArcMesh;
+        private float _shownArcProgress = -1f;
         private bool _isSelected;
 
         public bool IsSelected => _isSelected;
@@ -248,18 +215,7 @@ namespace Game.Presentation.Views
                 _selectionMarker.SetActive(selected);
             }
 
-            Color activeColor = selected ? new Color(1.0f, 0.85f, 0.15f) : GetPlayerColor(_owner);
-            if (_captureZoneCircle != null)
-            {
-                _captureZoneCircle.startWidth = selected ? 0.45f : 0.15f;
-                _captureZoneCircle.endWidth = selected ? 0.45f : 0.15f;
-                _captureZoneCircle.startColor = activeColor;
-                _captureZoneCircle.endColor = activeColor;
-                if (_captureZoneCircle.material != null)
-                {
-                    _captureZoneCircle.material.color = activeColor;
-                }
-            }
+            if (_selectionRing != null) _selectionRing.enabled = selected;
 
             if (_nameLabel != null)
             {

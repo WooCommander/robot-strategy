@@ -39,6 +39,7 @@ namespace Game.Presentation.Controllers
         private WeaponEffectsPool _weaponEffects;
         private CombatFeedbackView _combatFeedback;
         private SceneAtmosphere _atmosphere;
+        private PathPreviewView _pathPreview;
         private bool _isOrderMode;
         private bool _matchResultReported;
         private RobotState _drivenRobot;
@@ -65,7 +66,7 @@ namespace Game.Presentation.Controllers
             _simulation.Combat.OnDamageDealt += HandleDamageDealt;
             _simulation.Combat.OnNuclearDetonated += (carrier, center, radius) =>
             {
-                if (IsVisibleToPlayer(center)) _weaponEffects.PlayNuclearBlast(center, radius);
+                if (IsVisibleToPlayer(center)) _weaponEffects.PlayNuclearBlast(ToEffectPoint(center, 0.6f), radius);
             };
             _simulation.Capture.OnBuildingCaptured += HandleBuildingCaptured;
             _simulation.StepCompleted += HandleSimulationStep;
@@ -128,6 +129,8 @@ namespace Game.Presentation.Controllers
             _hudView.OnSelectPlayerBaseRequested += HandleSelectPlayerBaseFromHud;
             _hudView.OnMinimapPointRequested += point => _cameraController?.FocusOn(point.X, point.Y, instant: false);
             _combatFeedback = new GameObject("CombatFeedback").AddComponent<CombatFeedbackView>();
+            _pathPreview = new GameObject("PathPreview").AddComponent<PathPreviewView>();
+            _pathPreview.Initialize(GetSurfaceHeight);
 
             // На старте ничего не выбрано — экран чистый
             _currentlySelectedBuilding = null;
@@ -154,6 +157,7 @@ namespace Game.Presentation.Controllers
 
             _mapRenderer.UpdateFog(MatchState);
             UpdateEntityVisibility();
+            _pathPreview?.Show(_currentlySelectedRobot);
             UpdateCombatAndCaptureVisuals();
             if (!_matchResultReported && MatchState.Result != MatchResult.InProgress)
             {
@@ -341,10 +345,19 @@ namespace Game.Presentation.Controllers
 
         private float GetSurfaceHeight(SimVector2 position) => _mapRenderer.SampleSurfaceHeight(position.X, position.Y);
 
+        // Высоты точек эффектов над поверхностью: ствол и центр корпуса робота.
+        private const float MuzzleHeight = 0.85f;
+        private const float HitHeight = 0.6f;
+
+        private Vector3 ToEffectPoint(SimVector2 position, float lift) =>
+            new Vector3(position.X, Mathf.Max(0f, GetSurfaceHeight(position)) + lift, position.Y);
+
         private void HandleRobotDestroyed(RobotState attacker, RobotState target)
         {
             if (_spawnedRobots.Remove(target.Id.Value, out var view) && view != null)
             {
+                if (target.Owner == PlayerId.Player1 || IsVisibleToPlayer(target.Position))
+                    _weaponEffects.PlayExplosion(view.transform.position + Vector3.up * HitHeight);
                 Destroy(view.gameObject);
             }
 
@@ -385,12 +398,12 @@ namespace Game.Presentation.Controllers
         {
             if (_spawnedRobots.TryGetValue(attacker.Id.Value, out RobotView shooter) && shooter != null) shooter.AimAt(target.Position);
             if (IsVisibleToPlayer(attacker.Position) || IsVisibleToPlayer(target.Position))
-                _weaponEffects.PlayLaunch(attacker.Position, target.Position, weaponType);
+                _weaponEffects.PlayLaunch(ToEffectPoint(attacker.Position, MuzzleHeight), ToEffectPoint(target.Position, HitHeight), weaponType);
         }
 
         private void HandleProjectileImpact(RobotState attacker, SimVector2 impactPosition, WeaponType weaponType)
         {
-            if (IsVisibleToPlayer(impactPosition)) _weaponEffects.PlayImpact(impactPosition, weaponType);
+            if (IsVisibleToPlayer(impactPosition)) _weaponEffects.PlayImpact(ToEffectPoint(impactPosition, HitHeight), weaponType);
         }
 
         private void HandleDamageDealt(RobotState target, int damage)

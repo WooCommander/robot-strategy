@@ -13,7 +13,7 @@ namespace Game.Presentation.Views
         [SerializeField] private PlayerId _owner;
 
         [Header("Components")]
-        [SerializeField] private LineRenderer _selectionRing;
+        [SerializeField] private MeshRenderer _selectionRing;
         [SerializeField] private LineRenderer _healthBarBg;
         [SerializeField] private LineRenderer _healthBarFill;
         private Transform _healthBarRoot;
@@ -57,36 +57,18 @@ namespace Game.Presentation.Views
 
             CreateSelectionRing();
             CreateHealthBar(modelHeight + 0.35f);
+            // Гусеницы поднимают пыль сильнее, шагающие — слабее, антиграв не касается земли.
+            if (state.Mobility != MobilityClass.Hover)
+                FxLibrary.CreateDustTrail(transform, state.Mobility == MobilityClass.Tracked ? 5f : 2.5f);
             SetSelected(false);
             UpdateHealthVisual();
         }
 
+        /// <summary>Светящееся кольцо на земле: голубое у своих, красное у чужих (HDR-цвет — для bloom).</summary>
         private void CreateSelectionRing()
         {
-            var ringObj = new GameObject("SelectionRing");
-            ringObj.transform.SetParent(transform, false);
-            ringObj.transform.localPosition = new Vector3(0f, 0.05f, 0f);
-
-            _selectionRing = ringObj.AddComponent<LineRenderer>();
-            _selectionRing.useWorldSpace = false;
-            _selectionRing.loop = true;
-            _selectionRing.startWidth = 0.08f;
-            _selectionRing.endWidth = 0.08f;
-
-            var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");
-            _selectionRing.material = new Material(shader);
-            Color selColor = new Color(0.2f, 1f, 0.3f); // Ярко-зелёный маркер выбора
-            _selectionRing.startColor = selColor;
-            _selectionRing.endColor = selColor;
-
-            const int segments = 32;
-            _selectionRing.positionCount = segments;
-            float step = 360f / segments;
-            for (int i = 0; i < segments; i++)
-            {
-                float rad = Mathf.Deg2Rad * (i * step);
-                _selectionRing.SetPosition(i, new Vector3(Mathf.Cos(rad) * 0.9f, 0f, Mathf.Sin(rad) * 0.9f));
-            }
+            Color ringColor = _owner == PlayerId.Player1 ? new Color(0.4f, 1.6f, 2.2f) : new Color(2.2f, 0.5f, 0.45f);
+            _selectionRing = FxLibrary.CreateGroundRing("SelectionRing", transform, 0.72f, 0.95f, ringColor);
         }
 
         /// <summary>Повернуть башню к цели выстрела.</summary>

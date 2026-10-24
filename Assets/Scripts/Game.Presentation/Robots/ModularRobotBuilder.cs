@@ -73,7 +73,7 @@ namespace Game.Presentation.Robots
             if (radarHeight >= 0f)
             {
                 Transform radar = AddPart(turret, "Radar", GetMesh("radar", BuildRadar), material).transform;
-                radar.localPosition = new Vector3(-0.12f, radarHeight, -0.1f);
+                radar.localPosition = new Vector3(RadarX, radarHeight, RadarZ);
                 rig.Radar = radar;
             }
 
@@ -256,6 +256,10 @@ namespace Game.Presentation.Robots
         /// Строит ярусы над шасси и возвращает их общую высоту. builder = null — только расчёт высот.
         /// radarHeight — высота площадки радара (−1, если электроники нет).
         /// </summary>
+        // Блок электроники и радар над ним.
+        private const float RadarX = -0.1f;
+        private const float RadarZ = -0.08f;
+
         private static float BuildTurretStack(LowPolyMeshBuilder b, RobotBlueprint blueprint, out float radarHeight)
         {
             radarHeight = -1f;
@@ -269,7 +273,7 @@ namespace Game.Presentation.Robots
             }
             if (blueprint != null && blueprint.HasElectronics)
             {
-                radarHeight = y + 0.16f;
+                radarHeight = y + 0.23f;
                 y += Electronics(b, y);
             }
             if (blueprint != null && blueprint.HasNuclear) y += Nuclear(b, y);
@@ -316,59 +320,124 @@ namespace Game.Presentation.Robots
             return height;
         }
 
+        /// <summary>
+        /// Ракетный блок по эскизу «четырёхствольная ракетная турель»: бронированный контейнер, спереди четыре трубы 2×2
+        /// в восьмигранных обоймах с красными головками и жёлтыми кольцами, сзади блок с рукоятью, на борту панель с шевроном.
+        /// </summary>
         private static float Missiles(LowPolyMeshBuilder b, float y)
         {
-            if (b == null) return 0.32f;
-            b.Box(I, new Vector3(0f, y + 0.16f, 0f), new Vector3(0.6f, 0.3f, 0.5f), Swatch.MetalMid);
+            const float height = 0.34f;
+            if (b == null) return height;
+
+            b.ChamferBox(I, new Vector3(0f, y + 0.17f, -0.06f), new Vector3(0.56f, 0.3f, 0.48f), 0.045f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0f, y + 0.17f, -0.33f), new Vector3(0.48f, 0.24f, 0.08f), 0.025f, Swatch.MetalDark);
+            b.Box(I, new Vector3(0f, y + 0.17f, -0.38f), new Vector3(0.22f, 0.025f, 0.025f), Swatch.Steel);
+            foreach (float x in new[] { -0.11f, 0.11f })
+                b.Box(I, new Vector3(x, y + 0.17f, -0.36f), new Vector3(0.025f, 0.025f, 0.05f), Swatch.Steel);
+
+            // Бортовые панели с шевроном и решётка на крыше.
             foreach (float side in new[] { -1f, 1f })
-                b.Box(I, new Vector3(side * 0.31f, y + 0.16f, 0f), new Vector3(0.03f, 0.22f, 0.4f), Swatch.TeamAccent);
-            b.Box(I, new Vector3(0f, y + 0.16f, 0.255f), new Vector3(0.5f, 0.24f, 0.02f), Swatch.MetalDark);
-            foreach (float row in new[] { 0.1f, 0.22f })
             {
-                foreach (float x in new[] { -0.16f, 0f, 0.16f })
-                    b.Cylinder(At(new Vector3(x, y + row, 0.26f), AlongZ), Vector3.zero, 0.045f, 0.015f, 0.08f, 6, Swatch.Hazard, Swatch.Hazard);
+                var panel = new Vector3(side * 0.288f, y + 0.19f, -0.04f);
+                b.ChamferBox(I, panel, new Vector3(0.02f, 0.13f, 0.2f), 0.006f, Swatch.TeamAccent);
+                b.Chevron(panel + new Vector3(side * 0.01f, 0f, 0f), new Vector3(side, 0f, 0f), Vector3.up, 0.09f, Swatch.ArmorWhite);
             }
-            b.Box(I, new Vector3(0f, y + 0.315f, -0.12f), new Vector3(0.36f, 0.01f, 0.08f), Swatch.Hazard);
-            return 0.32f;
+            b.Box(I, new Vector3(0f, y + 0.325f, -0.1f), new Vector3(0.22f, 0.01f, 0.14f), Swatch.Grille);
+            for (int slat = 0; slat < 4; slat++)
+                b.Box(I, new Vector3(0f, y + 0.332f, -0.155f + slat * 0.036f), new Vector3(0.2f, 0.01f, 0.012f), Swatch.MetalDark);
+
+            // Четыре трубы: обойма, корпус ракеты, жёлтое кольцо, красная головка.
+            foreach (float row in new[] { 0.1f, 0.245f })
+            {
+                foreach (float x in new[] { -0.135f, 0.135f })
+                {
+                    var tube = new Vector3(x, y + row, 0.24f);
+                    b.ChamferBox(I, tube, new Vector3(0.22f, 0.135f, 0.16f), 0.035f, Swatch.MetalDark, Swatch.ArmorGrey);
+                    b.Cylinder(At(tube + new Vector3(0f, 0f, 0.07f), AlongZ), Vector3.zero, 0.052f, 0.05f, 8, Swatch.Grille);
+                    b.Cylinder(At(tube + new Vector3(0f, 0f, 0.1f), AlongZ), Vector3.zero, 0.054f, 0.015f, 8, Swatch.Hazard);
+                    b.Cylinder(At(tube + new Vector3(0f, 0f, 0.115f), AlongZ), Vector3.zero, 0.05f, 0.012f, 0.07f, 8, Swatch.Warhead, Swatch.Warhead);
+                }
+            }
+            return height;
         }
 
+        /// <summary>
+        /// Фазер по эскизу «турель-рельсотрон»: корпус со скошенной бортовой панелью, передний блок,
+        /// длинная направляющая с тёмным пазом, бандажи со светящимися огнями и дульный блок.
+        /// </summary>
         private static float Phaser(LowPolyMeshBuilder b, float y)
         {
-            if (b == null) return 0.26f;
-            b.Frustum(I, new Vector3(0f, y, -0.05f), new Vector2(0.5f, 0.5f), new Vector2(0.38f, 0.4f), 0.24f, Vector2.zero, Swatch.MetalLight, Swatch.MetalMid);
-            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.15f), AlongZ), Vector3.zero, 0.09f, 0.07f, 0.35f, 8, Swatch.MetalDark, Swatch.MetalDark);
-            foreach (float z in new[] { 0.24f, 0.36f })
-                b.Cylinder(At(new Vector3(0f, y + 0.12f, z), AlongZ), Vector3.zero, 0.12f, 0.04f, 8, Swatch.TeamAccent);
-            b.Cylinder(At(new Vector3(0f, y + 0.12f, 0.5f), AlongZ), Vector3.zero, 0.075f, 0.03f, 8, Swatch.Glow);
-            return 0.26f;
+            const float height = 0.3f;
+            if (b == null) return height;
+
+            b.ChamferBox(I, new Vector3(0f, y + 0.14f, -0.1f), new Vector3(0.5f, 0.26f, 0.46f), 0.045f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0.03f, y + 0.27f, -0.14f), new Vector3(0.3f, 0.06f, 0.26f), 0.02f, Swatch.MetalDark, Swatch.ArmorGrey);
+            foreach (float side in new[] { -1f, 1f })
+            {
+                var panel = new Vector3(side * 0.258f, y + 0.14f, -0.1f);
+                b.ChamferBox(I, panel, new Vector3(0.02f, 0.18f, 0.3f), 0.006f, Swatch.TeamAccent);
+                b.Chevron(panel + new Vector3(side * 0.01f, 0f, 0f), new Vector3(side, 0f, 0f), Vector3.up, 0.1f, Swatch.ArmorWhite);
+            }
+
+            // Передний блок и направляющая: светлая рейка с тёмным пазом посередине.
+            b.ChamferBox(I, new Vector3(0f, y + 0.13f, 0.18f), new Vector3(0.26f, 0.2f, 0.16f), 0.035f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, new Vector3(0f, y + 0.13f, 0.54f), new Vector3(0.15f, 0.11f, 0.58f), 0.025f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.Box(I, new Vector3(0f, y + 0.13f, 0.54f), new Vector3(0.156f, 0.03f, 0.56f), Swatch.Grille);
+            foreach (float z in new[] { 0.38f, 0.62f })
+            {
+                b.ChamferBox(I, new Vector3(0f, y + 0.13f, z), new Vector3(0.19f, 0.15f, 0.05f), 0.015f, Swatch.MetalDark);
+                b.Box(I, new Vector3(0f, y + 0.055f, z), new Vector3(0.05f, 0.006f, 0.02f), Swatch.Glow);
+            }
+            b.ChamferBox(I, new Vector3(0f, y + 0.13f, 0.87f), new Vector3(0.18f, 0.14f, 0.1f), 0.03f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.Cylinder(At(new Vector3(0f, y + 0.13f, 0.92f), AlongZ), Vector3.zero, 0.045f, 0.004f, 8, Swatch.Glow);
+
+            // Антенна с огнём и янтарная метка на переднем блоке.
+            b.Cylinder(I, new Vector3(-0.19f, y + 0.27f, -0.26f), 0.014f, 0.3f, 5, Swatch.Steel);
+            b.Cylinder(I, new Vector3(-0.19f, y + 0.5f, -0.26f), 0.018f, 0.04f, 5, Swatch.Glow);
+            b.Box(I, new Vector3(0.09f, y + 0.08f, 0.262f), new Vector3(0.03f, 0.02f, 0.006f), Swatch.Lamp);
+            return height;
         }
 
+        /// <summary>Электроника: блок датчиков со светящейся панелью и угловыми накладками, антенна; радар ставится сверху.</summary>
         private static float Electronics(LowPolyMeshBuilder b, float y)
         {
-            if (b == null) return 0.28f;
-            b.Box(I, new Vector3(-0.12f, y + 0.08f, -0.1f), new Vector3(0.26f, 0.16f, 0.26f), Swatch.MetalMid);
-            b.Box(I, new Vector3(-0.12f, y + 0.1f, 0.035f), new Vector3(0.18f, 0.03f, 0.01f), Swatch.Glow);
-            b.Cylinder(I, new Vector3(0.18f, y, -0.15f), 0.015f, 0.45f, 4, Swatch.MetalDark);
-            b.Box(I, new Vector3(0.18f, y + 0.47f, -0.15f), new Vector3(0.05f, 0.05f, 0.05f), Swatch.Glow);
-            return 0.28f;
+            const float height = 0.3f;
+            if (b == null) return height;
+            var box = new Vector3(RadarX, y + 0.12f, RadarZ);
+            b.ChamferBox(I, box, new Vector3(0.3f, 0.22f, 0.28f), 0.04f, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.ChamferBox(I, box + new Vector3(0f, 0f, 0.14f), new Vector3(0.18f, 0.12f, 0.012f), 0.01f, Swatch.Glow);
+            foreach (float x in new[] { -0.15f, 0.15f })
+                b.ChamferBox(I, box + new Vector3(x, 0f, 0f), new Vector3(0.03f, 0.2f, 0.24f), 0.01f, Swatch.MetalDark);
+            b.Box(I, box + new Vector3(0f, -0.05f, 0.141f), new Vector3(0.16f, 0.02f, 0.006f), Swatch.TeamAccent);
+            b.Cylinder(I, new Vector3(0.18f, y, -0.15f), 0.014f, 0.45f, 5, Swatch.Steel);
+            b.Cylinder(I, new Vector3(0.18f, y + 0.42f, -0.15f), 0.02f, 0.05f, 5, Swatch.Glow);
+            return height;
         }
 
         /// <summary>Радар отдельным мешем: его вращает <see cref="RobotModelRig"/>.</summary>
         private static void BuildRadar(LowPolyMeshBuilder b)
         {
-            b.Cylinder(I, Vector3.zero, 0.03f, 0.1f, 6, Swatch.MetalDark);
-            b.Cylinder(At(new Vector3(0f, 0.12f, 0f), Quaternion.Euler(-60f, 0f, 0f)), Vector3.zero, 0.04f, 0.17f, 0.06f, 8, Swatch.MetalLight, Swatch.MetalLight);
-            b.Box(I, new Vector3(0f, 0.16f, 0.06f), new Vector3(0.03f, 0.03f, 0.03f), Swatch.Glow);
+            b.Cylinder(I, Vector3.zero, 0.05f, 0.04f, 8, Swatch.MetalDark);
+            b.Cylinder(I, Vector3.zero, 0.022f, 0.12f, 6, Swatch.Steel);
+            b.Cylinder(At(new Vector3(0f, 0.13f, 0f), Quaternion.Euler(-60f, 0f, 0f)), Vector3.zero, 0.04f, 0.17f, 0.05f, 10, Swatch.ArmorGrey, Swatch.ArmorWhite);
+            b.Cylinder(At(new Vector3(0f, 0.15f, 0.03f), Quaternion.Euler(-60f, 0f, 0f)), Vector3.zero, 0.012f, 0.1f, 4, Swatch.Steel);
+            b.Box(I, new Vector3(0f, 0.2f, 0.09f), new Vector3(0.025f, 0.025f, 0.025f), Swatch.Glow);
         }
 
+        /// <summary>Ядерный заряд: жёлто-чёрный контейнер на опорной плите, с ручками и светящимся окном.</summary>
         private static float Nuclear(LowPolyMeshBuilder b, float y)
         {
-            if (b == null) return 0.38f;
-            b.Cylinder(I, new Vector3(0f, y, 0f), 0.17f, 0.17f, 0.32f, 8, Swatch.Hazard, Swatch.MetalDark);
-            foreach (float band in new[] { 0.07f, 0.21f })
-                b.Cylinder(I, new Vector3(0f, y + band, 0f), 0.18f, 0.04f, 8, Swatch.MetalDark);
-            b.Cylinder(I, new Vector3(0f, y + 0.32f, 0f), 0.12f, 0.06f, 8, Swatch.Glow);
-            return 0.38f;
+            const float height = 0.42f;
+            if (b == null) return height;
+            b.ChamferBox(I, new Vector3(0f, y + 0.03f, 0f), new Vector3(0.36f, 0.06f, 0.36f), 0.02f, Swatch.MetalDark, Swatch.ArmorGrey);
+            b.Cylinder(I, new Vector3(0f, y + 0.06f, 0f), 0.16f, 0.3f, 10, Swatch.Hazard);
+            foreach (float band in new[] { 0.1f, 0.24f })
+                b.Cylinder(I, new Vector3(0f, y + band, 0f), 0.168f, 0.04f, 10, Swatch.MetalDark);
+            b.Cylinder(I, new Vector3(0f, y + 0.36f, 0f), 0.16f, 0.1f, 0.04f, 10, Swatch.ArmorGrey, Swatch.MetalDark);
+            b.Cylinder(I, new Vector3(0f, y + 0.4f, 0f), 0.07f, 0.02f, 8, Swatch.Glow);
+            foreach (float side in new[] { -1f, 1f })
+                b.Box(I, new Vector3(side * 0.18f, y + 0.2f, 0f), new Vector3(0.025f, 0.12f, 0.06f), Swatch.Steel);
+            return height;
         }
     }
 }

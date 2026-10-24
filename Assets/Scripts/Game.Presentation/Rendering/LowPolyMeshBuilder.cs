@@ -18,10 +18,10 @@ namespace Game.Presentation.Rendering
         {
             Bark, PineDark, PineMid, PineLight, RockDark, RockLight, Bush, Concrete,
             MetalLight, MetalMid, MetalDark, Rubber, TeamAccent, TeamDark, Glow, Hazard,
-            ArmorWhite, ArmorGrey, Steel, Grille
+            ArmorWhite, ArmorGrey, Steel, Grille, Warhead, Lamp
         }
 
-        private const int SwatchCount = 20;
+        private const int SwatchCount = 22;
         private static readonly Color32[] SwatchColors =
         {
             new Color32(92, 64, 44, 255),     // Bark
@@ -44,6 +44,8 @@ namespace Game.Presentation.Rendering
             new Color32(148, 147, 143, 255),  // ArmorGrey — затенённые и вторичные плиты
             new Color32(142, 145, 150, 255),  // Steel — траки, шарниры, ступицы
             new Color32(36, 38, 42, 255),     // Grille — решётки, ниши, дульные срезы
+            new Color32(196, 62, 34, 255),    // Warhead — головки ракет
+            new Color32(232, 150, 46, 255),   // Lamp — янтарные огни и метки
         };
 
         private readonly List<Vector3> _vertices = new List<Vector3>();

@@ -2,6 +2,7 @@ using UnityEngine;
 using Game.Content.Definitions;
 using Game.Core.Models;
 using Game.Core.Types;
+using Game.Presentation.Rendering;
 using Game.Presentation.Views;
 
 namespace Game.Presentation.Robots
@@ -15,9 +16,9 @@ namespace Game.Presentation.Robots
         public static GameObject BuildRobotModel(RobotBlueprint blueprint, PlayerId owner)
         {
             var root = new GameObject($"Robot_{blueprint?.Name ?? "Modular"}");
-            var teamMat = CreateSimpleMaterial(BuildingView.GetPlayerColor(owner), "Mat_TeamColor");
-            var darkMat = CreateSimpleMaterial(new Color(0.2f, 0.22f, 0.25f), "Mat_DarkMetal");
-            var lightMat = CreateSimpleMaterial(new Color(0.55f, 0.58f, 0.62f), "Mat_LightMetal");
+            var teamMat = MaterialFactory.CreateLit("Mat_TeamColor", BuildingView.GetPlayerColor(owner), 0.3f, 0.55f);
+            var darkMat = MaterialFactory.CreateLit("Mat_DarkMetal", new Color(0.2f, 0.22f, 0.25f), 0.75f, 0.45f);
+            var lightMat = MaterialFactory.CreateLit("Mat_LightMetal", new Color(0.55f, 0.58f, 0.62f), 0.65f, 0.5f);
 
             float height = BuildChassis(root.transform, blueprint?.ChassisId, darkMat, lightMat, teamMat);
             if (blueprint?.WeaponIds != null)
@@ -35,7 +36,7 @@ namespace Game.Presentation.Robots
             }
             if (blueprint != null && blueprint.HasNuclear)
             {
-                var nuclearMat = CreateSimpleMaterial(new Color(0.95f, 0.8f, 0.1f), "Mat_Nuclear");
+                var nuclearMat = MaterialFactory.CreateEmissive("Mat_Nuclear", new Color(0.95f, 0.8f, 0.1f), 1.5f);
                 AddPart(root.transform, "Nuclear_Core", PrimitiveType.Sphere, new Vector3(0f, height + 0.22f, 0f), Vector3.one * 0.45f, nuclearMat);
                 height += 0.45f;
             }
@@ -91,7 +92,7 @@ namespace Game.Presentation.Robots
             if (weaponId == DefaultContentCatalog.WeaponPhasers)
             {
                 AddPart(mount, "Phaser_Housing", PrimitiveType.Cube, new Vector3(0f, 0.14f, 0f), new Vector3(0.6f, 0.26f, 0.6f), darkMat);
-                var lens = AddPart(mount, "Phaser_Emitter", PrimitiveType.Cylinder, new Vector3(0f, 0.14f, 0.45f), new Vector3(0.22f, 0.15f, 0.22f), CreateSimpleMaterial(new Color(0.3f, 0.95f, 1f), "Mat_Phaser"));
+                var lens = AddPart(mount, "Phaser_Emitter", PrimitiveType.Cylinder, new Vector3(0f, 0.14f, 0.45f), new Vector3(0.22f, 0.15f, 0.22f), MaterialFactory.CreateEmissive("Mat_Phaser", new Color(0.3f, 0.95f, 1f), 3f));
                 lens.transform.localRotation = Quaternion.Euler(90f, 0f, 0f);
                 return baseHeight + 0.28f;
             }
@@ -111,16 +112,6 @@ namespace Game.Presentation.Robots
             part.transform.localScale = localScale;
             part.GetComponent<MeshRenderer>().sharedMaterial = material;
             return part;
-        }
-
-        private static Material CreateSimpleMaterial(Color color, string name)
-        {
-            var shader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
-            var mat = new Material(shader) { name = name };
-            mat.color = color;
-            if (mat.HasProperty("_BaseColor")) mat.SetColor("_BaseColor", color);
-            if (mat.HasProperty("_Color")) mat.SetColor("_Color", color);
-            return mat;
         }
     }
 }

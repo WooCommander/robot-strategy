@@ -8,6 +8,7 @@
         "Game.AI",
         "Game.Persistence",
         "Unity.InputSystem",
+        "Unity.RenderPipelines.Core.Runtime",
         "Unity.RenderPipelines.Universal.Runtime",
         "Unity.UGUI"
     ],

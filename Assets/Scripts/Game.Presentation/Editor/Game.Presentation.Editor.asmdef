@@ -5,7 +5,9 @@
         "Game.Core",
         "Game.Simulation",
         "Game.Content",
-        "Game.Presentation"
+        "Game.Presentation",
+        "Unity.RenderPipelines.Core.Runtime",
+        "Unity.RenderPipelines.Universal.Runtime"
     ],
     "includePlatforms": [
         "Editor"

@@ -1,6 +1,7 @@
 using UnityEngine;
 using Game.Core.Models;
 using Game.Core.Types;
+using Game.Presentation.Rendering;
 using Game.Presentation.Robots;
 
 namespace Game.Presentation.Views
@@ -177,7 +178,7 @@ namespace Game.Presentation.Views
             if (_healthBarRoot == null || UnityEngine.Camera.main == null) return;
             var cameraTransform = UnityEngine.Camera.main.transform;
             _healthBarRoot.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
-            float scale = Mathf.Clamp(UnityEngine.Camera.main.orthographicSize / 9f, 0.75f, 1.8f);
+            float scale = Mathf.Clamp(CameraZoom.ViewHalfHeight(UnityEngine.Camera.main, _healthBarRoot.position) / 9f, 0.75f, 1.8f);
             _healthBarRoot.localScale = Vector3.one * scale;
         }
 

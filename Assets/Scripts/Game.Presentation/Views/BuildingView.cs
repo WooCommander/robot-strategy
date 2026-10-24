@@ -2,6 +2,7 @@ using UnityEngine;
 using Game.Core.Models;
 using Game.Core.Types;
 using Game.Content.Definitions;
+using Game.Presentation.Rendering;
 
 namespace Game.Presentation.Views
 {
@@ -67,8 +68,7 @@ namespace Game.Presentation.Views
                 }
 
                 _buildingRenderer = body.GetComponent<MeshRenderer>();
-                var bShader = Shader.Find("Standard") ?? Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Unlit/Color");
-                _buildingRenderer.sharedMaterial = new Material(bShader);
+                _buildingRenderer.sharedMaterial = MaterialFactory.CreateLit("Mat_Building", Color.white, 0.4f, 0.35f);
 
                 // Удаляем коллайдер с дочернего объекта, чтобы он был строго на корне
                 var childCol = body.GetComponent<Collider>();
@@ -171,10 +171,7 @@ namespace Game.Presentation.Views
                 if (mCol != null) DestroyImmediate(mCol);
 
                 var mRen = _selectionMarker.GetComponent<MeshRenderer>();
-                var mShader = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color") ?? Shader.Find("Sprites/Default");
-                var mMat = new Material(mShader);
-                mMat.color = new Color(1.0f, 0.9f, 0.15f, 1.0f);
-                mRen.sharedMaterial = mMat;
+                mRen.sharedMaterial = MaterialFactory.CreateEmissive("Mat_SelectionMarker", new Color(1.0f, 0.9f, 0.15f, 1.0f), 2f);
                 _selectionMarker.SetActive(false);
             }
         }
@@ -250,7 +247,7 @@ namespace Game.Presentation.Views
             {
                 var cameraTransform = UnityEngine.Camera.main.transform;
                 _captureLabel.transform.rotation = Quaternion.LookRotation(cameraTransform.forward, cameraTransform.up);
-                float scale = Mathf.Clamp(UnityEngine.Camera.main.orthographicSize / 9f, 0.75f, 1.8f);
+                float scale = Mathf.Clamp(CameraZoom.ViewHalfHeight(UnityEngine.Camera.main, _captureLabel.transform.position) / 9f, 0.75f, 1.8f);
                 _captureLabel.transform.localScale = Vector3.one * scale;
             }
             if (_isSelected && _selectionMarker != null)

@@ -3,6 +3,7 @@ using UnityEngine;
 using Game.Content.Definitions;
 using Game.Core.Models;
 using Game.Core.Types;
+using Game.Presentation.Rendering;
 
 namespace Game.Presentation.Views
 {
@@ -100,34 +101,9 @@ namespace Game.Presentation.Views
                 _roughMaterial = CreateMaterial("Mat_Rough", new Color(0.55f, 0.47f, 0.3f));   // Каменистые неровности
         }
 
-        private Material CreateMaterial(string name, Color color)
-        {
-            Shader shader = Shader.Find("Standard");
-            if (shader == null || !shader.isSupported)
-            {
-                shader = Shader.Find("Universal Render Pipeline/Lit");
-            }
-            if (shader == null || !shader.isSupported)
-            {
-                shader = Shader.Find("Unlit/Color");
-            }
-            if (shader == null)
-            {
-                shader = Shader.Find("Sprites/Default");
-            }
-
-            var mat = new Material(shader) { name = name };
-            mat.color = color;
-            if (mat.HasProperty("_BaseColor"))
-            {
-                mat.SetColor("_BaseColor", color);
-            }
-            if (mat.HasProperty("_Color"))
-            {
-                mat.SetColor("_Color", color);
-            }
-            return mat;
-        }
+        // Вода гладкая и даёт блик солнца, остальная поверхность матовая.
+        private static Material CreateMaterial(string name, Color color) =>
+            MaterialFactory.CreateLit(name, color, 0f, name == "Mat_Water" ? 0.85f : 0.12f);
 
         private void GenerateMapGeometry(MapDefinition map)
         {

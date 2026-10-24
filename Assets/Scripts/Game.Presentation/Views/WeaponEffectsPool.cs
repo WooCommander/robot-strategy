@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using Game.Core.Types;
+using Game.Presentation.Rendering;
 
 namespace Game.Presentation.Views
 {
@@ -21,7 +22,7 @@ namespace Game.Presentation.Views
             if (_impactProperties == null) _impactProperties = new MaterialPropertyBlock();
             if (_traceMaterial != null) return;
             _traceMaterial = new Material(Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color"));
-            _impactMaterial = new Material(Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color"));
+            _impactMaterial = MaterialFactory.CreateUnlit("Mat_Impact", Color.white);
             for (int index = 0; index < prewarmCount; index++)
             {
                 _freeTraces.Enqueue(CreateTrace());

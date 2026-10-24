@@ -9,6 +9,7 @@ using Game.Core.Models;
 using Game.Core.Types;
 using EntityId = Game.Core.Types.EntityId;
 using Game.Presentation.Camera;
+using Game.Presentation.Rendering;
 using Game.Presentation.Views;
 using Game.Persistence;
 using Game.Simulation.Systems;
@@ -37,6 +38,7 @@ namespace Game.Presentation.Controllers
         private BattleHudView _hudView;
         private WeaponEffectsPool _weaponEffects;
         private CombatFeedbackView _combatFeedback;
+        private SceneAtmosphere _atmosphere;
         private bool _isOrderMode;
         private bool _matchResultReported;
         private RobotState _drivenRobot;
@@ -88,6 +90,9 @@ namespace Game.Presentation.Controllers
                     _cameraController = UnityEngine.Camera.main.gameObject.AddComponent<RtsCameraController>();
                 }
             }
+
+            if (_atmosphere == null) _atmosphere = gameObject.AddComponent<SceneAtmosphere>();
+            _atmosphere.Apply(_cameraController != null ? _cameraController.GetComponent<UnityEngine.Camera>() : UnityEngine.Camera.main);
 
             if (_cameraController != null)
             {

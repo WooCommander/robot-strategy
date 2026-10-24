@@ -1,31 +1,32 @@
 using System.Collections.Generic;
 using UnityEngine;
-using Game.Content.Definitions;
+using UnityEngine.Rendering;
 using Game.Core.Models;
 using Game.Core.Types;
 using Game.Presentation.Rendering;
 
 namespace Game.Presentation.Views
 {
+    /// <summary>
+    /// Строит визуал карты: рельеф с цветовой картой, воду, мосты, декор, здания и слой тумана войны.
+    /// Всё генерируется из <see cref="MapDefinition"/> детерминированно и не влияет на симуляцию.
+    /// </summary>
     public class MapRenderer : MonoBehaviour
     {
-        [Header("Materials / Shaders")]
-        [SerializeField] private Material _groundMaterial;
-        [SerializeField] private Material _roadMaterial;
-        [SerializeField] private Material _mountainMaterial;
-        [SerializeField] private Material _waterMaterial;
-        [SerializeField] private Material _bridgeMaterial;
-        [SerializeField] private Material _crackMaterial;
-        [SerializeField] private Material _roughMaterial;
+        /// <summary>Подъём слоя тумана над рельефом: накрывает валуны и кусты, но почти не сдвигается от наклона камеры.</summary>
+        private const float FogLift = 0.35f;
+        /// <summary>Над скалами (выше порога) туман поднят сильнее: там лежат валуны.</summary>
+        private const float RockyFogLift = 0.6f;
+        private const float RockyFogThreshold = 0.5f;
 
         [Header("Prefabs / Templates")]
         [SerializeField] private BuildingView _buildingPrefab;
 
         private readonly List<BuildingView> _spawnedBuildings = new List<BuildingView>();
+        private readonly List<Object> _generatedAssets = new List<Object>();
+        private TerrainField _terrain;
         private Texture2D _fogTexture;
         private Color32[] _fogPixels;
-        private Material _fogMaterial;
-        private Mesh _fogMesh;
         private int _lastFogTick = -1;
 
         public IReadOnlyList<BuildingView> SpawnedBuildings => _spawnedBuildings;
@@ -35,33 +36,17 @@ namespace Game.Presentation.Views
         {
             if (map == null) return;
 
-            EnsureMaterials();
-            GenerateMapGeometry(map);
+            ClearGenerated();
+            _terrain = new TerrainField(map);
+            BuildTerrain();
+            BuildWater(map);
+            BuildBridgesAndDecor(map);
             SpawnBuildings(map);
             CreateFogOverlay(map);
         }
 
-        private void CreateFogOverlay(MapDefinition map)
-        {
-            _fogTexture = new Texture2D(map.Width, map.Height, TextureFormat.RGBA32, false)
-            {
-                name = "FogOfWar", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp
-            };
-            _fogPixels = new Color32[map.Width * map.Height];
-            var go = new GameObject("FogOfWarOverlay");
-            go.transform.SetParent(transform, false);
-            float width = map.Width * map.TileSize, height = map.Height * map.TileSize;
-            _fogMesh = new Mesh { name = "FogOfWarMesh" };
-            _fogMesh.vertices = new[] { new Vector3(0f, 3.2f, 0f), new Vector3(width, 3.2f, 0f), new Vector3(width, 3.2f, height), new Vector3(0f, 3.2f, height) };
-            _fogMesh.uv = new[] { Vector2.zero, Vector2.right, Vector2.one, Vector2.up };
-            _fogMesh.triangles = new[] { 0, 2, 1, 0, 3, 2 };
-            _fogMesh.RecalculateNormals();
-            go.AddComponent<MeshFilter>().sharedMesh = _fogMesh;
-            Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent");
-            _fogMaterial = new Material(shader) { name = "FogOfWarMaterial", mainTexture = _fogTexture, renderQueue = 3100 };
-            go.AddComponent<MeshRenderer>().sharedMaterial = _fogMaterial;
-            _lastFogTick = -1;
-        }
+        /// <summary>Высота, на которой стоит робот: по рельефу, над водой — по её поверхности.</summary>
+        public float SampleSurfaceHeight(float x, float z) => _terrain?.SampleSurface(x, z) ?? 0f;
 
         public void UpdateFog(MatchState state)
         {
@@ -69,163 +54,221 @@ namespace Game.Presentation.Views
             FogOfWarState fog = state.FogOfWar;
             if (fog.Player1Cells == null || fog.Player1Cells.Length != _fogPixels.Length) return;
             for (int i = 0; i < _fogPixels.Length; i++)
-                _fogPixels[i] = fog.Player1Cells[i] == 2 ? new Color32(0, 0, 0, 0) :
-                    fog.Player1Cells[i] == 1 ? new Color32(0, 0, 0, 155) : new Color32(0, 0, 0, 245);
+                _fogPixels[i] = fog.Player1Cells[i] == 2 ? new Color32(8, 12, 18, 0) :
+                    fog.Player1Cells[i] == 1 ? new Color32(8, 12, 18, 150) : new Color32(8, 12, 18, 240);
             _fogTexture.SetPixels32(_fogPixels);
             _fogTexture.Apply(false, false);
             _lastFogTick = state.Tick;
         }
 
-        private void OnDestroy()
+        private void OnDestroy() => ClearGenerated();
+
+        private void ClearGenerated()
         {
-            if (_fogTexture != null) Destroy(_fogTexture);
-            if (_fogMaterial != null) Destroy(_fogMaterial);
-            if (_fogMesh != null) Destroy(_fogMesh);
+            for (int i = transform.childCount - 1; i >= 0; i--) Destroy(transform.GetChild(i).gameObject);
+            foreach (Object asset in _generatedAssets)
+            {
+                if (asset != null) Destroy(asset);
+            }
+            _generatedAssets.Clear();
+            _spawnedBuildings.Clear();
         }
 
-        private void EnsureMaterials()
+        private T Track<T>(T asset) where T : Object
         {
-            if (_groundMaterial == null)
-                _groundMaterial = CreateMaterial("Mat_Ground", new Color(0.28f, 0.48f, 0.22f)); // Сочный зелёный
-            if (_roadMaterial == null)
-                _roadMaterial = CreateMaterial("Mat_Road", new Color(0.24f, 0.24f, 0.28f));     // Тёмный асфальт
-            if (_mountainMaterial == null)
-                _mountainMaterial = CreateMaterial("Mat_Mountain", new Color(0.52f, 0.46f, 0.38f)); // Камень
-            if (_waterMaterial == null)
-                _waterMaterial = CreateMaterial("Mat_Water", new Color(0.18f, 0.45f, 0.85f));   // Вода
-            if (_bridgeMaterial == null)
-                _bridgeMaterial = CreateMaterial("Mat_Bridge", new Color(0.65f, 0.55f, 0.42f)); // Мост
-            if (_crackMaterial == null)
-                _crackMaterial = CreateMaterial("Mat_Crack", new Color(0.12f, 0.09f, 0.07f));  // Тёмный разлом
-            if (_roughMaterial == null)
-                _roughMaterial = CreateMaterial("Mat_Rough", new Color(0.55f, 0.47f, 0.3f));   // Каменистые неровности
+            _generatedAssets.Add(asset);
+            return asset;
         }
 
-        // Вода гладкая и даёт блик солнца, остальная поверхность матовая.
-        private static Material CreateMaterial(string name, Color color) =>
-            MaterialFactory.CreateLit(name, color, 0f, name == "Mat_Water" ? 0.85f : 0.12f);
-
-        private void GenerateMapGeometry(MapDefinition map)
+        private void BuildTerrain()
         {
-            // Очищаем старые дочерние объекты
-            for (int i = transform.childCount - 1; i >= 0; i--)
+            int countX = _terrain.VertexCountX, countZ = _terrain.VertexCountZ;
+            var vertices = new Vector3[countX * countZ];
+            var uvs = new Vector2[vertices.Length];
+            for (int iz = 0; iz < countZ; iz++)
             {
-                DestroyImmediate(transform.GetChild(i).gameObject);
-            }
-
-            // Генерируем 5 комбинированных мешей (по одному на каждый тип поверхности) для минимизации Draw Calls
-            var tileMeshes = new Dictionary<TileType, (List<Vector3> verts, List<int> tris, List<Vector3> norms)>();
-            foreach (TileType t in System.Enum.GetValues(typeof(TileType)))
-            {
-                tileMeshes[t] = (new List<Vector3>(), new List<int>(), new List<Vector3>());
-            }
-
-            float sz = map.TileSize;
-
-            for (int y = 0; y < map.Height; y++)
-            {
-                for (int x = 0; x < map.Width; x++)
+                for (int ix = 0; ix < countX; ix++)
                 {
-                    var type = map.GetTile(x, y);
-                    var (verts, tris, norms) = tileMeshes[type];
-
-                    float heightOffset = GetTileHeight(type);
-                    AddTileQuad(verts, tris, norms, x * sz, y * sz, sz, heightOffset, type == TileType.Mountain);
+                    int index = iz * countX + ix;
+                    vertices[index] = _terrain.GetVertex(ix, iz);
+                    uvs[index] = new Vector2((float)ix / (countX - 1), (float)iz / (countZ - 1));
                 }
             }
 
-            // Создаем объекты с MeshRenderer для каждого типа тайла
-            CreateSubMeshObject("Terrain_Ground", tileMeshes[TileType.Ground], _groundMaterial);
-            CreateSubMeshObject("Terrain_Road", tileMeshes[TileType.Road], _roadMaterial);
-            CreateSubMeshObject("Terrain_Mountains", tileMeshes[TileType.Mountain], _mountainMaterial);
-            CreateSubMeshObject("Terrain_Water", tileMeshes[TileType.Water], _waterMaterial);
-            CreateSubMeshObject("Terrain_Bridge", tileMeshes[TileType.Bridge], _bridgeMaterial);
-            CreateSubMeshObject("Terrain_Crack", tileMeshes[TileType.Crack], _crackMaterial);
-            CreateSubMeshObject("Terrain_Rough", tileMeshes[TileType.Rough], _roughMaterial);
-        }
+            var mesh = Track(new Mesh { name = "TerrainMesh", indexFormat = IndexFormat.UInt32 });
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = GridTriangles(countX, countZ);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
+            mesh.RecalculateBounds();
 
-        /// <summary>Высота поверхности клетки в мире; по ней визуал поднимает роботов над рельефом.</summary>
-        public static float GetTileHeight(TileType type) => type switch
-        {
-            TileType.Mountain => 1.5f,
-            TileType.Water => -0.2f,
-            TileType.Crack => -0.35f,
-            TileType.Rough => 0.12f,
-            _ => 0f
-        };
+            Texture2D albedo = Track(TerrainTextures.BuildAlbedo(_terrain));
+            Texture2D detail = Track(TerrainTextures.BuildDetailAlbedo());
+            Texture2D detailNormal = Track(TerrainTextures.BuildNormalMap("TerrainDetailNormal", 128, 8, 6f, 31));
+            // Один повтор деталей на две клетки.
+            var tiling = new Vector2(_terrain.CellCountX * 0.5f, _terrain.CellCountZ * 0.5f);
+            Material material = Track(MaterialFactory.CreateTerrain("Mat_Terrain", albedo, detail, detailNormal, tiling));
 
-        private void AddTileQuad(List<Vector3> verts, List<int> tris, List<Vector3> norms, float x, float z, float sz, float h, bool isCube)
-        {
-            int startIdx = verts.Count;
-
-            if (isCube)
-            {
-                // Для гор строим призму/куб с верхней и боковыми гранями
-                Vector3 p0 = new Vector3(x, 0, z);
-                Vector3 p1 = new Vector3(x + sz, 0, z);
-                Vector3 p2 = new Vector3(x + sz, 0, z + sz);
-                Vector3 p3 = new Vector3(x, 0, z + sz);
-
-                Vector3 t0 = new Vector3(x, h, z);
-                Vector3 t1 = new Vector3(x + sz, h, z);
-                Vector3 t2 = new Vector3(x + sz, h, z + sz);
-                Vector3 t3 = new Vector3(x, h, z + sz);
-
-                // Верхняя грань
-                verts.Add(t0); verts.Add(t1); verts.Add(t2); verts.Add(t3);
-                norms.Add(Vector3.up); norms.Add(Vector3.up); norms.Add(Vector3.up); norms.Add(Vector3.up);
-                tris.Add(startIdx); tris.Add(startIdx + 2); tris.Add(startIdx + 1);
-                tris.Add(startIdx); tris.Add(startIdx + 3); tris.Add(startIdx + 2);
-            }
-            else
-            {
-                // Обычная плоская плитка
-                verts.Add(new Vector3(x, h, z));
-                verts.Add(new Vector3(x + sz, h, z));
-                verts.Add(new Vector3(x + sz, h, z + sz));
-                verts.Add(new Vector3(x, h, z + sz));
-
-                norms.Add(Vector3.up);
-                norms.Add(Vector3.up);
-                norms.Add(Vector3.up);
-                norms.Add(Vector3.up);
-
-                tris.Add(startIdx);
-                tris.Add(startIdx + 2);
-                tris.Add(startIdx + 1);
-                tris.Add(startIdx);
-                tris.Add(startIdx + 3);
-                tris.Add(startIdx + 2);
-            }
-        }
-
-        private void CreateSubMeshObject(string name, (List<Vector3> verts, List<int> tris, List<Vector3> norms) meshData, Material mat)
-        {
-            if (meshData.verts.Count == 0) return;
-
-            var go = new GameObject(name);
+            var go = new GameObject("Terrain");
             go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            go.AddComponent<MeshRenderer>().sharedMaterial = material;
+            go.AddComponent<MeshCollider>().sharedMesh = mesh;
+        }
 
-            // Крупная карта может превысить 65535 вершин в одном меше.
-            var mesh = new Mesh { name = $"{name}_Mesh", indexFormat = UnityEngine.Rendering.IndexFormat.UInt32 };
-            mesh.SetVertices(meshData.verts);
-            mesh.SetTriangles(meshData.tris, 0);
-            mesh.SetNormals(meshData.norms);
+        /// <summary>Индексы регулярной сетки; порядок обхода — лицом вверх в соглашении Unity.</summary>
+        private static int[] GridTriangles(int countX, int countZ)
+        {
+            var triangles = new int[(countX - 1) * (countZ - 1) * 6];
+            int t = 0;
+            for (int iz = 0; iz < countZ - 1; iz++)
+            {
+                for (int ix = 0; ix < countX - 1; ix++)
+                {
+                    int v00 = iz * countX + ix, v10 = v00 + 1, v01 = v00 + countX, v11 = v01 + 1;
+                    triangles[t++] = v00; triangles[t++] = v11; triangles[t++] = v10;
+                    triangles[t++] = v00; triangles[t++] = v01; triangles[t++] = v11;
+                }
+            }
+            return triangles;
+        }
 
-            var mf = go.AddComponent<MeshFilter>();
-            mf.sharedMesh = mesh;
+        private void BuildWater(MapDefinition map)
+        {
+            var vertices = new List<Vector3>();
+            var uvs = new List<Vector2>();
+            var triangles = new List<int>();
+            float size = map.TileSize, y = TerrainField.WaterLevel;
+            const float rippleScale = 0.15f;
+            for (int cy = 0; cy < map.Height; cy++)
+            {
+                for (int cx = 0; cx < map.Width; cx++)
+                {
+                    if (_terrain.GetSurface(cx, cy) != TerrainField.Surface.Water) continue;
+                    int start = vertices.Count;
+                    float x0 = cx * size, z0 = cy * size, x1 = x0 + size, z1 = z0 + size;
+                    vertices.Add(new Vector3(x0, y, z0)); vertices.Add(new Vector3(x1, y, z0));
+                    vertices.Add(new Vector3(x1, y, z1)); vertices.Add(new Vector3(x0, y, z1));
+                    uvs.Add(new Vector2(x0, z0) * rippleScale); uvs.Add(new Vector2(x1, z0) * rippleScale);
+                    uvs.Add(new Vector2(x1, z1) * rippleScale); uvs.Add(new Vector2(x0, z1) * rippleScale);
+                    triangles.Add(start); triangles.Add(start + 2); triangles.Add(start + 1);
+                    triangles.Add(start); triangles.Add(start + 3); triangles.Add(start + 2);
+                }
+            }
+            if (vertices.Count == 0) return;
 
-            var mr = go.AddComponent<MeshRenderer>();
-            mr.sharedMaterial = mat;
+            var mesh = Track(new Mesh { name = "WaterMesh", indexFormat = IndexFormat.UInt32 });
+            mesh.SetVertices(vertices);
+            mesh.SetUVs(0, uvs);
+            mesh.SetTriangles(triangles, 0);
+            mesh.RecalculateNormals();
+            mesh.RecalculateTangents();
 
-            var mc = go.AddComponent<MeshCollider>();
-            mc.sharedMesh = mesh;
+            Texture2D ripples = Track(TerrainTextures.BuildNormalMap("WaterNormal", 128, 6, 4f, 57));
+            Material material = Track(MaterialFactory.CreateWater("Mat_Water", new Color(0.16f, 0.42f, 0.5f, 0.72f), ripples));
+
+            var go = new GameObject("Water");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            go.AddComponent<WaterSurface>().Initialize(material);
+        }
+
+        private void BuildBridgesAndDecor(MapDefinition map)
+        {
+            Texture2D palette = Track(LowPolyMeshBuilder.CreatePaletteTexture());
+            Material material = Track(MaterialFactory.CreateTexturedLit("Mat_LowPoly", palette, 0.15f));
+
+            var builder = new LowPolyMeshBuilder();
+            float size = map.TileSize;
+            for (int cy = 0; cy < map.Height; cy++)
+            {
+                for (int cx = 0; cx < map.Width; cx++)
+                {
+                    if (map.GetTile(cx, cy) != TileType.Bridge) continue;
+                    var center = new Vector3((cx + 0.5f) * size, 0f, (cy + 0.5f) * size);
+                    Matrix4x4 at = Matrix4x4.Translate(center);
+                    // Верх настила на уровне земли: по нему едут роботы.
+                    builder.Box(at, new Vector3(0f, -0.12f, 0f), new Vector3(size, 0.26f, size), LowPolyMeshBuilder.Swatch.Concrete);
+                    builder.Box(at, new Vector3(0f, -0.6f, 0f), new Vector3(0.3f, 0.7f, 0.3f), LowPolyMeshBuilder.Swatch.RockDark);
+                    // Перила там, где мост кончается поперёк движения.
+                    if (map.GetTile(cx, cy - 1) != TileType.Bridge)
+                        builder.Box(at, new Vector3(0f, 0.12f, -size * 0.46f), new Vector3(size, 0.22f, 0.08f), LowPolyMeshBuilder.Swatch.RockDark);
+                    if (map.GetTile(cx, cy + 1) != TileType.Bridge)
+                        builder.Box(at, new Vector3(0f, 0.12f, size * 0.46f), new Vector3(size, 0.22f, 0.08f), LowPolyMeshBuilder.Swatch.RockDark);
+                }
+            }
+            if (builder.VertexCount > 0)
+            {
+                var bridges = new GameObject("Bridges");
+                bridges.transform.SetParent(transform, false);
+                bridges.AddComponent<MeshFilter>().sharedMesh = Track(builder.ToMesh("BridgesMesh"));
+                bridges.AddComponent<MeshRenderer>().sharedMaterial = material;
+            }
+
+            var decor = new GameObject("Decor");
+            decor.transform.SetParent(transform, false);
+            DecorationScatter.Build(_terrain, material, decor.transform);
+            foreach (MeshFilter filter in decor.GetComponentsInChildren<MeshFilter>()) Track(filter.sharedMesh);
+        }
+
+        /// <summary>Туман лежит на рельефе (с небольшим подъёмом) и потому не «съезжает» при наклонной камере.</summary>
+        private void CreateFogOverlay(MapDefinition map)
+        {
+            _fogTexture = Track(new Texture2D(map.Width, map.Height, TextureFormat.RGBA32, false)
+            {
+                name = "FogOfWar", filterMode = FilterMode.Bilinear, wrapMode = TextureWrapMode.Clamp
+            });
+            _fogPixels = new Color32[map.Width * map.Height];
+
+            int samples = TerrainField.SamplesPerTile;
+            int countX = map.Width * samples + 1, countZ = map.Height * samples + 1;
+            var vertices = new Vector3[countX * countZ];
+            var uvs = new Vector2[vertices.Length];
+            for (int iz = 0; iz < countZ; iz++)
+            {
+                for (int ix = 0; ix < countX; ix++)
+                {
+                    // Та же сетка, что у рельефа (со сдвигом на рамку). Высота берётся по максимуму соседних вершин:
+                    // валун на краю гребня нависает над склоном и иначе торчал бы из тумана.
+                    int tx = ix + TerrainField.Margin * samples, tz = iz + TerrainField.Margin * samples;
+                    Vector3 vertex = _terrain.GetVertex(tx, tz);
+                    float top = TerrainField.WaterLevel;
+                    for (int dz = -1; dz <= 1; dz++)
+                    {
+                        for (int dx = -1; dx <= 1; dx++) top = Mathf.Max(top, _terrain.GetVertexHeight(tx + dx, tz + dz));
+                    }
+                    vertex.y = top + (top > RockyFogThreshold ? RockyFogLift : FogLift);
+                    int index = iz * countX + ix;
+                    vertices[index] = vertex;
+                    uvs[index] = new Vector2((float)ix / (countX - 1), (float)iz / (countZ - 1));
+                }
+            }
+
+            var mesh = Track(new Mesh { name = "FogOfWarMesh", indexFormat = IndexFormat.UInt32 });
+            mesh.vertices = vertices;
+            mesh.uv = uvs;
+            mesh.triangles = GridTriangles(countX, countZ);
+            mesh.RecalculateBounds();
+
+            Shader shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Transparent");
+            Material material = Track(new Material(shader) { name = "FogOfWarMaterial", mainTexture = _fogTexture, renderQueue = 3100 });
+
+            var go = new GameObject("FogOfWarOverlay");
+            go.transform.SetParent(transform, false);
+            go.AddComponent<MeshFilter>().sharedMesh = mesh;
+            var renderer = go.AddComponent<MeshRenderer>();
+            renderer.sharedMaterial = material;
+            renderer.shadowCastingMode = ShadowCastingMode.Off;
+            renderer.receiveShadows = false;
+            _lastFogTick = -1;
         }
 
         private void SpawnBuildings(MapDefinition map)
         {
-            _spawnedBuildings.Clear();
-
             var container = new GameObject("Buildings");
             container.transform.SetParent(transform, false);
 

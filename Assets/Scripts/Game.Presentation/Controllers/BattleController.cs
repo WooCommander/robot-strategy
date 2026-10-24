@@ -305,11 +305,7 @@ namespace Game.Presentation.Controllers
             Debug.Log($"[Battle] Робот #{robotState.Id.Value} ({robotState.Blueprint.Name}) вышел на поле боя в точке {robotState.Position}!");
         }
 
-        private float GetSurfaceHeight(SimVector2 position)
-        {
-            GridCoord cell = GridCoord.FromSimVector2(position, _mapDefinition.TileSize);
-            return MapRenderer.GetTileHeight(_mapDefinition.GetTile(cell.X, cell.Y));
-        }
+        private float GetSurfaceHeight(SimVector2 position) => _mapRenderer.SampleSurfaceHeight(position.X, position.Y);
 
         private void HandleRobotDestroyed(RobotState attacker, RobotState target)
         {

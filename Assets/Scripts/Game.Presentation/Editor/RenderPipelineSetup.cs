@@ -3,6 +3,7 @@ using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 using UnityEngine.Rendering.Universal;
+using Game.Presentation.Rendering;
 
 namespace Game.Presentation.Editor
 {
@@ -44,6 +45,7 @@ namespace Game.Presentation.Editor
             QualitySettings.SetQualityLevel(currentLevel, false);
 
             UpgradeProjectMaterials();
+            CreateMaterialTemplates();
             AssetDatabase.SaveAssets();
             Debug.Log($"[RenderPipelineSetup] URP назначен: {PipelinePath}");
         }
@@ -115,6 +117,45 @@ namespace Game.Presentation.Editor
             serialized.FindProperty("m_SoftShadowsSupported").boolValue = true;
             serialized.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(pipeline);
+        }
+
+        /// <summary>
+        /// Материалы-шаблоны в Resources: через них шейдеры URP и нужные варианты ключевых слов
+        /// попадают в сборку, хотя все игровые материалы создаются в коде.
+        /// </summary>
+        private static void CreateMaterialTemplates()
+        {
+            string folder = "Assets/Resources/" + MaterialFactory.TemplateFolder;
+            if (!AssetDatabase.IsValidFolder("Assets/Resources")) AssetDatabase.CreateFolder("Assets", "Resources");
+            if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder("Assets/Resources", MaterialFactory.TemplateFolder);
+
+            Shader lit = Shader.Find("Universal Render Pipeline/Lit");
+            Shader unlit = Shader.Find("Universal Render Pipeline/Unlit");
+            if (lit == null || unlit == null)
+            {
+                Debug.LogError("[RenderPipelineSetup] Шейдеры URP не найдены, шаблоны материалов не созданы.");
+                return;
+            }
+
+            SaveTemplate(folder, MaterialFactory.LitTemplate, lit, null);
+            SaveTemplate(folder, MaterialFactory.EmissiveTemplate, lit, MaterialFactory.ConfigureEmissive);
+            SaveTemplate(folder, MaterialFactory.TerrainTemplate, lit, MaterialFactory.ConfigureTerrain);
+            SaveTemplate(folder, MaterialFactory.WaterTemplate, lit, MaterialFactory.ConfigureWater);
+            SaveTemplate(folder, MaterialFactory.UnlitTemplate, unlit, null);
+        }
+
+        private static void SaveTemplate(string folder, string name, Shader shader, System.Action<Material> configure)
+        {
+            string path = $"{folder}/{name}.mat";
+            var material = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (material == null)
+            {
+                material = new Material(shader) { name = name };
+                AssetDatabase.CreateAsset(material, path);
+            }
+            material.shader = shader;
+            configure?.Invoke(material);
+            EditorUtility.SetDirty(material);
         }
 
         /// <summary>Переводит материалы проекта со Standard на URP/Lit, сохраняя цвет.</summary>

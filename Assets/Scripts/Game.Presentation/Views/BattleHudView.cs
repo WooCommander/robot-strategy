@@ -74,13 +74,13 @@ namespace Game.Presentation.Views
             }
         }
 
-        // Палитра в духе оригинала: тёмный фон, голубые названия, зелёные запасы, пурпурные цены.
-        private static readonly Color PanelColor = new Color(0.02f, 0.03f, 0.06f, 0.94f);
-        private static readonly Color HeaderColor = new Color(1f, 0.9f, 0.2f);
-        private static readonly Color NameColor = new Color(0.3f, 0.9f, 1f);
-        private static readonly Color StockColor = new Color(0.3f, 1f, 0.35f);
-        private static readonly Color PriceColor = new Color(1f, 0.35f, 0.95f);
-        private static readonly Color ClockColor = new Color(0.75f, 0.08f, 0.08f, 0.96f);
+        // Палитра HUD: тёмно-синие панели с голубым акцентом (см. HudSkin); запасы — зелёные, цены — тёплые.
+        private static readonly Color PanelColor = HudSkin.PanelFill;
+        private static readonly Color HeaderColor = HudSkin.Accent;
+        private static readonly Color NameColor = HudSkin.Title;
+        private static readonly Color StockColor = new Color(0.45f, 1f, 0.55f);
+        private static readonly Color PriceColor = new Color(1f, 0.72f, 0.3f);
+        private static readonly Color ClockColor = HudSkin.PanelFill;
         private static readonly Color HumanColor = new Color(0.35f, 0.75f, 1f);
         private static readonly Color ComputerColor = new Color(1f, 0.4f, 0.4f);
 
@@ -257,14 +257,14 @@ namespace Game.Presentation.Views
         private void CreateTopLeftBar()
         {
             var bar = CreatePanel(_canvas.transform, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(20f, -20f), new Vector2(450f, 70f), PanelColor);
+                new Vector2(20f, -20f), new Vector2(450f, 70f), PanelColor, framed: true);
             _armyText = CreateText(bar.transform, "Army", "", new Vector2(14f, -8f), new Vector2(190f, 54f), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
             var selectBase = CreateButton(bar.transform, "SelectBaseBtn", "БАЗА", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-182f, 0f), new Vector2(106f, 54f), new Color(0.12f, 0.35f, 0.58f, 0.98f), 15);
+                new Vector2(-182f, 0f), new Vector2(106f, 54f), HudSkin.ButtonIdle, 15);
             selectBase.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
-            // Переключение тумана начинает новый матч: это настройка матча, а не фильтр отображения.
+            // Туман переключается командой симуляции прямо в текущем матче.
             _fogToggleButton = CreateButton(bar.transform, "FogToggleBtn", "", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-64f, 0f), new Vector2(118f, 54f), new Color(0.2f, 0.24f, 0.32f, 0.98f), 13);
+                new Vector2(-64f, 0f), new Vector2(118f, 54f), HudSkin.ButtonIdle, 13);
             _fogToggleButton.onClick.AddListener(() => OnFogOfWarToggleRequested?.Invoke());
             SetFogOfWarEnabled(true);
         }
@@ -272,11 +272,11 @@ namespace Game.Presentation.Views
         private void CreateClockAndStatus()
         {
             const float width = 320f;
-            var clock = CreatePanel(_canvas.transform, "Clock", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -20f), new Vector2(width, 64f), ClockColor);
+            var clock = CreatePanel(_canvas.transform, "Clock", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -20f), new Vector2(width, 64f), ClockColor, framed: true);
             _clockText = CreateText(clock.transform, "ClockText", "", new Vector2(12f, -4f), new Vector2(width - 24f, 56f), 22, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
 
             // Статус сторон: слева вы, справа компьютер, посередине названия строк.
-            var status = CreatePanel(_canvas.transform, "Status", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -94f), new Vector2(width, 292f), PanelColor);
+            var status = CreatePanel(_canvas.transform, "Status", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -94f), new Vector2(width, 292f), PanelColor, framed: true);
             CreateText(status.transform, "Header", "СТАТУС", new Vector2(0f, -8f), new Vector2(width, 30f), 20, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
             CreateText(status.transform, "Human", "ВЫ", new Vector2(12f, -38f), new Vector2(60f, 24f), 14, FontStyle.Bold, HumanColor, TextAnchor.MiddleLeft);
             CreateText(status.transform, "Computer", "ИИ", new Vector2(width - 72f, -38f), new Vector2(60f, 24f), 14, FontStyle.Bold, ComputerColor, TextAnchor.MiddleRight);
@@ -289,7 +289,7 @@ namespace Game.Presentation.Views
             _statusComputerColumn = CreateText(status.transform, "ComputerValues", "", new Vector2(width - 60f, -64f), new Vector2(48f, 220f), 16, FontStyle.Bold, ComputerColor, TextAnchor.UpperRight);
             _statusComputerColumn.lineSpacing = 1.05f;
 
-            var resources = CreatePanel(_canvas.transform, "Resources", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -396f), new Vector2(width, 236f), PanelColor);
+            var resources = CreatePanel(_canvas.transform, "Resources", Vector2.one, Vector2.one, Vector2.one, new Vector2(-20f, -396f), new Vector2(width, 236f), PanelColor, framed: true);
             CreateText(resources.transform, "Header", "РЕСУРСЫ", new Vector2(0f, -8f), new Vector2(width, 30f), 20, FontStyle.Bold, HeaderColor, TextAnchor.MiddleCenter);
             string resourceNames = "";
             foreach (ResourceType type in AllResourceTypes) resourceNames += (resourceNames.Length > 0 ? "\n" : "") + DefaultContentCatalog.GetResourceName(type).ToUpperInvariant();
@@ -341,7 +341,7 @@ namespace Game.Presentation.Views
         private void CreateBottomPanel()
         {
             _bottomPanel = CreatePanel(_canvas.transform, "BottomDeck", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0.5f, 0f),
-                new Vector2(0f, 18f), new Vector2(980f, 300f), PanelColor);
+                new Vector2(0f, 18f), new Vector2(980f, 300f), PanelColor, framed: true);
             _bottomPanel.SetActive(false);
 
             _panelTitleText = CreateLabel(_bottomPanel.transform, "Title", "", new Vector2(0f, 1f), new Vector2(1f, 1f),
@@ -350,7 +350,7 @@ namespace Game.Presentation.Views
                 new Vector2(20f, -38f), new Vector2(-330f, -96f), 15, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
 
             var progressBar = CreatePanel(_bottomPanel.transform, "ProgressBarBg", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -106f), new Vector2(-40f, 8f), new Color(0.10f, 0.15f, 0.22f, 1f));
+                new Vector2(0f, -106f), new Vector2(-40f, 6f), new Color(0.08f, 0.16f, 0.26f, 1f));
             var fillGo = new GameObject("Fill");
             fillGo.transform.SetParent(progressBar.transform, false);
             _progressBarFillRect = fillGo.AddComponent<RectTransform>();
@@ -359,11 +359,11 @@ namespace Game.Presentation.Views
             _progressBarFillRect.pivot = new Vector2(0f, 0.5f);
             _progressBarFillRect.offsetMin = Vector2.zero;
             _progressBarFillRect.offsetMax = Vector2.zero;
-            fillGo.AddComponent<Image>().color = new Color(0.15f, 0.80f, 0.95f, 1f);
+            fillGo.AddComponent<Image>().color = HudSkin.Accent;
             SetProgress(0f);
 
             _constructorBtn = CreateButton(_bottomPanel.transform, "Btn_Constructor", "СБОРКА РОБОТА", new Vector2(1f, 1f), new Vector2(1f, 1f),
-                new Vector2(-165f, -62f), new Vector2(290f, 64f), new Color(0.22f, 0.45f, 0.62f), 18);
+                new Vector2(-165f, -62f), new Vector2(290f, 64f), HudSkin.ButtonPrimary, 18);
             _constructorBtn.onClick.AddListener(ShowConstructor);
 
             CreateOrderButton(OrderType.Capture, "ЗАХВАТ", -375f);
@@ -371,7 +371,7 @@ namespace Game.Presentation.Views
             CreateOrderButton(OrderType.Scout, "РАЗВЕДКА", -75f);
             CreateOrderButton(OrderType.Defend, "ОБОРОНА", 75f);
             CreateOrderButton(OrderType.Stop, "СТОП", 225f);
-            CreateOrderButton(OrderType.Detonate, "ПОДРЫВ", 375f).GetComponent<Image>().color = new Color(0.55f, 0.35f, 0.05f);
+            CreateOrderButton(OrderType.Detonate, "ПОДРЫВ", 375f).GetComponent<Image>().color = HudSkin.ButtonDanger;
             _programButton = CreateButton(_bottomPanel.transform, "EditProgram", "ПРОГРАММА РОБОТА", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 145f), new Vector2(320f, 50f), new Color(0.12f, 0.32f, 0.28f), 16);
             _programButton.onClick.AddListener(ShowProgramEditor);
             _programButton.gameObject.SetActive(false);
@@ -400,7 +400,7 @@ namespace Game.Presentation.Views
                 pair.Value.gameObject.SetActive(visible);
                 if (pair.Key != OrderType.Detonate)
                 {
-                    pair.Value.GetComponent<Image>().color = pair.Key == robot.CurrentOrder.Type ? new Color(0.15f, 0.65f, 0.95f) : new Color(0.12f, 0.20f, 0.32f);
+                    pair.Value.GetComponent<Image>().color = pair.Key == robot.CurrentOrder.Type ? HudSkin.ButtonActive : HudSkin.ButtonIdle;
                 }
             }
         }
@@ -464,12 +464,22 @@ namespace Game.Presentation.Views
 
         private Button CreateOrderButton(OrderType order, string label, float x)
         {
-            var button = CreateButton(_bottomPanel.transform, "Order_" + order, label, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 50f), new Vector2(140f, 48f), new Color(0.12f, 0.20f, 0.32f), 14);
+            var button = CreateButton(_bottomPanel.transform, "Order_" + order, label, new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(x, 62f), new Vector2(136f, 92f), HudSkin.ButtonIdle, 14, GetOrderIcon(order));
             button.onClick.AddListener(() => OnRobotOrderRequested?.Invoke(order));
             _orderButtons[order] = button;
             button.gameObject.SetActive(false);
             return button;
         }
+
+        private static HudIcon GetOrderIcon(OrderType order) => order switch
+        {
+            OrderType.Capture => HudIcon.Flag,
+            OrderType.Hunt => HudIcon.Crosshair,
+            OrderType.Scout => HudIcon.Eye,
+            OrderType.Defend => HudIcon.Shield,
+            OrderType.Detonate => HudIcon.Radiation,
+            _ => HudIcon.Stop
+        };
 
         private void ShowProgramEditor()
         {
@@ -484,8 +494,8 @@ namespace Game.Presentation.Views
 
         private void CreateProgramEditor()
         {
-            _programOverlay = CreatePanel(_canvas.transform, "RobotProgramEditor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.93f));
-            var card = CreatePanel(_programOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1040f, 730f), new Color(0.04f, 0.08f, 0.15f));
+            _programOverlay = CreatePanel(_canvas.transform, "RobotProgramEditor", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.01f, 0.02f, 0.04f, 0.88f));
+            var card = CreatePanel(_programOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1040f, 730f), HudSkin.CardFill, framed: true);
             Transform root = card.transform;
             CreateText(root, "Title", "ПРОГРАММА РОБОТА", new Vector2(35f, -25f), new Vector2(570f, 55f), 32, FontStyle.Bold, NameColor, TextAnchor.MiddleLeft);
             _programRetreatButton = CreateButton(root, "RetreatThreshold", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(790f, -50f), new Vector2(320f, 48f), new Color(0.42f, 0.23f, 0.12f), 15);
@@ -501,7 +511,7 @@ namespace Game.Presentation.Views
             for (int index = 0; index < 3; index++)
             {
                 int slot = index;
-                var row = CreatePanel(root, "Rule_" + (index + 1), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(35f, -160f - index * 145f), new Vector2(970f, 130f), new Color(0.09f, 0.15f, 0.25f, 0.98f));
+                var row = CreatePanel(root, "Rule_" + (index + 1), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(35f, -160f - index * 145f), new Vector2(970f, 130f), HudSkin.InsetFill, framed: true);
                 _programRuleLabels[index] = CreateText(row.transform, "Name", "", new Vector2(15f, -12f), new Vector2(280f, 74f), 19, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
                 _programRuleLabels[index].raycastTarget = false;
                 _programHealthButtons[index] = CreateButton(row.transform, "MinHealth", "", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(160f, -103f), new Vector2(250f, 36f), new Color(0.2f, 0.3f, 0.4f), 14);
@@ -713,8 +723,8 @@ namespace Game.Presentation.Views
 
         private void CreateConstructorOverlay()
         {
-            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstruction", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.97f));
-            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 900f), Color.black);
+            _constructorOverlay = CreatePanel(_canvas.transform, "RobotConstruction", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0.01f, 0.02f, 0.04f, 0.92f));
+            var card = CreatePanel(_constructorOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(1400f, 900f), HudSkin.CardFill, framed: true);
             Transform root = card.transform;
 
             // Левая половина: заголовок, доступные ресурсы, миниатюра и кнопки.
@@ -723,7 +733,7 @@ namespace Game.Presentation.Views
             _constructorResources = CreateText(root, "Resources", "", new Vector2(60f, -235f), new Vector2(560f, 330f), 24, FontStyle.Bold, StockColor, TextAnchor.UpperLeft);
             _constructorResources.lineSpacing = 1.1f;
 
-            _constructorPreview = CreatePanel(root, "Preview", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -585f), new Vector2(230f, 270f), new Color(0.05f, 0.07f, 0.1f)).transform;
+            _constructorPreview = CreatePanel(root, "Preview", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(40f, -585f), new Vector2(230f, 270f), HudSkin.InsetFill, framed: true).transform;
             _constructorName = CreateText(root, "RobotName", "", new Vector2(290f, -585f), new Vector2(350f, 120f), 20, FontStyle.Bold, NameColor, TextAnchor.UpperLeft);
             _constructorSummary = CreateText(root, "Summary", "", new Vector2(290f, -705f), new Vector2(350f, 80f), 17, FontStyle.Normal, Color.white, TextAnchor.UpperLeft);
 
@@ -806,7 +816,8 @@ namespace Game.Presentation.Views
         /// <summary>Миниатюра робота сбоку: детали стоят стопкой, как модель на поле боя.</summary>
         private void RefreshConstructorPreview()
         {
-            foreach (Transform child in _constructorPreview) Destroy(child.gameObject);
+            foreach (Transform child in _constructorPreview)
+                if (child.name != "Frame") Destroy(child.gameObject);
             float y = 24f;
             string chassis = _constructorDraft.ChassisId;
             if (chassis == DefaultContentCatalog.ChassisBipod)
@@ -908,11 +919,11 @@ namespace Game.Presentation.Views
         private void CreateMinimap()
         {
             var panel = CreatePanel(_canvas.transform, "Minimap", Vector2.zero, Vector2.zero, Vector2.zero,
-                new Vector2(20f, 20f), new Vector2(300f, 200f), PanelColor);
+                new Vector2(20f, 20f), new Vector2(300f, 200f), PanelColor, framed: true);
             CreateLabel(panel.transform, "Title", "РАДАР", new Vector2(0f, 1f), new Vector2(1f, 1f),
                 new Vector2(8f, -6f), new Vector2(-8f, -27f), 13, FontStyle.Bold, NameColor, TextAnchor.MiddleCenter);
             var mapArea = CreatePanel(panel.transform, "Map", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f),
-                new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.05f, 0.12f, 0.3f, 1f));
+                new Vector2(0f, -12f), new Vector2(-12f, -38f), new Color(0.02f, 0.07f, 0.13f, 1f));
             _minimapContent = mapArea.GetComponent<RectTransform>();
             var fogGo = new GameObject("FogOfWar", typeof(RectTransform));
             fogGo.transform.SetParent(mapArea.transform, false);
@@ -946,7 +957,7 @@ namespace Game.Presentation.Views
         {
             if (_resultOverlay != null) return;
             _resultOverlay = CreatePanel(_canvas.transform, "MatchResult", Vector2.zero, Vector2.one, new Vector2(0.5f, 0.5f), Vector2.zero, Vector2.zero, new Color(0f, 0f, 0f, 0.72f));
-            var card = CreatePanel(_resultOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 220f), new Color(0.05f, 0.1f, 0.18f, 1f));
+            var card = CreatePanel(_resultOverlay.transform, "Card", new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), new Vector2(0.5f, 0.5f), Vector2.zero, new Vector2(420f, 220f), HudSkin.CardFill, framed: true);
             _resultTitle = CreateLabel(card.transform, "Title", "ПОБЕДА", new Vector2(0f, 1f), new Vector2(1f, 1f), new Vector2(20f, -35f), new Vector2(-20f, -95f), 38, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);
             var restart = CreateButton(card.transform, "Restart", "НОВЫЙ МАТЧ", new Vector2(0.5f, 0f), new Vector2(0.5f, 0f), new Vector2(0f, 42f), new Vector2(220f, 58f), new Color(0.12f, 0.42f, 0.7f), 18);
             restart.onClick.AddListener(() => OnRestartRequested?.Invoke());
@@ -1001,7 +1012,7 @@ namespace Game.Presentation.Views
         private void EnsureFont()
         {
             if (_uiFont != null) return;
-            _uiFont = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf")
+            _uiFont = HudSkin.GetFont(false)
                       ?? Resources.GetBuiltinResource<Font>("Arial.ttf")
                       ?? Font.CreateDynamicFontFromOSFont("Arial", 16);
         }
@@ -1037,7 +1048,8 @@ namespace Game.Presentation.Views
             canvasGo.AddComponent<GraphicRaycaster>();
         }
 
-        private GameObject CreatePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPos, Vector2 sizeDelta, Color color)
+        /// <param name="framed">Основная панель HUD: срезанные углы и светящаяся рамка.</param>
+        private GameObject CreatePanel(Transform parent, string name, Vector2 anchorMin, Vector2 anchorMax, Vector2 pivot, Vector2 anchoredPos, Vector2 sizeDelta, Color color, bool framed = false)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -1051,7 +1063,30 @@ namespace Game.Presentation.Views
 
             var img = go.AddComponent<Image>();
             img.color = color;
+            if (framed)
+            {
+                img.sprite = HudSkin.Panel;
+                img.type = Image.Type.Sliced;
+                AddFrame(go.transform, HudSkin.PanelFrameSprite, HudSkin.PanelFrame);
+            }
             return go;
+        }
+
+        /// <summary>Рамка поверх фона, но под содержимым (первый дочерний объект); клики не перехватывает.</summary>
+        private static void AddFrame(Transform parent, Sprite sprite, Color color)
+        {
+            var frame = new GameObject("Frame", typeof(RectTransform));
+            frame.transform.SetParent(parent, false);
+            var rect = (RectTransform)frame.transform;
+            rect.anchorMin = Vector2.zero;
+            rect.anchorMax = Vector2.one;
+            rect.offsetMin = Vector2.zero;
+            rect.offsetMax = Vector2.zero;
+            var image = frame.AddComponent<Image>();
+            image.sprite = sprite;
+            image.type = Image.Type.Sliced;
+            image.color = color;
+            image.raycastTarget = false;
         }
 
         /// <summary>Текст с фиксированным прямоугольником от левого верхнего угла родителя.</summary>
@@ -1083,10 +1118,12 @@ namespace Game.Presentation.Views
 
         private Text ConfigureText(Text txt, string text, int fontSize, FontStyle style, Color color, TextAnchor alignment)
         {
-            txt.font = _uiFont;
+            bool bold = style == FontStyle.Bold || style == FontStyle.BoldAndItalic;
+            txt.font = bold ? HudSkin.GetFont(true) : _uiFont;
             txt.text = text;
             txt.fontSize = fontSize;
-            txt.fontStyle = style;
+            // У Play есть настоящий жирный файл: синтетический жирный поверх него размывает буквы.
+            txt.fontStyle = bold && HudSkin.HasRealBold ? (style == FontStyle.BoldAndItalic ? FontStyle.Italic : FontStyle.Normal) : style;
             txt.color = color;
             txt.alignment = alignment;
             txt.supportRichText = true;
@@ -1095,7 +1132,8 @@ namespace Game.Presentation.Views
             return txt;
         }
 
-        private Button CreateButton(Transform parent, string name, string labelText, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos, Vector2 sizeDelta, Color normalColor, int fontSize)
+        /// <param name="icon">Иконка над подписью, как у кнопок приказов.</param>
+        private Button CreateButton(Transform parent, string name, string labelText, Vector2 anchorMin, Vector2 anchorMax, Vector2 anchoredPos, Vector2 sizeDelta, Color normalColor, int fontSize, HudIcon? icon = null)
         {
             var go = new GameObject(name);
             go.transform.SetParent(parent, false);
@@ -1109,6 +1147,24 @@ namespace Game.Presentation.Views
             // Цвет задаёт Image, кнопка лишь подсвечивает его: так выделение строк и приказов меняется одной строкой.
             var img = go.AddComponent<Image>();
             img.color = normalColor;
+            img.sprite = HudSkin.Button;
+            img.type = Image.Type.Sliced;
+            AddFrame(go.transform, HudSkin.ButtonFrameSprite, HudSkin.ButtonFrame);
+
+            if (icon.HasValue)
+            {
+                var iconGo = new GameObject("Icon", typeof(RectTransform));
+                iconGo.transform.SetParent(go.transform, false);
+                var iconRect = (RectTransform)iconGo.transform;
+                iconRect.anchorMin = new Vector2(0.5f, 0.36f);
+                iconRect.anchorMax = new Vector2(0.5f, 0.36f);
+                iconRect.pivot = new Vector2(0.5f, 0f);
+                iconRect.sizeDelta = Vector2.one * Mathf.Min(sizeDelta.y * 0.46f, 44f);
+                var iconImage = iconGo.AddComponent<Image>();
+                iconImage.sprite = HudSkin.GetIcon(icon.Value);
+                iconImage.preserveAspect = true;
+                iconImage.raycastTarget = false;
+            }
 
             var btn = go.AddComponent<Button>();
             var colors = btn.colors;
@@ -1124,7 +1180,7 @@ namespace Game.Presentation.Views
             txtGo.transform.SetParent(go.transform, false);
             var txtRt = txtGo.AddComponent<RectTransform>();
             txtRt.anchorMin = Vector2.zero;
-            txtRt.anchorMax = Vector2.one;
+            txtRt.anchorMax = icon.HasValue ? new Vector2(1f, 0.36f) : Vector2.one;
             txtRt.offsetMin = Vector2.zero;
             txtRt.offsetMax = Vector2.zero;
             var txt = ConfigureText(txtGo.AddComponent<Text>(), labelText, fontSize, FontStyle.Bold, Color.white, TextAnchor.MiddleCenter);

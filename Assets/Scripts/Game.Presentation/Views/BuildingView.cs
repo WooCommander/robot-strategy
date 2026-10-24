@@ -87,7 +87,7 @@ namespace Game.Presentation.Views
             {
                 var labelObj = new GameObject("Label");
                 labelObj.transform.SetParent(transform, false);
-                labelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.3f : 2.5f, 0f);
+                labelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.3f : 2.95f, 0f);
                 labelObj.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
 
                 _nameLabel = labelObj.AddComponent<TextMesh>();
@@ -101,7 +101,7 @@ namespace Game.Presentation.Views
 
             var captureLabelObj = new GameObject("CaptureProgress");
             captureLabelObj.transform.SetParent(transform, false);
-            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.0f : 3.0f, 0f);
+            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.0f : 3.45f, 0f);
             _captureLabel = captureLabelObj.AddComponent<TextMesh>();
             _captureLabel.font = GetWorldFont();
             _captureLabel.fontSize = 28;
@@ -121,7 +121,7 @@ namespace Game.Presentation.Views
                 _selectionMarker = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 _selectionMarker.name = "SelectionMarker";
                 _selectionMarker.transform.SetParent(transform, false);
-                _selectionMarker.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.2f : 3.1f, 0f);
+                _selectionMarker.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.2f : 3.6f, 0f);
                 _selectionMarker.transform.localScale = new Vector3(0.85f, 0.85f, 0.85f);
                 _selectionMarker.transform.localRotation = Quaternion.Euler(45f, 45f, 45f);
 
@@ -202,7 +202,7 @@ namespace Game.Presentation.Views
             {
                 _selectionMarker.transform.Rotate(Vector3.up, 90f * Time.deltaTime, Space.World);
                 float hover = Mathf.Sin(Time.time * 4f) * 0.15f;
-                float baseY = _type == BuildingType.Base ? 4.2f : 3.1f;
+                float baseY = _type == BuildingType.Base ? 4.2f : 3.6f;
                 _selectionMarker.transform.localPosition = new Vector3(0f, baseY + hover, 0f);
             }
         }

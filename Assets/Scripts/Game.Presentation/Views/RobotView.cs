@@ -17,6 +17,7 @@ namespace Game.Presentation.Views
         [SerializeField] private LineRenderer _healthBarBg;
         [SerializeField] private LineRenderer _healthBarFill;
         private Transform _healthBarRoot;
+        private RobotModelRig _rig;
         private TextMesh _healthLabel;
 
         private RobotState _state;
@@ -41,19 +42,21 @@ namespace Game.Presentation.Views
             transform.position = _currentSimPosition;
             transform.rotation = Quaternion.Euler(0f, state.RotationDegrees, 0f);
 
-            // Добавляем коллайдер на корень робота для надежного выбора лучами
-            var col = GetComponent<CapsuleCollider>();
-            if (col == null) col = gameObject.AddComponent<CapsuleCollider>();
-            col.center = new Vector3(0f, 0.75f, 0f);
-            col.radius = 0.8f;
-            col.height = 1.5f;
-
             // Собираем визуальную модель робота
             var visualModel = ModularRobotBuilder.BuildRobotModel(state.Blueprint, state.Owner);
             visualModel.transform.SetParent(transform, false);
+            _rig = visualModel.GetComponent<RobotModelRig>();
+            float modelHeight = Mathf.Max(1.2f, _rig != null ? _rig.Height : 1.5f);
+
+            // Коллайдер на корне робота для надёжного выбора лучами — по высоте модели.
+            var col = GetComponent<CapsuleCollider>();
+            if (col == null) col = gameObject.AddComponent<CapsuleCollider>();
+            col.center = new Vector3(0f, modelHeight * 0.5f, 0f);
+            col.radius = 0.8f;
+            col.height = modelHeight;
 
             CreateSelectionRing();
-            CreateHealthBar();
+            CreateHealthBar(modelHeight + 0.35f);
             SetSelected(false);
             UpdateHealthVisual();
         }
@@ -86,11 +89,17 @@ namespace Game.Presentation.Views
             }
         }
 
-        private void CreateHealthBar()
+        /// <summary>Повернуть башню к цели выстрела.</summary>
+        public void AimAt(SimVector2 target)
+        {
+            if (_rig != null) _rig.AimAt(new Vector3(target.X, transform.position.y, target.Y));
+        }
+
+        private void CreateHealthBar(float height)
         {
             var hbObj = new GameObject("HealthBar");
             hbObj.transform.SetParent(transform, false);
-            hbObj.transform.localPosition = new Vector3(0f, 1.8f, 0f);
+            hbObj.transform.localPosition = new Vector3(0f, height, 0f);
             _healthBarRoot = hbObj.transform;
 
             var shader = Shader.Find("Sprites/Default") ?? Shader.Find("Unlit/Color");

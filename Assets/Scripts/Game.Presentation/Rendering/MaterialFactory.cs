@@ -38,6 +38,19 @@ namespace Game.Presentation.Rendering
             return mat;
         }
 
+        /// <summary>Палитра с картой эмиссии: светятся только отмеченные ячейки (линзы, окна, огни).</summary>
+        public static Material CreatePaletteEmissive(string name, Texture2D palette, Texture2D emission, float metallic, float smoothness)
+        {
+            Material mat = Instantiate(EmissiveTemplate, name);
+            ConfigureEmissive(mat);
+            SetColor(mat, Color.white);
+            SetSurface(mat, metallic, smoothness);
+            SetBaseMap(mat, palette);
+            if (mat.HasProperty("_EmissionMap")) mat.SetTexture("_EmissionMap", emission);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.white * 2f);
+            return mat;
+        }
+
         /// <summary>Самосветящийся материал для линз, индикаторов и маркеров: подхватывается bloom'ом.</summary>
         public static Material CreateEmissive(string name, Color color, float intensity = 2f)
         {

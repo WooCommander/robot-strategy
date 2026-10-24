@@ -10,9 +10,17 @@ namespace Game.Presentation.Rendering
     /// </summary>
     public sealed class LowPolyMeshBuilder
     {
-        public enum Swatch { Bark, PineDark, PineMid, PineLight, RockDark, RockLight, Bush, Concrete }
+        /// <summary>
+        /// Ячейки палитры. Team* и Glow зависят от стороны: у каждой стороны своя текстура палитры,
+        /// поэтому смена владельца здания — это просто смена материала.
+        /// </summary>
+        public enum Swatch
+        {
+            Bark, PineDark, PineMid, PineLight, RockDark, RockLight, Bush, Concrete,
+            MetalLight, MetalMid, MetalDark, Rubber, TeamAccent, TeamDark, Glow, Hazard
+        }
 
-        private const int SwatchCount = 8;
+        private const int SwatchCount = 16;
         private static readonly Color32[] SwatchColors =
         {
             new Color32(92, 64, 44, 255),     // Bark
@@ -23,6 +31,14 @@ namespace Game.Presentation.Rendering
             new Color32(138, 132, 120, 255),  // RockLight
             new Color32(70, 104, 46, 255),    // Bush
             new Color32(150, 146, 138, 255),  // Concrete
+            new Color32(172, 176, 180, 255),  // MetalLight
+            new Color32(112, 117, 124, 255),  // MetalMid
+            new Color32(54, 58, 64, 255),     // MetalDark
+            new Color32(30, 30, 32, 255),     // Rubber
+            new Color32(128, 128, 128, 255),  // TeamAccent (заменяется цветом стороны)
+            new Color32(72, 72, 72, 255),     // TeamDark (заменяется цветом стороны)
+            new Color32(220, 230, 235, 255),  // Glow (заменяется цветом стороны)
+            new Color32(226, 176, 34, 255),   // Hazard
         };
 
         private readonly List<Vector3> _vertices = new List<Vector3>();
@@ -32,13 +48,38 @@ namespace Game.Presentation.Rendering
 
         public int VertexCount => _vertices.Count;
 
-        public static Texture2D CreatePaletteTexture()
+        public static Texture2D CreatePaletteTexture() => CreatePaletteTexture(null);
+
+        /// <summary>Палитра стороны: ячейки Team* и Glow окрашены в цвет команды.</summary>
+        public static Texture2D CreatePaletteTexture(Color? teamColor)
+        {
+            var colors = (Color32[])SwatchColors.Clone();
+            if (teamColor.HasValue)
+            {
+                Color team = teamColor.Value;
+                colors[(int)Swatch.TeamAccent] = team;
+                colors[(int)Swatch.TeamDark] = team * 0.5f;
+                colors[(int)Swatch.Glow] = Color.Lerp(team, Color.white, 0.45f);
+            }
+            return CreateTexture("LowPolyPalette", colors);
+        }
+
+        /// <summary>Карта эмиссии к палитре: светится только ячейка Glow.</summary>
+        public static Texture2D CreateEmissionTexture(Color teamColor)
+        {
+            var colors = new Color32[SwatchCount];
+            for (int i = 0; i < colors.Length; i++) colors[i] = new Color32(0, 0, 0, 255);
+            colors[(int)Swatch.Glow] = Color.Lerp(teamColor, Color.white, 0.3f);
+            return CreateTexture("LowPolyEmission", colors);
+        }
+
+        private static Texture2D CreateTexture(string name, Color32[] colors)
         {
             var texture = new Texture2D(SwatchCount, 1, TextureFormat.RGBA32, false)
             {
-                name = "LowPolyPalette", filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp
+                name = name, filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp
             };
-            texture.SetPixels32(SwatchColors);
+            texture.SetPixels32(colors);
             texture.Apply(false, true);
             return texture;
         }
@@ -104,6 +145,47 @@ namespace Game.Presentation.Rendering
             Quad(P(-1, -1, 1), P(-1, 1, 1), P(-1, 1, -1), P(-1, -1, -1), swatch);   // -x
             Quad(P(1, -1, -1), P(1, 1, -1), P(1, 1, 1), P(1, -1, 1), swatch);       // +x
         }
+
+        /// <summary>
+        /// Усечённая призма: прямоугольное основание (bottom — полные размеры по x и z) сужается к верху (top),
+        /// верх можно сдвинуть (topOffset) — так получаются скошенная лобовая броня и наклонные стены.
+        /// </summary>
+        public void Frustum(Matrix4x4 transform, Vector3 baseCenter, Vector2 bottom, Vector2 top, float height, Vector2 topOffset,
+            Swatch sides, Swatch cap)
+        {
+            Vector3 B(float x, float z) => transform.MultiplyPoint3x4(baseCenter + new Vector3(x * bottom.x * 0.5f, 0f, z * bottom.y * 0.5f));
+            Vector3 T(float x, float z) => transform.MultiplyPoint3x4(baseCenter + new Vector3(topOffset.x + x * top.x * 0.5f, height, topOffset.y + z * top.y * 0.5f));
+            Quad(T(-1, -1), T(-1, 1), T(1, 1), T(1, -1), cap);              // верх
+            Quad(B(-1, -1), B(1, -1), B(1, 1), B(-1, 1), sides);            // низ
+            Quad(B(-1, -1), T(-1, -1), T(1, -1), B(1, -1), sides);          // -z
+            Quad(B(1, 1), T(1, 1), T(-1, 1), B(-1, 1), sides);              // +z
+            Quad(B(-1, 1), T(-1, 1), T(-1, -1), B(-1, -1), sides);          // -x
+            Quad(B(1, -1), T(1, -1), T(1, 1), B(1, 1), sides);              // +x
+        }
+
+        public void Frustum(Matrix4x4 transform, Vector3 baseCenter, Vector2 bottom, Vector2 top, float height, Swatch swatch) =>
+            Frustum(transform, baseCenter, bottom, top, height, Vector2.zero, swatch, swatch);
+
+        /// <summary>Цилиндр или усечённый конус вдоль локальной оси Y с крышками.</summary>
+        public void Cylinder(Matrix4x4 transform, Vector3 baseCenter, float radiusBottom, float radiusTop, float height, int sides,
+            Swatch side, Swatch cap)
+        {
+            Vector3 bottomCenter = transform.MultiplyPoint3x4(baseCenter);
+            Vector3 topCenter = transform.MultiplyPoint3x4(baseCenter + Vector3.up * height);
+            for (int i = 0; i < sides; i++)
+            {
+                Vector3 a = baseCenter + Ring(i, sides, radiusBottom), b = baseCenter + Ring(i + 1, sides, radiusBottom);
+                Vector3 at = baseCenter + Vector3.up * height + Ring(i, sides, radiusTop), bt = baseCenter + Vector3.up * height + Ring(i + 1, sides, radiusTop);
+                Vector3 wa = transform.MultiplyPoint3x4(a), wb = transform.MultiplyPoint3x4(b);
+                Vector3 wat = transform.MultiplyPoint3x4(at), wbt = transform.MultiplyPoint3x4(bt);
+                Quad(wa, wat, wbt, wb, side);
+                if (radiusTop > 0f) Triangle(topCenter, wbt, wat, cap);
+                if (radiusBottom > 0f) Triangle(bottomCenter, wa, wb, cap);
+            }
+        }
+
+        public void Cylinder(Matrix4x4 transform, Vector3 baseCenter, float radius, float height, int sides, Swatch swatch) =>
+            Cylinder(transform, baseCenter, radius, radius, height, sides, swatch, swatch);
 
         private void Cone(Matrix4x4 transform, Vector3 baseCenter, float radius, float height, int sides, Swatch swatch)
         {

@@ -383,6 +383,7 @@ namespace Game.Presentation.Controllers
 
         private void HandleWeaponFired(RobotState attacker, RobotState target, WeaponType weaponType)
         {
+            if (_spawnedRobots.TryGetValue(attacker.Id.Value, out RobotView shooter) && shooter != null) shooter.AimAt(target.Position);
             if (IsVisibleToPlayer(attacker.Position) || IsVisibleToPlayer(target.Position))
                 _weaponEffects.PlayLaunch(attacker.Position, target.Position, weaponType);
         }

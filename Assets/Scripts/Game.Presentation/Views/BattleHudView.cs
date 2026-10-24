@@ -147,6 +147,7 @@ namespace Game.Presentation.Views
         private RectTransform _minimapContent;
         private RawImage _minimapFog;
         private Button _fogToggleButton;
+        private Button _gameSpeedButton;
         private readonly Dictionary<int, Image> _minimapBuildingMarkers = new Dictionary<int, Image>();
         private readonly Dictionary<int, Image> _minimapRobotMarkers = new Dictionary<int, Image>();
         private GameObject _resultOverlay;
@@ -158,6 +159,7 @@ namespace Game.Presentation.Views
         public event Action OnRestartRequested;
         public event Action OnSelectPlayerBaseRequested;
         public event Action OnFogOfWarToggleRequested;
+        public event Action OnGameSpeedCycleRequested;
         public event Action<SimVector2> OnMinimapPointRequested;
 
         public void Initialize(IReadOnlyDictionary<string, ModuleDefinition> moduleCatalog, MapDefinition mapDefinition)
@@ -257,16 +259,20 @@ namespace Game.Presentation.Views
         private void CreateTopLeftBar()
         {
             var bar = CreatePanel(_canvas.transform, "TopLeft", new Vector2(0f, 1f), new Vector2(0f, 1f), new Vector2(0f, 1f),
-                new Vector2(20f, -20f), new Vector2(450f, 70f), PanelColor, framed: true);
+                new Vector2(20f, -20f), new Vector2(580f, 70f), PanelColor, framed: true);
             _armyText = CreateText(bar.transform, "Army", "", new Vector2(14f, -8f), new Vector2(190f, 54f), 16, FontStyle.Bold, Color.white, TextAnchor.MiddleLeft);
             var selectBase = CreateButton(bar.transform, "SelectBaseBtn", "БАЗА", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-182f, 0f), new Vector2(106f, 54f), HudSkin.ButtonIdle, 15);
+                new Vector2(-312f, 0f), new Vector2(106f, 54f), HudSkin.ButtonIdle, 15);
             selectBase.onClick.AddListener(() => OnSelectPlayerBaseRequested?.Invoke());
             // Туман переключается командой симуляции прямо в текущем матче.
             _fogToggleButton = CreateButton(bar.transform, "FogToggleBtn", "", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
-                new Vector2(-64f, 0f), new Vector2(118f, 54f), HudSkin.ButtonIdle, 13);
+                new Vector2(-194f, 0f), new Vector2(118f, 54f), HudSkin.ButtonIdle, 13);
             _fogToggleButton.onClick.AddListener(() => OnFogOfWarToggleRequested?.Invoke());
             SetFogOfWarEnabled(true);
+            _gameSpeedButton = CreateButton(bar.transform, "GameSpeedBtn", "", new Vector2(1f, 0.5f), new Vector2(1f, 0.5f),
+                new Vector2(-66f, 0f), new Vector2(118f, 54f), HudSkin.ButtonIdle, 13);
+            _gameSpeedButton.onClick.AddListener(() => OnGameSpeedCycleRequested?.Invoke());
+            SetGameSpeed(1f);
         }
 
         private void CreateClockAndStatus()
@@ -945,6 +951,12 @@ namespace Game.Presentation.Views
             _minimapFog.texture = texture;
             // RawImage без текстуры рисуется белым прямоугольником поверх радара.
             _minimapFog.enabled = texture != null;
+        }
+
+        public void SetGameSpeed(float speed)
+        {
+            if (_gameSpeedButton == null) return;
+            _gameSpeedButton.GetComponentInChildren<Text>().text = $"СКОРОСТЬ ×{speed:0.##}";
         }
 
         public void SetFogOfWarEnabled(bool enabled)

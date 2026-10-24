@@ -211,8 +211,9 @@ namespace Game.Presentation.Camera
 
         private void SmoothUpdate()
         {
-            _focus = Vector3.SmoothDamp(_focus, _targetFocus, ref _focusVelocity, _smoothTime);
-            _zoom = Mathf.SmoothDamp(_zoom, _targetZoom, ref _zoomVelocity, _smoothTime);
+            // Камера живёт в реальном времени: замедление игры не должно делать управление вязким.
+            _focus = Vector3.SmoothDamp(_focus, _targetFocus, ref _focusVelocity, _smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
+            _zoom = Mathf.SmoothDamp(_zoom, _targetZoom, ref _zoomVelocity, _smoothTime, Mathf.Infinity, Time.unscaledDeltaTime);
             ApplyTransform();
         }
 

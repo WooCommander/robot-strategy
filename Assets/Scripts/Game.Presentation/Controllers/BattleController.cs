@@ -121,6 +121,8 @@ namespace Game.Presentation.Controllers
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
             ApplyFogVisuals();
             _hudView.OnFogOfWarToggleRequested += ToggleFogOfWar;
+            ApplyGameSpeed(PlayerPrefs.GetFloat(GameSpeedPrefKey, 1f));
+            _hudView.OnGameSpeedCycleRequested += CycleGameSpeed;
             _hudView.SetOrderMode(false);
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
             _hudView.OnRobotOrderRequested += HandleRobotOrderFromHud;
@@ -278,6 +280,34 @@ namespace Game.Presentation.Controllers
         {
             SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
         }
+
+        private const string GameSpeedPrefKey = "settings.gameSpeed";
+        private static readonly float[] GameSpeeds = { 0.5f, 0.75f, 1f, 1.5f, 2f };
+
+        /// <summary>
+        /// Скорость игры через Time.timeScale: замедляются симуляция (фиксированные тики считаются от времени кадра,
+        /// детерминизм не меняется), анимации и частицы. Камера и HUD работают в реальном времени.
+        /// </summary>
+        private void ApplyGameSpeed(float speed)
+        {
+            float closest = GameSpeeds[0];
+            foreach (float option in GameSpeeds)
+                if (Mathf.Abs(option - speed) < Mathf.Abs(closest - speed)) closest = option;
+            Time.timeScale = closest;
+            _hudView?.SetGameSpeed(closest);
+        }
+
+        private void CycleGameSpeed()
+        {
+            int index = System.Array.IndexOf(GameSpeeds, Time.timeScale);
+            float next = GameSpeeds[(index + 1) % GameSpeeds.Length];
+            PlayerPrefs.SetFloat(GameSpeedPrefKey, next);
+            PlayerPrefs.Save();
+            ApplyGameSpeed(next);
+        }
+
+        // Масштаб времени глобален: при выходе со сцены возвращаем нормальную скорость.
+        private void OnDestroy() => Time.timeScale = 1f;
 
         private const string FogOfWarPrefKey = "settings.fogOfWar";
 

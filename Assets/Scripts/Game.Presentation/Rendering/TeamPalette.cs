@@ -16,7 +16,7 @@ namespace Game.Presentation.Rendering
         {
             if (Materials.TryGetValue(owner, out Material cached) && cached != null) return cached;
             Material material = MaterialFactory.CreatePaletteEmissive($"Mat_Team_{owner}",
-                LowPolyMeshBuilder.CreatePaletteTexture(teamColor), LowPolyMeshBuilder.CreateEmissionTexture(teamColor), 0.35f, 0.45f);
+                LowPolyMeshBuilder.CreatePaletteTexture(teamColor), LowPolyMeshBuilder.CreateEmissionTexture(teamColor), 0.12f, 0.35f);
             Materials[owner] = material;
             return material;
         }

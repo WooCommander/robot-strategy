@@ -61,10 +61,11 @@ namespace Game.Presentation.Rendering
             var colors = (Color32[])SwatchColors.Clone();
             if (teamColor.HasValue)
             {
-                Color team = teamColor.Value;
+                // На броне цвет стороны приглушён к серому, как краска на металле; чистый цвет — у колец и HUD.
+                Color team = Color.Lerp(teamColor.Value, new Color(0.55f, 0.57f, 0.6f), 0.35f) * 0.85f;
                 colors[(int)Swatch.TeamAccent] = team;
-                colors[(int)Swatch.TeamDark] = team * 0.5f;
-                colors[(int)Swatch.Glow] = Color.Lerp(team, Color.white, 0.45f);
+                colors[(int)Swatch.TeamDark] = team * 0.55f;
+                colors[(int)Swatch.Glow] = Color.Lerp(teamColor.Value, Color.white, 0.45f);
             }
             return CreateTexture("LowPolyPalette", colors);
         }

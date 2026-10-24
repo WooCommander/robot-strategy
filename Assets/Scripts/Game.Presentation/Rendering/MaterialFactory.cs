@@ -47,7 +47,7 @@ namespace Game.Presentation.Rendering
             SetSurface(mat, metallic, smoothness);
             SetBaseMap(mat, palette);
             if (mat.HasProperty("_EmissionMap")) mat.SetTexture("_EmissionMap", emission);
-            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.white * 2f);
+            if (mat.HasProperty("_EmissionColor")) mat.SetColor("_EmissionColor", Color.white * 1.3f);
             return mat;
         }
 

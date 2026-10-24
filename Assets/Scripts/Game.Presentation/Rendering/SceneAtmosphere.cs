@@ -11,14 +11,14 @@ namespace Game.Presentation.Rendering
     public class SceneAtmosphere : MonoBehaviour
     {
         [Header("Sun")]
-        [SerializeField] private Vector3 _sunEuler = new Vector3(42f, 140f, 0f);
+        [SerializeField] private Vector3 _sunEuler = new Vector3(45f, 115f, 0f);
         [SerializeField] private Color _sunColor = new Color(1f, 0.93f, 0.8f);
         [SerializeField] private float _sunIntensity = 1.6f;
 
         [Header("Ambient")]
         [SerializeField] private Color _skyAmbient = new Color(0.56f, 0.66f, 0.8f);
-        [SerializeField] private Color _equatorAmbient = new Color(0.42f, 0.45f, 0.46f);
-        [SerializeField] private Color _groundAmbient = new Color(0.24f, 0.22f, 0.18f);
+        [SerializeField] private Color _equatorAmbient = new Color(0.52f, 0.55f, 0.58f);
+        [SerializeField] private Color _groundAmbient = new Color(0.34f, 0.31f, 0.27f);
         [SerializeField] private Color _hazeColor = new Color(0.62f, 0.7f, 0.78f);
         [SerializeField] private float _hazeDensity = 0.003f;
 
@@ -95,8 +95,8 @@ namespace Game.Presentation.Rendering
             tonemapping.mode.Override(TonemappingMode.ACES);
 
             ColorAdjustments color = _profile.Add<ColorAdjustments>(true);
-            color.postExposure.Override(0.45f);
-            color.contrast.Override(18f);
+            color.postExposure.Override(0.15f);
+            color.contrast.Override(10f);
             color.saturation.Override(4f);
 
             WhiteBalance whiteBalance = _profile.Add<WhiteBalance>(true);

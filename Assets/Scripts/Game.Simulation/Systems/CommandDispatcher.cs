@@ -40,8 +40,21 @@ namespace Game.Simulation.Systems
                 OrderDriveCommand drive => HandleDrive(drive, state),
                 OrderDetonateCommand detonate => HandleDetonate(detonate, state),
                 ConfigureProgramCommand program => HandleProgram(program, state),
+                SetFogOfWarCommand fog => HandleSetFogOfWar(fog, state),
                 _ => CommandResult.Fail($"Неизвестный тип команды: {command.GetType().Name}")
             };
+        }
+
+        /// <summary>
+        /// Без тумана FogOfWar сбрасывается в null — все проверки обзора считают видимым всё.
+        /// При включении карту обзора заново строит FogOfWarSystem: разведанное до выключения забыто.
+        /// </summary>
+        private static CommandResult HandleSetFogOfWar(SetFogOfWarCommand cmd, MatchState state)
+        {
+            if (state.FogOfWarDisabled == !cmd.Enabled) return CommandResult.Fail(cmd.Enabled ? "Туман уже включён." : "Туман уже выключен.");
+            state.FogOfWarDisabled = !cmd.Enabled;
+            if (!cmd.Enabled) state.FogOfWar = null;
+            return CommandResult.Success();
         }
 
         private CommandResult HandleEnqueue(EnqueueProductionCommand cmd, MatchState state, PlayerState player)

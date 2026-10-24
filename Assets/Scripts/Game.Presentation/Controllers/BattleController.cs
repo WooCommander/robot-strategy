@@ -118,10 +118,7 @@ namespace Game.Presentation.Controllers
             var hudGo = new GameObject("BattleHud");
             _hudView = hudGo.AddComponent<BattleHudView>();
             _hudView.Initialize(_moduleCatalog, _mapDefinition);
-            bool fogEnabled = !MatchState.FogOfWarDisabled;
-            _mapRenderer.SetFogVisible(fogEnabled);
-            _hudView.SetFogTexture(fogEnabled ? _mapRenderer.FogTexture : null);
-            _hudView.SetFogOfWarEnabled(fogEnabled);
+            ApplyFogVisuals();
             _hudView.OnFogOfWarToggleRequested += ToggleFogOfWar;
             _hudView.SetOrderMode(false);
             _hudView.OnOrderBlueprintRequested += HandleOrderBlueprintFromHud;
@@ -284,14 +281,31 @@ namespace Game.Presentation.Controllers
         private static bool IsFogOfWarPreferred => PlayerPrefs.GetInt(FogOfWarPrefKey, 1) == 1;
 
         /// <summary>
-        /// Туман — настройка матча: он влияет на ИИ, приказы и наведение, и replay должен воспроизводиться
-        /// одинаково. Поэтому переключение запоминает выбор и начинает новый матч.
+        /// Переключает туман в текущем матче. Туман влияет на ИИ, приказы и наведение, поэтому это команда
+        /// симуляции: она попадает в журнал, и replay воспроизводит матч так же. Выбор запоминается для новых матчей.
         /// </summary>
         private void ToggleFogOfWar()
         {
-            PlayerPrefs.SetInt(FogOfWarPrefKey, IsFogOfWarPreferred ? 0 : 1);
+            bool enable = MatchState.FogOfWarDisabled;
+            CommandResult result = _simulation.Issue(new SetFogOfWarCommand { PlayerId = PlayerId.Player1, Enabled = enable });
+            if (!result.IsSuccess)
+            {
+                Debug.LogWarning($"[Battle] Туман не переключён: {result.ErrorReason}");
+                return;
+            }
+            PlayerPrefs.SetInt(FogOfWarPrefKey, enable ? 1 : 0);
             PlayerPrefs.Save();
-            RestartMatch();
+            ApplyFogVisuals();
+        }
+
+        private void ApplyFogVisuals()
+        {
+            bool fogEnabled = !MatchState.FogOfWarDisabled;
+            _mapRenderer.SetFogVisible(fogEnabled);
+            if (fogEnabled) _mapRenderer.UpdateFog(MatchState, force: true);
+            _hudView.SetFogTexture(fogEnabled ? _mapRenderer.FogTexture : null);
+            _hudView.SetFogOfWarEnabled(fogEnabled);
+            UpdateEntityVisibility();
         }
 
         private void OnApplicationPause(bool pauseStatus)

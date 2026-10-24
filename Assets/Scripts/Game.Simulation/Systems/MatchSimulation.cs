@@ -62,16 +62,11 @@ namespace Game.Simulation.Systems
                 Navigation = new MatchNavigation(map);
                 Movement = new MovementSystem(Navigation);
                 Planner = new OrderPlanner(catalog, map, Navigation, Movement);
-                if (State.FogOfWarDisabled)
-                {
-                    // Все проверки обзора трактуют отсутствие FogOfWar как «видно всё».
-                    State.FogOfWar = null;
-                }
-                else
-                {
-                    Vision = new FogOfWarSystem(map);
-                    Vision.Update(State);
-                }
+                // Система обзора нужна и без тумана: его можно включить посреди матча командой.
+                Vision = new FogOfWarSystem(map);
+                // Все проверки обзора трактуют отсутствие FogOfWar как «видно всё».
+                if (State.FogOfWarDisabled) State.FogOfWar = null;
+                else Vision.Update(State);
             }
         }
 
@@ -105,8 +100,18 @@ namespace Game.Simulation.Systems
         /// <summary>Команда игрока: применяется к текущему тику и попадает в журнал replay.</summary>
         public CommandResult Issue(ICommand command)
         {
-            CommandResult result = Dispatcher.Dispatch(command, State);
+            CommandResult result = Apply(command);
             if (result.IsSuccess) CommandLog.Record(State.Tick, command);
+            return result;
+        }
+
+        /// <summary>Применяет команду; общий путь для живых команд и replay.</summary>
+        private CommandResult Apply(ICommand command)
+        {
+            CommandResult result = Dispatcher.Dispatch(command, State);
+            // Включённый туман должен сразу закрыть невидимое, а не только после следующего тика:
+            // иначе ИИ успел бы отдать приказ по врагу, которого уже не видно.
+            if (result.IsSuccess && command is SetFogOfWarCommand { Enabled: true }) Vision?.Update(State);
             return result;
         }
 
@@ -140,7 +145,7 @@ namespace Game.Simulation.Systems
             {
                 foreach (ReplayCommandRecord record in replay.GetForTick(State.Tick))
                 {
-                    CommandResult result = Dispatcher.Dispatch(record.ToCommand(), State);
+                    CommandResult result = Apply(record.ToCommand());
                     if (!result.IsSuccess) throw new InvalidOperationException($"Replay-команда на тике {State.Tick} отклонена: {result.ErrorReason}");
                 }
             }
@@ -149,7 +154,7 @@ namespace Game.Simulation.Systems
             Production.Update(State, deltaSeconds);
             Planner?.Update(State);
             Movement?.Update(State, deltaSeconds);
-            Vision?.Update(State);
+            if (!State.FogOfWarDisabled) Vision?.Update(State);
             Combat.Update(State, deltaSeconds);
             Capture.Update(State, deltaSeconds);
 

@@ -54,9 +54,10 @@ namespace Game.Presentation.Views
             if (_fogOverlay != null) _fogOverlay.SetActive(visible);
         }
 
-        public void UpdateFog(MatchState state)
+        /// <param name="force">Перерисовать в том же тике: туман только что включили командой.</param>
+        public void UpdateFog(MatchState state, bool force = false)
         {
-            if (_fogTexture == null || state?.FogOfWar == null || _lastFogTick == state.Tick) return;
+            if (_fogTexture == null || state?.FogOfWar == null || (!force && _lastFogTick == state.Tick)) return;
             FogOfWarState fog = state.FogOfWar;
             if (fog.Player1Cells == null || fog.Player1Cells.Length != _fogPixels.Length) return;
             for (int i = 0; i < _fogPixels.Length; i++)

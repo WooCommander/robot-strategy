@@ -50,10 +50,39 @@ namespace Game.Core.Tests
 
             Assert.IsTrue(simulation.State.FogOfWarDisabled);
             Assert.IsNull(simulation.State.FogOfWar, "Без тумана проверки обзора должны видеть всё.");
-            Assert.IsNull(simulation.Vision);
 
             var restored = new MatchSimulation(catalog, map, simulation.State);
             Assert.IsNull(restored.State.FogOfWar, "Восстановленный матч берёт настройку из состояния, а не из параметра.");
+        }
+
+        [Test]
+        public void SetFogOfWar_TogglesMidMatchAndReplaysTheSame()
+        {
+            MapDefinition map = DefaultMapFactory.CreatePrototypeMap();
+            var catalog = DefaultContentCatalog.CreateDefaultModules();
+            var live = new MatchSimulation(catalog, map);
+            live.AddAgent(new AiCommander(live.Dispatcher, catalog));
+            SimVector2 enemyBase = live.State.Buildings[2].Position;
+            for (int tick = 0; tick < 30; tick++) live.Step(MatchSimulation.FixedDeltaSeconds);
+
+            Assert.IsTrue(live.Issue(new SetFogOfWarCommand { PlayerId = PlayerId.Player1, Enabled = false }).IsSuccess);
+            Assert.IsNull(live.State.FogOfWar, "Выключение сразу открывает всю карту.");
+            Assert.IsFalse(live.Issue(new SetFogOfWarCommand { PlayerId = PlayerId.Player1, Enabled = false }).IsSuccess, "Повторное выключение отклоняется.");
+            for (int tick = 0; tick < 30; tick++) live.Step(MatchSimulation.FixedDeltaSeconds);
+            Assert.IsNull(live.State.FogOfWar, "Без тумана обзор не пересчитывается.");
+
+            Assert.IsTrue(live.Issue(new SetFogOfWarCommand { PlayerId = PlayerId.Player1, Enabled = true }).IsSuccess);
+            Assert.IsNotNull(live.State.FogOfWar, "Включённый туман строится в том же тике.");
+            Assert.IsFalse(live.State.FogOfWar.IsVisible(PlayerId.Player1, enemyBase));
+            for (int tick = 0; tick < 30; tick++) live.Step(MatchSimulation.FixedDeltaSeconds);
+
+            MatchState replayState = MatchSimulation.CreateInitialState(map);
+            var runner = new HeadlessMatchRunner(catalog, map, new AiCommander(new CommandDispatcher(catalog), catalog));
+            runner.RunTicks(replayState, live.CommandLog, live.State.Tick);
+            Assert.IsFalse(replayState.FogOfWarDisabled);
+            CollectionAssert.AreEqual(live.State.FogOfWar.Player1Cells, replayState.FogOfWar.Player1Cells);
+            CollectionAssert.AreEqual(live.State.FogOfWar.Player2Cells, replayState.FogOfWar.Player2Cells);
+            Assert.AreEqual(live.State.Robots.Count, replayState.Robots.Count);
         }
 
         [Test]

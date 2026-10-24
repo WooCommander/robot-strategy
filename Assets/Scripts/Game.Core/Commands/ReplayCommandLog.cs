@@ -54,6 +54,7 @@ namespace Game.Core.Commands
         public int DefendTargetId;
         public int AttackTargetId;
         public int CaptureTargetId;
+        public bool FogEnabled;
 
         public static ReplayCommandRecord FromCommand(int tick, ICommand command)
         {
@@ -81,6 +82,7 @@ namespace Game.Core.Commands
                     break;
                 case EnqueueProductionCommand enqueue: record.TargetEntityId = enqueue.BaseBuildingId.Value; record.Blueprint = ReplayBlueprint.From(enqueue.Blueprint); break;
                 case CancelProductionCommand cancel: record.TargetEntityId = cancel.BaseBuildingId.Value; record.OrderId = cancel.OrderId; break;
+                case SetFogOfWarCommand fog: record.FogEnabled = fog.Enabled; break;
                 default: throw new NotSupportedException($"Команда {command.GetType().Name} не поддерживается в replay.");
             }
             return record;
@@ -109,6 +111,7 @@ namespace Game.Core.Commands
                     DefendTargetId = new EntityId(DefendTargetId), AttackTargetId = new EntityId(AttackTargetId), CaptureTargetId = new EntityId(CaptureTargetId) },
                 CommandType.EnqueueProduction => new EnqueueProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), Blueprint = Blueprint?.ToBlueprint() },
                 CommandType.CancelProduction => new CancelProductionCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, BaseBuildingId = new EntityId(TargetEntityId), OrderId = OrderId },
+                CommandType.SetFogOfWar => new SetFogOfWarCommand { PlayerId = PlayerId, SequenceNumber = SequenceNumber, Enabled = FogEnabled },
                 _ => throw new NotSupportedException($"Тип команды {Type} не поддерживается в replay.")
             };
         }

@@ -18,7 +18,8 @@ namespace Game.Core.Commands
         Detonate = 9,
         EnqueueProduction = 10,
         CancelProduction = 11,
-        ConfigureProgram = 12
+        ConfigureProgram = 12,
+        SetFogOfWar = 13
     }
 
     public interface ICommand
@@ -186,5 +187,18 @@ namespace Game.Core.Commands
 
         public EntityId BaseBuildingId { get; set; }
         public string OrderId { get; set; }
+    }
+
+    /// <summary>
+    /// Включает или выключает туман войны посреди матча. Это команда, а не прямая правка состояния,
+    /// чтобы переключение попадало в журнал и replay воспроизводил матч так же.
+    /// </summary>
+    [Serializable]
+    public class SetFogOfWarCommand : ICommand
+    {
+        public PlayerId PlayerId { get; set; }
+        public int SequenceNumber { get; set; }
+        public CommandType Type => CommandType.SetFogOfWar;
+        public bool Enabled { get; set; }
     }
 }

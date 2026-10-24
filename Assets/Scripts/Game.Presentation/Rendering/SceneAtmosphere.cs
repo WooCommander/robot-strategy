@@ -97,7 +97,7 @@ namespace Game.Presentation.Rendering
             ColorAdjustments color = _profile.Add<ColorAdjustments>(true);
             color.postExposure.Override(0.45f);
             color.contrast.Override(18f);
-            color.saturation.Override(14f);
+            color.saturation.Override(4f);
 
             WhiteBalance whiteBalance = _profile.Add<WhiteBalance>(true);
             whiteBalance.temperature.Override(6f);

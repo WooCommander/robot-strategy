@@ -207,7 +207,7 @@ namespace Game.Presentation.Rendering
                     return Color.Lerp(new Color(0.16f, 0.27f, 0.11f), new Color(0.28f, 0.40f, 0.17f), n1) * (0.9f + 0.2f * n2);
                 default:
                 {
-                    Color grass = Color.Lerp(new Color(0.22f, 0.36f, 0.14f), new Color(0.40f, 0.52f, 0.21f), n1);
+                    Color grass = Color.Lerp(new Color(0.24f, 0.33f, 0.15f), new Color(0.41f, 0.47f, 0.25f), n1);
                     // Небольшие проплешины земли: реже и бледнее, чтобы поле не казалось вытоптанным.
                     float dirt = Mathf.SmoothStep(0f, 1f, Mathf.InverseLerp(0.7f, 0.8f, ProceduralNoise.Value(wx * 0.3f, wz * 0.3f, Seed + 12)));
                     return Color.Lerp(grass, new Color(0.43f, 0.37f, 0.25f), dirt * 0.55f) * (0.9f + 0.2f * n2);

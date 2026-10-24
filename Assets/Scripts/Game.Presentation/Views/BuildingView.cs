@@ -22,7 +22,6 @@ namespace Game.Presentation.Views
         [SerializeField] private TextMesh _captureLabel;
         [SerializeField] private LineRenderer _captureProgressArc;
 
-        private MaterialPropertyBlock _propBlock;
 
         public int EntityId => _entityId;
         public BuildingType Type => _type;
@@ -42,37 +41,24 @@ namespace Game.Presentation.Views
             transform.position = new Vector3(def.Position.X, 0f, def.Position.Y);
             gameObject.name = $"{def.Type}_{def.EntityIdValue}_{def.InitialOwner}";
 
-            CreateVisuals();
+            // Фасад смотрит туда, откуда выезжают роботы; у заводов точки выхода нет — к камере (на юг).
+            var facing = new Vector2(def.SpawnPoint.X - def.Position.X, def.SpawnPoint.Y - def.Position.Y);
+            float yaw = facing.sqrMagnitude > 0.01f ? Mathf.Atan2(facing.x, facing.y) * Mathf.Rad2Deg : 180f;
+
+            CreateVisuals(yaw);
             UpdateOwnerVisuals(_owner);
         }
 
-        private void CreateVisuals()
+        private void CreateVisuals(float modelYaw)
         {
-            _propBlock = new MaterialPropertyBlock();
-
-            // Создаем корпус здания процедурно, если нет назначенного рендера
+            // Корпус — процедурная модель, если в префабе не назначен свой рендер.
             if (_buildingRenderer == null)
             {
-                var body = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                var body = new GameObject("Model");
                 body.transform.SetParent(transform, false);
-
-                if (_type == BuildingType.Base)
-                {
-                    body.transform.localScale = new Vector3(3f, 2f, 3f);
-                    body.transform.localPosition = new Vector3(0f, 1f, 0f);
-                }
-                else
-                {
-                    body.transform.localScale = new Vector3(2f, 1.5f, 2f);
-                    body.transform.localPosition = new Vector3(0f, 0.75f, 0f);
-                }
-
-                _buildingRenderer = body.GetComponent<MeshRenderer>();
-                _buildingRenderer.sharedMaterial = MaterialFactory.CreateLit("Mat_Building", Color.white, 0.4f, 0.35f);
-
-                // Удаляем коллайдер с дочернего объекта, чтобы он был строго на корне
-                var childCol = body.GetComponent<Collider>();
-                if (childCol != null) DestroyImmediate(childCol);
+                body.transform.localRotation = Quaternion.Euler(0f, modelYaw, 0f);
+                body.AddComponent<MeshFilter>().sharedMesh = BuildingModelBuilder.GetMesh(_type);
+                _buildingRenderer = body.AddComponent<MeshRenderer>();
             }
 
             // Добавляем BoxCollider прямо на корень здания
@@ -123,7 +109,7 @@ namespace Game.Presentation.Views
             {
                 var labelObj = new GameObject("Label");
                 labelObj.transform.SetParent(transform, false);
-                labelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.0f : 2.2f, 0f);
+                labelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.3f : 2.5f, 0f);
                 labelObj.transform.localRotation = Quaternion.Euler(55f, 0f, 0f);
 
                 _nameLabel = labelObj.AddComponent<TextMesh>();
@@ -137,7 +123,7 @@ namespace Game.Presentation.Views
 
             var captureLabelObj = new GameObject("CaptureProgress");
             captureLabelObj.transform.SetParent(transform, false);
-            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.75f : 2.7f, 0f);
+            captureLabelObj.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.0f : 3.0f, 0f);
             _captureLabel = captureLabelObj.AddComponent<TextMesh>();
             _captureLabel.font = GetWorldFont();
             _captureLabel.fontSize = 28;
@@ -163,7 +149,7 @@ namespace Game.Presentation.Views
                 _selectionMarker = GameObject.CreatePrimitive(PrimitiveType.Cube);
                 _selectionMarker.name = "SelectionMarker";
                 _selectionMarker.transform.SetParent(transform, false);
-                _selectionMarker.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 3.5f : 2.5f, 0f);
+                _selectionMarker.transform.localPosition = new Vector3(0f, _type == BuildingType.Base ? 4.2f : 3.1f, 0f);
                 _selectionMarker.transform.localScale = new Vector3(0.85f, 0.85f, 0.85f);
                 _selectionMarker.transform.localRotation = Quaternion.Euler(45f, 45f, 45f);
 
@@ -181,13 +167,8 @@ namespace Game.Presentation.Views
             _owner = newOwner;
             Color teamColor = GetPlayerColor(newOwner);
 
-            if (_buildingRenderer != null)
-            {
-                _buildingRenderer.GetPropertyBlock(_propBlock);
-                _propBlock.SetColor("_BaseColor", teamColor);
-                _propBlock.SetColor("_Color", teamColor);
-                _buildingRenderer.SetPropertyBlock(_propBlock);
-            }
+            // Пояса, баки и огни окрашены материалом стороны: захват меняет только материал.
+            if (_buildingRenderer != null) _buildingRenderer.sharedMaterial = TeamPalette.Get(newOwner, teamColor);
 
             if (_captureZoneCircle != null)
             {
@@ -254,7 +235,7 @@ namespace Game.Presentation.Views
             {
                 _selectionMarker.transform.Rotate(Vector3.up, 90f * Time.deltaTime, Space.World);
                 float hover = Mathf.Sin(Time.time * 4f) * 0.15f;
-                float baseY = _type == BuildingType.Base ? 3.5f : 2.5f;
+                float baseY = _type == BuildingType.Base ? 4.2f : 3.1f;
                 _selectionMarker.transform.localPosition = new Vector3(0f, baseY + hover, 0f);
             }
         }
